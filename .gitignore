@@ -42,4 +42,7 @@ app-example
 /ios
 /android
 
+# Python virtual environment
+executorch/
+
 
