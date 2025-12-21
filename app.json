@@ -23,7 +23,8 @@
       "usesCleartextTraffic": true,
       "networkSecurityConfig": {
         "cleartextTrafficPermitted": true
-      }
+      },
+      "package": "com.anonymous.Shanesgymapp"
     },
     "web": {
       "output": "static",

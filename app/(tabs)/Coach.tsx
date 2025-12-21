@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { LLAMA3_2_1B, Message, useLLM } from 'react-native-executorch';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -11,35 +12,45 @@ export default function HomeScreen() {
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [serverIP, setServerIP] = useState('');
 
-  // Determine the correct API URL based on platform
-  // For Android emulator: use 10.0.2.2 (special IP that maps to host machine's localhost)
-  // For Android physical device: use device's IP address (user can configure)
-  // For iOS simulator: use localhost
-  // For physical device: use device's IP or localhost if on same machine
-  const LLAMA_API_URL = useMemo(() => {
-    const port = 8080;
-    
-    if (Platform.OS === 'android') {
-      // Check if user has set a custom IP
-      if (serverIP) {
-        return `http://${serverIP}:${port}/completion`;
-      }
-      // Default to emulator IP (10.0.2.2) - works for both emulator and can be changed
-      // For physical device, user should set their device's IP address
-      return `http://10.0.2.2:${port}/completion`;
-    } else if (Platform.OS === 'ios') {
-      return `http://localhost:${port}/completion`;
-    } else {
-      // Web or other platforms
-      return `http://localhost:${port}/completion`;
+  // Initialize Executorch LLM - Llama 3.2 1B (smaller, faster model)
+  const llm = useLLM({ 
+    model: LLAMA3_2_1B,
+    preventLoad: false // Auto-load on mount
+  });
+
+  // Watch for response updates from Executorch
+  useEffect(() => {
+    if (llm.response) {
+      setResponse(llm.response);
     }
-  }, [serverIP]);
+    // Clear loading state when generation completes
+    if (!llm.isGenerating && loading) {
+      setLoading(false);
+      // Clear error if we have a response
+      if (llm.response) {
+        setError('');
+      }
+    }
+  }, [llm.response, llm.isGenerating, loading]);
+
+  // Watch for errors from Executorch
+  useEffect(() => {
+    if (llm.error) {
+      setError(llm.error);
+      setLoading(false);
+    }
+  }, [llm.error]);
 
   const sendToLlama = async () => {
     if (!inputText.trim()) {
       setError('Please enter some text');
+      return;
+    }
+
+    // Check if model is ready
+    if (!llm.isReady) {
+      setError('Model is still loading. Please wait...');
       return;
     }
 
@@ -48,48 +59,29 @@ export default function HomeScreen() {
     setResponse('');
 
     try {
-      // llama.cpp server API format
-      const response = await fetch(LLAMA_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Use Executorch 
+      const chat: Message[] = [
+        { 
+          role: 'system', 
+          content: 'you are a fitness coach, provide exercises only in the form of JSON objects listing the exercise containing sets, reps, weight, rest time and muscle groups worked, a full workout routine shout be an array of these JSON objects' 
         },
-        body: JSON.stringify({
-          prompt: inputText,
-          n_predict: 512, // Max tokens to generate
-          temperature: 0.7,
-          top_p: 0.9,
-          repeat_penalty: 1.1,
-          stream: false, // Set to true for streaming responses
-        }),
-      });
+        { 
+          role: 'user', 
+          content: inputText 
+        }
+      ];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-
-      const data = await response.json();
-      // llama.cpp server returns content in 'content' field
-      const content = data.content || data.response || JSON.stringify(data);
-      setResponse(content);
+      // Generate response - runs entirely on-device!
+      // Note: Response streams in via llm.response and is handled by useEffect
+      // Don't check llm.response here as it may still be streaming
+      await llm.generate(chat);
     } catch (err) {
       const errorMessage = err instanceof Error 
         ? err.message 
-        : 'Failed to connect to Llama server';
+        : 'Failed to get response';
       
-      let helpfulMessage = errorMessage;
-      
-      if (Platform.OS === 'android') {
-        if (errorMessage.includes('Network request failed') || errorMessage.includes('ECONNREFUSED')) {
-          helpfulMessage = `Connection failed. ${serverIP ? `Trying to connect to ${serverIP}:8080` : 'Using emulator IP (10.0.2.2:8080). For physical device, set your device IP above.'}\n\nMake sure:\n1. Llama server is running on your device\n2. Server is listening on 0.0.0.0:8080\n3. For physical device, enter your device's IP address`;
-        }
-      }
-      
-      setError(helpfulMessage);
+      setError(errorMessage);
       console.error('Error calling Llama:', err);
-      console.error('API URL:', LLAMA_API_URL);
-    } finally {
       setLoading(false);
     }
   };
@@ -105,24 +97,21 @@ export default function HomeScreen() {
         <ThemedText type="subtitle" style={styles.label}>
           Ask your AI Coach:
         </ThemedText>
-        
-        {Platform.OS === 'android' && (
-          <ThemedView style={styles.configContainer}>
-            <ThemedText style={styles.configLabel}>
-              Server IP (leave empty for emulator):
+
+        {/* Model Status */}
+        {!llm.isReady && (
+          <ThemedView style={styles.statusContainer}>
+            <ActivityIndicator size="small" />
+            <ThemedText style={styles.statusText}>
+              Loading model... {llm.downloadProgress > 0 ? `${Math.round(llm.downloadProgress * 100)}%` : ''}
             </ThemedText>
-            <TextInput
-              style={styles.ipInput}
-              value={serverIP}
-              onChangeText={setServerIP}
-              placeholder="e.g., 192.168.1.100"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <ThemedText style={styles.configHint}>
-              Current endpoint: {LLAMA_API_URL}
+          </ThemedView>
+        )}
+
+        {llm.isReady && (
+          <ThemedView style={styles.infoContainer}>
+            <ThemedText style={styles.infoText}>
+              ✓ Using Executorch - Llama 3.2 1B (on-device, offline-capable)
             </ThemedText>
           </ThemedView>
         )}
@@ -136,18 +125,19 @@ export default function HomeScreen() {
           multiline
           numberOfLines={4}
           textAlignVertical="top"
+          editable={llm.isReady}
         />
 
         <Pressable
           style={({ pressed }) => [
             styles.sendButton,
             pressed && styles.sendButtonPressed,
-            loading && styles.sendButtonDisabled,
+            (loading || llm.isGenerating || !llm.isReady) && styles.sendButtonDisabled,
           ]}
           onPress={sendToLlama}
-          disabled={loading}
+          disabled={loading || llm.isGenerating || !llm.isReady}
         >
-          {loading ? (
+          {(loading || llm.isGenerating) ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <ThemedText type="defaultSemiBold" className="text-white">
@@ -168,7 +158,7 @@ export default function HomeScreen() {
               Response:
             </ThemedText>
             <ScrollView style={styles.responseScroll}>
-              <ThemedText style={styles.responseText}>{response}</ThemedText>
+              <ThemedText style={[styles.responseText, { color: '#000' }]}>{response}</ThemedText>
             </ScrollView>
           </ThemedView>
         ) : null}
@@ -244,31 +234,29 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     lineHeight: 20,
+    color: '#000',
   },
-  configContainer: {
-    backgroundColor: '#f0f0f0',
+  infoContainer: {
+    backgroundColor: '#e8f5e9',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    gap: 8,
   },
-  configLabel: {
+  infoText: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
+    color: '#2e7d32',
   },
-  configHint: {
-    fontSize: 10,
-    color: '#999',
-    fontStyle: 'italic',
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff3e0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
   },
-  ipInput: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 8,
-    fontSize: 14,
-    backgroundColor: '#fff',
-    color: '#000',
+  statusText: {
+    fontSize: 12,
+    color: '#e65100',
   },
 });
