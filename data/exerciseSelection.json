@@ -1,102 +1,182 @@
 [
-  {
-    "name": "Barbell Back Squat",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["quads", "glutes", "hamstrings", "abs"]
-  },
-  {
-    "name": "Barbell Deadlift",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["hamstrings", "glutes", "lats", "traps", "forearms"]
-  },
-  {
-    "name": "Flat Barbell Bench Press",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["chest", "triceps", "shoulders"]
-  },
-  {
-    "name": "Bent Over Barbell Row",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["lats", "traps", "biceps", "forearms"]
-  },
-  {
-    "name": "Overhead Barbell Press (Military Press)",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["shoulders", "triceps", "chest"]
-  },
-  {
-    "name": "Romanian Deadlift",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["hamstrings", "glutes", "forearms"]
-  },
-  {
-    "name": "Barbell Lunge",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["quads", "glutes", "hamstrings"]
-  },
-  {
-    "name": "Incline Dumbbell Press",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["chest", "shoulders", "triceps"]
-  },
-  {
-    "name": "One-Arm Dumbbell Row",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["lats", "biceps", "shoulders"]
-  },
-  {
-    "name": "Dumbbell Goblet Squat",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["quads", "glutes", "abs"]
-  },
-  {
-    "name": "Dumbbell Lateral Raise",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["shoulders"]
-  },
-  {
-    "name": "Dumbbell Arnold Press",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["shoulders", "triceps"]
-  },
-  {
-    "name": "Seated Dumbbell Bicep Curl",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["biceps", "forearms"]
-  },
-  {
-    "name": "Dumbbell Skullcrushers",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["triceps"]
-  },
-  {
-    "name": "Dumbbell Flyes",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["chest", "shoulders"]
-  },
-  {
-    "name": "Bulgarian Split Squat",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["quads", "glutes", "hamstrings"]
-  },
-  {
-    "name": "Barbell Hip Thrust",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["glutes", "hamstrings"]
-  },
-  {
-    "name": "Hammer Curls",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["biceps", "forearms"]
-  },
-  {
-    "name": "Barbell Shrugs",
-    "equipment": "Barbell",
-    "muscle_groups_worked": ["traps", "forearms"]
-  },
-  {
-    "name": "Calf Raises (Holding Dumbbells)",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["calves"]
-  }
-]
+    {
+      "name": "Barbell Back Squat",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["quads", "glutes", "hamstrings", "abs"]
+    },
+    {
+      "name": "Barbell Bench Press",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["chest", "triceps", "shoulders"]
+    },
+    {
+      "name": "Barbell Deadlift",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["hamstrings", "glutes", "lats", "traps", "forearms"]
+    },
+    {
+      "name": "Barbell Hip Thrust",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["glutes", "hamstrings"]
+    },
+    {
+      "name": "Barbell Lunge",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["quads", "glutes", "hamstrings"]
+    },
+    {
+      "name": "Barbell Shrugs",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["traps", "forearms"]
+    },
+    {
+      "name": "Bent Over Barbell Row",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["lats", "traps", "biceps", "forearms"]
+    },
+    {
+      "name": "Bulgarian Split Squat",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["quads", "glutes", "hamstrings"]
+    },
+    {
+      "name": "Calf Press",
+      "equipment": "",
+      "muscle_groups_worked": ["calves"]
+    },
+    {
+      "name": "Calf Raises (Holding Dumbbells)",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["calves"]
+    },
+    {
+      "name": "Chest Press",
+      "equipment": "",
+      "muscle_groups_worked": ["chest", "shoulders", "triceps"]
+    },
+    {
+      "name": "Decline Crunches",
+      "equipment": "",
+      "muscle_groups_worked": ["abs"]
+    },
+    {
+      "name": "Dumbbell Arnold Press",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["shoulders", "triceps"]
+    },
+    {
+      "name": "Dumbbell Flyes",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["chest", "shoulders"]
+    },
+    {
+      "name": "Dumbbell Goblet Squat",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["quads", "glutes", "abs"]
+    },
+    {
+      "name": "Dumbbell Lateral Raise",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["shoulders"]
+    },
+    {
+      "name": "Dumbbell Shoulder Press",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["shoulders"]
+    },
+    {
+      "name": "Dumbbell Skullcrushers",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["triceps"]
+    },
+    {
+      "name": "Fingertip Curls",
+      "equipment": "",
+      "muscle_groups_worked": ["forearms"]
+    },
+    {
+      "name": "Hammer Curls",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["biceps", "forearms"]
+    },
+    {
+      "name": "Hamstring Curls",
+      "equipment": "",
+      "muscle_groups_worked": ["hamstrings"]
+    },
+    {
+      "name": "Incline Dumbbell Press",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["chest", "shoulders", "triceps"]
+    },
+    {
+      "name": "Lat Pulldowns",
+      "equipment": "",
+      "muscle_groups_worked": ["lats"]
+    },
+    {
+      "name": "Leg Extensions",
+      "equipment": "",
+      "muscle_groups_worked": ["quads"]
+    },
+    {
+      "name": "Leg Press",
+      "equipment": "",
+      "muscle_groups_worked": ["quads", "glutes", "hamstrings"]
+    },
+    {
+      "name": "One-Arm Dumbbell Row",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["lats", "biceps", "shoulders"]
+    },
+    {
+      "name": "Overhead Barbell Press (Military Press)",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["shoulders", "triceps", "chest"]
+    },
+    {
+      "name": "Preacher Curl",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["biceps"]
+    },
+    {
+      "name": "Pull-Ups",
+      "equipment": "",
+      "muscle_groups_worked": ["lats"]
+    },
+    {
+      "name": "Rear Delt Fly",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["shoulders"]
+    },
+    {
+      "name": "Reverse Grip Forearm Curls",
+      "equipment": "",
+      "muscle_groups_worked": ["forearms"]
+    },
+    {
+      "name": "Romanian Deadlift",
+      "equipment": "Barbell",
+      "muscle_groups_worked": ["hamstrings", "glutes", "forearms"]
+    },
+    {
+      "name": "Seated Dumbbell Bicep Curl",
+      "equipment": "Dumbbell",
+      "muscle_groups_worked": ["biceps", "forearms"]
+    },
+    {
+      "name": "The Hug Machine",
+      "equipment": "",
+      "muscle_groups_worked": ["chest"]
+    },
+    {
+      "name": "Triangle Rows",
+      "equipment": "",
+      "muscle_groups_worked": ["lats", "traps"]
+    },
+    {
+      "name": "Triceps Pushdown",
+      "equipment": "Cable",
+      "muscle_groups_worked": ["triceps"]
+    }
+  ]
