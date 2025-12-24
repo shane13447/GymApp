@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
@@ -24,11 +25,17 @@ export interface ProgramExercise extends Exercise {
   progression: string;
 }
 
+// Workout Day interface
+export interface WorkoutDay {
+  dayNumber: number;
+  exercises: ProgramExercise[];
+}
+
 // Program interface
 export interface Program {
   id: string;
   name: string;
-  exercises: ProgramExercise[];
+  workoutDays: WorkoutDay[];
   createdAt: string;
 }
 
@@ -36,15 +43,44 @@ type ViewMode = 'list' | 'create' | 'view';
 
 export default function ProgramsScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [createStep, setCreateStep] = useState<0 | 1 | 2>(0);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [programName, setProgramName] = useState('');
+  const [numberOfDays, setNumberOfDays] = useState('');
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([]);
+  const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const [selectedExercises, setSelectedExercises] = useState<ProgramExercise[]>([]);
   const [showExerciseList, setShowExerciseList] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [exercisesByMuscleGroup, setExercisesByMuscleGroup] = useState<Record<string, Exercise[]>>({});
 
-  // Load exercises from JSON file
+  // Storage key for AsyncStorage
+  const PROGRAMS_STORAGE_KEY = 'gymApp_programs';
+
+  // Load programs from AsyncStorage
+  const loadPrograms = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(PROGRAMS_STORAGE_KEY);
+      if (stored) {
+        const loadedPrograms: Program[] = JSON.parse(stored);
+        setPrograms(loadedPrograms);
+      }
+    } catch (error) {
+      console.error('Error loading programs:', error);
+    }
+  };
+
+  // Save programs to AsyncStorage
+  const savePrograms = async (programsToSave: Program[]) => {
+    try {
+      await AsyncStorage.setItem(PROGRAMS_STORAGE_KEY, JSON.stringify(programsToSave, null, 2));
+    } catch (error) {
+      console.error('Error saving programs:', error);
+    }
+  };
+
+  // Load exercises from JSON file and group by muscle group
   useEffect(() => {
     try {
       const loadedExercises: Exercise[] = exercisesData.map((ex: any) => ({
@@ -53,9 +89,29 @@ export default function ProgramsScreen() {
         muscle_groups_worked: ex.muscle_groups_worked,
       }));
       setExercises(loadedExercises);
+
+      // Group exercises by muscle group
+      const grouped: Record<string, Exercise[]> = {};
+      loadedExercises.forEach((exercise) => {
+        exercise.muscle_groups_worked.forEach((muscleGroup) => {
+          if (!grouped[muscleGroup]) {
+            grouped[muscleGroup] = [];
+          }
+          // Avoid duplicates
+          if (!grouped[muscleGroup].some((ex) => ex.name === exercise.name)) {
+            grouped[muscleGroup].push(exercise);
+          }
+        });
+      });
+      setExercisesByMuscleGroup(grouped);
     } catch (error) {
       console.error('Error loading exercises:', error);
     }
+  }, []);
+
+  // Load programs on mount
+  useEffect(() => {
+    loadPrograms();
   }, []);
 
   const toggleExercise = (exercise: Exercise) => {
@@ -85,13 +141,31 @@ export default function ProgramsScreen() {
   const updateExerciseField = (
     exerciseName: string,
     field: keyof ProgramExercise,
-    value: string
+    value: string,
+    dayNumber?: number
   ) => {
-    setSelectedExercises((prev) =>
-      prev.map((ex) =>
-        ex.name === exerciseName ? { ...ex, [field]: value } : ex
-      )
-    );
+    if (createStep === 2 && dayNumber !== undefined) {
+      // Update in workoutDays for configuration step
+      setWorkoutDays((prev) =>
+        prev.map((day) =>
+          day.dayNumber === dayNumber
+            ? {
+                ...day,
+                exercises: day.exercises.map((ex) =>
+                  ex.name === exerciseName ? { ...ex, [field]: value } : ex
+                ),
+              }
+            : day
+        )
+      );
+    } else {
+      // Update selectedExercises for selection step
+      setSelectedExercises((prev) =>
+        prev.map((ex) =>
+          ex.name === exerciseName ? { ...ex, [field]: value } : ex
+        )
+      );
+    }
   };
 
   const removeExerciseFromProgram = (exerciseName: string) => {
@@ -100,52 +174,111 @@ export default function ProgramsScreen() {
 
   const clearProgram = () => {
     setProgramName('');
+    setNumberOfDays('');
+    setWorkoutDays([]);
     setSelectedExercises([]);
     setShowExerciseList(false);
-    setCreateStep(1);
+    setCurrentDayIndex(0);
+    setCreateStep(0);
   };
 
-  const continueToConfiguration = () => {
+  const continueToExerciseSelection = () => {
     if (!programName.trim()) {
       alert('Please enter a program name');
       return;
     }
 
-    if (selectedExercises.length === 0) {
-      alert('Please select at least one exercise');
+    const days = parseInt(numberOfDays);
+    if (isNaN(days) || days < 1) {
+      alert('Please enter a valid number of workout days (at least 1)');
+      return;
+    }
+
+    // Initialize workout days
+    const daysArray: WorkoutDay[] = Array.from({ length: days }, (_, i) => ({
+      dayNumber: i + 1,
+      exercises: [],
+    }));
+    setWorkoutDays(daysArray);
+    setCurrentDayIndex(0);
+    setSelectedExercises([]); // Initialize with empty array for first day
+    setCreateStep(1);
+  };
+
+  const continueToConfiguration = () => {
+    // Save current day's exercises
+    const updatedDays = [...workoutDays];
+    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    setWorkoutDays(updatedDays);
+
+    // Check if all days have at least one exercise
+    const allDaysHaveExercises = updatedDays.every(day => day.exercises.length > 0);
+    if (!allDaysHaveExercises) {
+      const incompleteDays = updatedDays
+        .map((day, idx) => day.exercises.length === 0 ? idx + 1 : null)
+        .filter(day => day !== null);
+      alert(`Please select at least one exercise for Day ${incompleteDays.join(', ')}`);
       return;
     }
 
     setCreateStep(2);
   };
 
-  const createProgram = () => {
+  const goToNextDay = () => {
+    // Save current day's exercises
+    const updatedDays = [...workoutDays];
+    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    setWorkoutDays(updatedDays);
+
+    if (currentDayIndex < workoutDays.length - 1) {
+      const nextIndex = currentDayIndex + 1;
+      // Move to next day
+      setCurrentDayIndex(nextIndex);
+      setSelectedExercises(updatedDays[nextIndex].exercises);
+      setShowExerciseList(false);
+    }
+  };
+
+  const goToPreviousDay = () => {
+    // Save current day's exercises
+    const updatedDays = [...workoutDays];
+    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    setWorkoutDays(updatedDays);
+
+    if (currentDayIndex > 0) {
+      const prevIndex = currentDayIndex - 1;
+      // Move to previous day
+      setCurrentDayIndex(prevIndex);
+      setSelectedExercises(updatedDays[prevIndex].exercises);
+      setShowExerciseList(false);
+    }
+  };
+
+  const createProgram = async () => {
     if (!programName.trim()) {
       alert('Please enter a program name');
-      return;
-    }
-
-    if (selectedExercises.length === 0) {
-      alert('Please select at least one exercise');
       return;
     }
 
     const newProgram: Program = {
       id: Date.now().toString(),
       name: programName.trim(),
-      exercises: selectedExercises,
+      workoutDays: workoutDays,
       createdAt: new Date().toISOString(),
     };
 
-    setPrograms((prev) => [newProgram, ...prev]);
+    const updatedPrograms = [newProgram, ...programs];
+    setPrograms(updatedPrograms);
+    await savePrograms(updatedPrograms);
     clearProgram();
     setViewMode('list');
-    // Here you would typically save to AsyncStorage or database
-    console.log('Program created:', JSON.stringify(newProgram, null, 2));
+    console.log('Program created and saved:', JSON.stringify(newProgram, null, 2));
   };
 
-  const deleteProgram = (programId: string) => {
-    setPrograms((prev) => prev.filter((p) => p.id !== programId));
+  const deleteProgram = async (programId: string) => {
+    const updatedPrograms = programs.filter((p) => p.id !== programId);
+    setPrograms(updatedPrograms);
+    await savePrograms(updatedPrograms);
     if (selectedProgramId === programId) {
       setViewMode('list');
       setSelectedProgramId(null);
@@ -170,14 +303,14 @@ export default function ProgramsScreen() {
       
         <ThemedView className="mt-5 gap-4">
           {/* Create New Program Button */}
-          <Pressable
-            onPress={() => {
+        <Pressable 
+          onPress={() => {
               clearProgram();
               setViewMode('create');
-            }}
-          >
-            {({ pressed }) => (
-              <View
+          }}
+        >
+          {({ pressed }) => (
+            <View 
                 className="bg-blue-500 rounded-lg p-4 border-2 border-white"
                 style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
@@ -215,7 +348,7 @@ export default function ProgramsScreen() {
                               {program.name}
                             </ThemedText>
                             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-                              {program.exercises.length} exercise{program.exercises.length !== 1 ? 's' : ''}
+                              {program.workoutDays.length} day{program.workoutDays.length !== 1 ? 's' : ''} • {program.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercise{program.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0) !== 1 ? 's' : ''}
                             </ThemedText>
                           </View>
                           <View className="ml-3 bg-blue-500 rounded-full w-8 h-8 items-center justify-center">
@@ -242,7 +375,81 @@ export default function ProgramsScreen() {
 
   // Create Program View
   if (viewMode === 'create') {
-    // Step 1: Exercise Selection and Program Name
+    // Step 0: Program Name and Number of Workout Days
+    if (createStep === 0) {
+      return (
+        <ParallaxScrollView>
+          <ThemedView style={styles.titleContainer}>
+            <View className="flex-row items-center gap-4">
+              <Pressable onPress={() => {
+                clearProgram();
+                setViewMode('list');
+              }}>
+                {({ pressed }) => (
+                  <View
+                    className="px-3 py-1 rounded-lg"
+                    style={pressed && { backgroundColor: 'rgba(0,0,0,0.1)', opacity: 0.7 }}
+                  >
+                    <ThemedText className="text-lg font-semibold">‹ Back</ThemedText>
+                  </View>
+                )}
+              </Pressable>
+              <ThemedText type="title">Create Program</ThemedText>
+            </View>
+          </ThemedView>
+
+          <ThemedView className="mt-5 gap-4">
+            {/* Program Name Input */}
+            <ThemedView className="gap-2">
+              <ThemedText className="text-base font-semibold">
+                Program Name
+              </ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base"
+                placeholder="Enter program name..."
+                placeholderTextColor="#999"
+                value={programName}
+                onChangeText={setProgramName}
+              />
+            </ThemedView>
+
+            {/* Number of Workout Days Input */}
+            <ThemedView className="gap-2">
+              <ThemedText className="text-base font-semibold">
+                Number of Workout Days
+              </ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base"
+                placeholder="e.g., 3 (for a 3-day split)"
+                placeholderTextColor="#999"
+                value={numberOfDays}
+                onChangeText={setNumberOfDays}
+                keyboardType="numeric"
+              />
+              <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                How many unique workout days will this program contain?
+              </ThemedText>
+            </ThemedView>
+
+            {/* Continue Button */}
+            <Pressable onPress={continueToExerciseSelection}>
+              {({ pressed }) => (
+                <View
+                  className="bg-green-500 rounded-lg p-4 border-2 border-white"
+                  style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+                >
+                  <ThemedText className="text-white text-center font-semibold text-lg">
+                    Continue to Exercise Selection →
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
+          </ThemedView>
+        </ParallaxScrollView>
+      );
+    }
+
+    // Step 1: Exercise Selection for each day
     if (createStep === 1) {
       return (
         <ParallaxScrollView>
@@ -300,57 +507,70 @@ export default function ProgramsScreen() {
               )}
             </Pressable>
 
-            {/* Exercise Selection List */}
+            {/* Exercise Selection List - Organized by Muscle Groups */}
             {showExerciseList && (
               <ThemedView className="gap-3">
                 <ThemedText className="text-base font-semibold">
-                  Select Exercises
+                  Select Exercises by Muscle Group
                 </ThemedText>
                 <ScrollView className="max-h-96" showsVerticalScrollIndicator={true}>
-                  {exercises.map((exercise) => {
-                    const isSelected = isExerciseSelected(exercise.name);
-                    return (
-                      <Pressable
-                        key={exercise.name}
-                        onPress={() => toggleExercise(exercise)}
-                      >
-                        {({ pressed }) => (
-                          <View
-                            className={`mb-2 p-4 rounded-lg border-2 ${
-                              isSelected
-                                ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
-                                : pressed
-                                ? 'bg-gray-100 dark:bg-gray-700 border-gray-400'
-                                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                            }`}
-                            style={pressed && !isSelected ? { opacity: 0.8 } : {}}
-                          >
-                            <View className="flex-row items-center justify-between">
-                              <ThemedText 
-                                className="font-bold text-lg flex-1"
-                                numberOfLines={1}
-                              >
-                                {exercise.name}
-                              </ThemedText>
-                              <View
-                                className={`ml-3 w-7 h-7 rounded-full border-2 items-center justify-center flex-shrink-0 ${
-                                  isSelected
-                                    ? 'bg-blue-500 border-blue-600'
-                                    : 'border-gray-400 bg-gray-50 dark:bg-gray-700'
-                                }`}
-                              >
-                                {isSelected && (
-                                  <ThemedText className="text-white text-sm font-bold">
-                                    ✓
-                                  </ThemedText>
-                                )}
-                              </View>
+                  {Object.keys(exercisesByMuscleGroup)
+                    .sort()
+                    .map((muscleGroup) => {
+                      const muscleGroupExercises = exercisesByMuscleGroup[muscleGroup];
+                      return (
+                        <ThemedView key={muscleGroup} className="mb-3">
+                          <Collapsible title={`${muscleGroup.charAt(0).toUpperCase() + muscleGroup.slice(1)} (${muscleGroupExercises.length})`}>
+                            <View className="gap-2 mt-2">
+                              {muscleGroupExercises.map((exercise) => {
+                                const isSelected = isExerciseSelected(exercise.name);
+                                return (
+                                  <Pressable
+                                    key={exercise.name}
+                                    onPress={() => toggleExercise(exercise)}
+                                  >
+                                    {({ pressed }) => (
+                                      <View
+                                        className={`p-3 rounded-lg border-2 ${
+                                          isSelected
+                                            ? 'bg-blue-100 dark:bg-blue-900 border-blue-500'
+                                            : pressed
+                                            ? 'bg-gray-100 dark:bg-gray-700 border-gray-400'
+                                            : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                                        }`}
+                                        style={pressed && !isSelected ? { opacity: 0.8 } : {}}
+                                      >
+                                        <View className="flex-row items-center justify-between">
+                                          <ThemedText 
+                                            className="font-bold text-base flex-1"
+                                            numberOfLines={1}
+                                          >
+                                            {exercise.name}
+                                          </ThemedText>
+                                          <View
+                                            className={`ml-3 w-6 h-6 rounded-full border-2 items-center justify-center flex-shrink-0 ${
+                                              isSelected
+                                                ? 'bg-blue-500 border-blue-600'
+                                                : 'border-gray-400 bg-gray-50 dark:bg-gray-700'
+                                            }`}
+                                          >
+                                            {isSelected && (
+                                              <ThemedText className="text-white text-xs font-bold">
+                                                ✓
+                                              </ThemedText>
+                                            )}
+                                          </View>
+                                        </View>
+                                      </View>
+                                    )}
+                                  </Pressable>
+                                );
+                              })}
                             </View>
-                          </View>
-                        )}
-                      </Pressable>
-                    );
-                  })}
+                          </Collapsible>
+                        </ThemedView>
+                      );
+                    })}
                 </ScrollView>
               </ThemedView>
             )}
@@ -359,7 +579,7 @@ export default function ProgramsScreen() {
             {selectedExercises.length > 0 && (
               <ThemedView className="gap-3">
                 <ThemedText className="text-base font-semibold">
-                  Selected Exercises ({selectedExercises.length})
+                  Day {currentDayIndex + 1} Exercises ({selectedExercises.length})
                 </ThemedText>
                 <ScrollView className="max-h-48" showsVerticalScrollIndicator={true}>
                   {selectedExercises.map((exercise, index) => (
@@ -389,24 +609,53 @@ export default function ProgramsScreen() {
               </ThemedView>
             )}
 
-            {/* Continue Button */}
+            {/* Continue/Next Day Button */}
             {selectedExercises.length > 0 && (
               <Pressable
-                onPress={continueToConfiguration}
+                onPress={() => {
+                  // Save current day's exercises
+                  const updatedDays = [...workoutDays];
+                  updatedDays[currentDayIndex].exercises = [...selectedExercises];
+                  setWorkoutDays(updatedDays);
+
+                  // Check if all days have exercises (including current day we just saved)
+                  const allDaysComplete = updatedDays.every(day => day.exercises.length > 0);
+                  
+                  if (allDaysComplete) {
+                    // All days complete, go to configuration
+                    continueToConfiguration();
+                  } else if (currentDayIndex < workoutDays.length - 1) {
+                    // Move to next day
+                    const nextIndex = currentDayIndex + 1;
+                    setCurrentDayIndex(nextIndex);
+                    setSelectedExercises(updatedDays[nextIndex].exercises || []);
+                    setShowExerciseList(false);
+                  }
+                }}
               >
-                {({ pressed }) => (
-                  <View
-                    className="bg-green-500 rounded-lg p-4 border-2 border-white"
-                    style={[
-                      { marginTop: 16 },
-                      pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
-                    ]}
-                  >
-                    <ThemedText className="text-white text-center font-semibold text-lg">
-                      Continue to Configuration →
-                    </ThemedText>
-                  </View>
-                )}
+                {({ pressed }) => {
+                  // Check if all days will have exercises after saving current
+                  const updatedDays = [...workoutDays];
+                  updatedDays[currentDayIndex].exercises = [...selectedExercises];
+                  const allDaysComplete = updatedDays.every(day => day.exercises.length > 0);
+                  const isLastDay = currentDayIndex === workoutDays.length - 1;
+                  
+                  return (
+                    <View
+                      className="bg-green-500 rounded-lg p-4 border-2 border-white"
+                      style={[
+                        { marginTop: 16 },
+                        pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+                      ]}
+                    >
+                      <ThemedText className="text-white text-center font-semibold text-lg">
+                        {allDaysComplete || isLastDay
+                          ? 'Continue to Configuration →'
+                          : `Continue to Day ${currentDayIndex + 2} →`}
+                      </ThemedText>
+                    </View>
+                  );
+                }}
               </Pressable>
             )}
           </ThemedView>
@@ -439,12 +688,19 @@ export default function ProgramsScreen() {
               {programName}
             </ThemedText>
             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-              {selectedExercises.length} exercise{selectedExercises.length !== 1 ? 's' : ''}
+              {workoutDays.length} day{workoutDays.length !== 1 ? 's' : ''} • {selectedExercises.length} exercise{selectedExercises.length !== 1 ? 's' : ''} total
             </ThemedText>
           </ThemedView>
 
-          <ScrollView showsVerticalScrollIndicator={true}>
-            {selectedExercises.map((exercise, index) => (
+          {/* Group exercises by day */}
+          {workoutDays.map((day, dayIndex) => (
+            <ThemedView key={day.dayNumber} className="gap-3 mb-4">
+              <ThemedText className="text-base font-semibold">
+                Day {day.dayNumber} ({day.exercises.length} exercise{day.exercises.length !== 1 ? 's' : ''})
+              </ThemedText>
+
+              <ScrollView showsVerticalScrollIndicator={true}>
+                {day.exercises.map((exercise, index) => (
               <View
                 key={`${exercise.name}-${index}`}
                 className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
@@ -489,7 +745,7 @@ export default function ProgramsScreen() {
                       placeholderTextColor="#999"
                       value={exercise.sets}
                       onChangeText={(value) =>
-                        updateExerciseField(exercise.name, 'sets', value)
+                        updateExerciseField(exercise.name, 'sets', value, day.dayNumber)
                       }
                       keyboardType="numeric"
                     />
@@ -503,7 +759,7 @@ export default function ProgramsScreen() {
                       placeholderTextColor="#999"
                       value={exercise.reps}
                       onChangeText={(value) =>
-                        updateExerciseField(exercise.name, 'reps', value)
+                        updateExerciseField(exercise.name, 'reps', value, day.dayNumber)
                       }
                     />
                   </ThemedView>
@@ -516,7 +772,7 @@ export default function ProgramsScreen() {
                       placeholderTextColor="#999"
                       value={exercise.weight}
                       onChangeText={(value) =>
-                        updateExerciseField(exercise.name, 'weight', value)
+                        updateExerciseField(exercise.name, 'weight', value, day.dayNumber)
                       }
                     />
                   </ThemedView>
@@ -529,7 +785,7 @@ export default function ProgramsScreen() {
                       placeholderTextColor="#999"
                       value={exercise.restTime}
                       onChangeText={(value) =>
-                        updateExerciseField(exercise.name, 'restTime', value)
+                        updateExerciseField(exercise.name, 'restTime', value, day.dayNumber)
                       }
                     />
                   </ThemedView>
@@ -542,14 +798,16 @@ export default function ProgramsScreen() {
                       placeholderTextColor="#999"
                       value={exercise.progression}
                       onChangeText={(value) =>
-                        updateExerciseField(exercise.name, 'progression', value)
+                        updateExerciseField(exercise.name, 'progression', value, day.dayNumber)
                       }
                     />
                   </ThemedView>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
+              ))}
+              </ScrollView>
+            </ThemedView>
+          ))}
 
           {/* Create Program Button - At bottom */}
           <Pressable
@@ -597,7 +855,7 @@ export default function ProgramsScreen() {
         <ThemedView className="mt-5 gap-4">
           <View className="flex-row items-center justify-between mb-4">
             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-              {selectedProgram.exercises.length} exercise{selectedProgram.exercises.length !== 1 ? 's' : ''}
+              {selectedProgram.workoutDays.length} day{selectedProgram.workoutDays.length !== 1 ? 's' : ''} • {selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercise{selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0) !== 1 ? 's' : ''}
             </ThemedText>
             <Pressable
               onPress={() => deleteProgram(selectedProgram.id)}
@@ -609,28 +867,33 @@ export default function ProgramsScreen() {
                 >
                   <ThemedText className="text-white text-sm font-semibold">
                     Delete Program
-                  </ThemedText>
-                </View>
-              )}
-            </Pressable>
+              </ThemedText>
+            </View>
+          )}
+        </Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={true}>
-            {selectedProgram.exercises.map((exercise, index) => (
-              <View
-                key={exercise.name}
-                className="mb-3 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
-              >
-                <View className="flex-row items-center gap-2 mb-3">
-                  <View className="bg-blue-500 w-8 h-8 rounded-full items-center justify-center">
-                    <ThemedText className="text-white font-bold text-sm">
-                      {index + 1}
-                    </ThemedText>
-                  </View>
-                  <ThemedText className="font-bold text-lg flex-1">
-                    {exercise.name}
-                  </ThemedText>
-                </View>
+            {selectedProgram.workoutDays.map((day) => (
+              <ThemedView key={day.dayNumber} className="mb-4">
+                <ThemedText className="text-lg font-bold mb-3">
+                  Day {day.dayNumber}
+                </ThemedText>
+                {day.exercises.map((exercise, index) => (
+                  <View
+                    key={exercise.name}
+                    className="mb-3 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
+                  >
+                    <View className="flex-row items-center gap-2 mb-3">
+                      <View className="bg-blue-500 w-8 h-8 rounded-full items-center justify-center">
+                        <ThemedText className="text-white font-bold text-sm">
+                          {index + 1}
+                        </ThemedText>
+                      </View>
+                      <ThemedText className="font-bold text-lg flex-1">
+                        {exercise.name}
+                      </ThemedText>
+                    </View>
 
                 <Collapsible title="Equipment & Muscles">
                   <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mb-2">
@@ -704,9 +967,11 @@ export default function ProgramsScreen() {
                         </View>
                       )}
                     </View>
+                    </View>
+                  )}
                   </View>
-                )}
-              </View>
+                ))}
+              </ThemedView>
             ))}
           </ScrollView>
       </ThemedView>
