@@ -45,4 +45,7 @@ app-example
 # Python virtual environment
 executorch/
 
+# Markdown files
+*.md
+
 
