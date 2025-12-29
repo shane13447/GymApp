@@ -57,6 +57,8 @@ export default function ProgramsScreen() {
 
   // Storage key for AsyncStorage
   const PROGRAMS_STORAGE_KEY = 'gymApp_programs';
+  const CURRENT_PROGRAM_STORAGE_KEY = 'gymApp_currentProgram';
+  const [currentProgramId, setCurrentProgramId] = useState<string | null>(null);
 
   // Load programs from AsyncStorage
   const loadPrograms = async () => {
@@ -66,8 +68,24 @@ export default function ProgramsScreen() {
         const loadedPrograms: Program[] = JSON.parse(stored);
         setPrograms(loadedPrograms);
       }
+      
+      // Load current program ID
+      const currentId = await AsyncStorage.getItem(CURRENT_PROGRAM_STORAGE_KEY);
+      setCurrentProgramId(currentId);
     } catch (error) {
       console.error('Error loading programs:', error);
+    }
+  };
+
+  // Set program as current
+  const setCurrentProgram = async (programId: string) => {
+    try {
+      await AsyncStorage.setItem(CURRENT_PROGRAM_STORAGE_KEY, programId);
+      setCurrentProgramId(programId);
+      alert('Program set as current!');
+    } catch (error) {
+      console.error('Error setting current program:', error);
+      alert('Failed to set current program');
     }
   };
 
@@ -120,13 +138,13 @@ export default function ProgramsScreen() {
       if (isSelected) {
         return prev.filter((e) => e.name !== exercise.name);
       } else {
-        // Add exercise with empty program fields
+        // Add exercise with default program fields
         const programExercise: ProgramExercise = {
           ...exercise,
-          weight: '',
-          reps: '',
-          sets: '',
-          restTime: '',
+          weight: 'RPE 8',
+          reps: '8-12',
+          sets: '3',
+          restTime: '180',
           progression: '',
         };
         return [...prev, programExercise];
@@ -344,9 +362,18 @@ export default function ProgramsScreen() {
                       >
                         <View className="flex-row items-center justify-between">
                           <View className="flex-1">
-                            <ThemedText className="font-bold text-xl mb-1">
-                              {program.name}
-                            </ThemedText>
+                            <View className="flex-row items-center gap-2">
+                              <ThemedText className="font-bold text-xl mb-1">
+                                {program.name}
+                              </ThemedText>
+                              {currentProgramId === program.id && (
+                                <View className="bg-green-500 px-2 py-1 rounded">
+                                  <ThemedText className="text-white text-xs font-semibold">
+                                    CURRENT
+                                  </ThemedText>
+                                </View>
+                              )}
+                            </View>
                             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
                               {program.workoutDays.length} day{program.workoutDays.length !== 1 ? 's' : ''} • {program.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercise{program.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0) !== 1 ? 's' : ''}
                             </ThemedText>
@@ -405,11 +432,12 @@ export default function ProgramsScreen() {
                 Program Name
               </ThemedText>
               <TextInput
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base"
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
                 placeholder="Enter program name..."
                 placeholderTextColor="#999"
                 value={programName}
                 onChangeText={setProgramName}
+                style={[{ color: '#ffffff', fontSize: 16 }]}
               />
             </ThemedView>
 
@@ -419,12 +447,13 @@ export default function ProgramsScreen() {
                 Number of Workout Days
               </ThemedText>
               <TextInput
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base"
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
                 placeholder="e.g., 3 (for a 3-day split)"
                 placeholderTextColor="#999"
                 value={numberOfDays}
                 onChangeText={setNumberOfDays}
                 keyboardType="numeric"
+                style={[{ color: '#ffffff', fontSize: 16 }]}
               />
               <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                 How many unique workout days will this program contain?
@@ -479,11 +508,12 @@ export default function ProgramsScreen() {
                 Program Name
               </ThemedText>
               <TextInput
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base"
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
                 placeholder="Enter program name..."
                 placeholderTextColor="#999"
                 value={programName}
                 onChangeText={setProgramName}
+                style={[{ color: '#ffffff', fontSize: 16 }]}
               />
             </ThemedView>
 
@@ -541,7 +571,7 @@ export default function ProgramsScreen() {
                                         style={pressed && !isSelected ? { opacity: 0.8 } : {}}
                                       >
                                         <View className="flex-row items-center justify-between">
-                                          <ThemedText 
+              <ThemedText 
                                             className="font-bold text-base flex-1"
                                             numberOfLines={1}
                                           >
@@ -748,6 +778,7 @@ export default function ProgramsScreen() {
                         updateExerciseField(exercise.name, 'sets', value, day.dayNumber)
                       }
                       keyboardType="numeric"
+                      style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
 
@@ -761,6 +792,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'reps', value, day.dayNumber)
                       }
+                      style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
 
@@ -774,6 +806,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'weight', value, day.dayNumber)
                       }
+                      style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
 
@@ -787,6 +820,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'restTime', value, day.dayNumber)
                       }
+                      style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
 
@@ -800,6 +834,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'progression', value, day.dayNumber)
                       }
+                      style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
                   </View>
@@ -857,20 +892,45 @@ export default function ProgramsScreen() {
             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
               {selectedProgram.workoutDays.length} day{selectedProgram.workoutDays.length !== 1 ? 's' : ''} • {selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercise{selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0) !== 1 ? 's' : ''}
             </ThemedText>
-            <Pressable
-              onPress={() => deleteProgram(selectedProgram.id)}
-            >
-              {({ pressed }) => (
-                <View
-                  className="bg-red-500 px-4 py-2 rounded-lg border-2 border-white"
-                  style={pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}
+            <View className="flex-row gap-2">
+              {currentProgramId !== selectedProgram.id && (
+                <Pressable
+                  onPress={() => setCurrentProgram(selectedProgram.id)}
                 >
+                  {({ pressed }) => (
+                    <View
+                      className="bg-green-500 px-4 py-2 rounded-lg border-2 border-white"
+                      style={pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}
+                    >
+                      <ThemedText className="text-white text-sm font-semibold">
+                        Set as Current
+                      </ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              )}
+              {currentProgramId === selectedProgram.id && (
+                <View className="bg-green-500 px-4 py-2 rounded-lg border-2 border-white">
                   <ThemedText className="text-white text-sm font-semibold">
-                    Delete Program
-              </ThemedText>
+                    ✓ Current Program
+                  </ThemedText>
+                </View>
+              )}
+              <Pressable
+                onPress={() => deleteProgram(selectedProgram.id)}
+              >
+                {({ pressed }) => (
+                  <View
+                    className="bg-red-500 px-4 py-2 rounded-lg border-2 border-white"
+                    style={pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}
+                  >
+                    <ThemedText className="text-white text-sm font-semibold">
+                      Delete Program
+                    </ThemedText>
+                  </View>
+                )}
+              </Pressable>
             </View>
-          )}
-        </Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={true}>
