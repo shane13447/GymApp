@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -389,7 +389,7 @@ export default function ActiveWorkout() {
   if (isLoading) {
     return (
       <ParallaxScrollView>
-        <ThemedView style={styles.container}>
+        <ThemedView className="flex-1">
           <ThemedText type="title">Loading...</ThemedText>
         </ThemedView>
       </ParallaxScrollView>
@@ -399,7 +399,7 @@ export default function ActiveWorkout() {
   if (!currentProgram) {
     return (
       <ParallaxScrollView>
-        <ThemedView style={styles.container}>
+        <ThemedView className="flex-1">
           <ThemedText type="title">No Program Selected</ThemedText>
           <Pressable onPress={() => router.back()}>
             {({ pressed }) => (
@@ -422,8 +422,8 @@ export default function ActiveWorkout() {
 
   return (
     <ParallaxScrollView>
-      <ThemedView style={styles.container}>
-        <View style={styles.titleContainer}>
+      <ThemedView className="flex-1">
+        <View className="flex-row items-center gap-2">
           <Pressable onPress={() => router.back()}>
             {({ pressed }) => (
               <View
@@ -626,14 +626,3 @@ export default function ActiveWorkout() {
     </ParallaxScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-});
