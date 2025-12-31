@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -314,7 +314,7 @@ export default function ProgramsScreen() {
   if (viewMode === 'list') {
   return (
     <ParallaxScrollView>
-      <ThemedView style={styles.titleContainer}>
+      <ThemedView className="flex-row items-center gap-2">
           <ThemedText type="title">Programs</ThemedText>
         <HelloWave />
       </ThemedView>
@@ -406,7 +406,7 @@ export default function ProgramsScreen() {
     if (createStep === 0) {
       return (
         <ParallaxScrollView>
-          <ThemedView style={styles.titleContainer}>
+          <ThemedView className="flex-row items-center gap-2">
             <View className="flex-row items-center gap-4">
               <Pressable onPress={() => {
                 clearProgram();
@@ -482,7 +482,7 @@ export default function ProgramsScreen() {
     if (createStep === 1) {
       return (
         <ParallaxScrollView>
-        <ThemedView style={styles.titleContainer}>
+        <ThemedView className="flex-row items-center gap-2">
           <View className="flex-row items-center gap-4">
             <Pressable onPress={() => {
               clearProgram();
@@ -696,7 +696,7 @@ export default function ProgramsScreen() {
     // Step 2: Exercise Configuration
     return (
       <ParallaxScrollView>
-        <ThemedView style={styles.titleContainer}>
+        <ThemedView className="flex-row items-center gap-2">
           <View className="flex-row items-center gap-4">
             <Pressable onPress={() => setCreateStep(1)}>
               {({ pressed }) => (
@@ -871,7 +871,7 @@ export default function ProgramsScreen() {
   if (viewMode === 'view' && selectedProgram) {
     return (
       <ParallaxScrollView>
-        <ThemedView style={styles.titleContainer}>
+        <ThemedView className="flex-row items-center gap-2">
           <View className="flex-row items-center gap-4">
             <Pressable onPress={() => setViewMode('list')}>
               {({ pressed }) => (
@@ -1042,11 +1042,3 @@ export default function ProgramsScreen() {
   // Fallback (should not reach here)
   return null;
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-});

@@ -7,18 +7,18 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
+import exercisesData from '@/data/exerciseSelection.json';
 import {
-  loadWorkoutQueue,
-  buildModificationPrompt,
-  parseModificationResponse,
-  formatProposedChanges,
   applyModifications,
+  buildModificationPrompt,
+  formatProposedChanges,
+  loadWorkoutQueue,
+  parseModificationResponse,
   WORKOUT_MODIFICATION_SYSTEM_PROMPT,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { WorkoutQueueItem } from './ActiveWorkout';
 import type { Exercise } from './Programs';
-import exercisesData from '@/data/exerciseSelection.json';
 
 type CoachMode = 'chat' | 'modify_workout';
 
@@ -200,7 +200,7 @@ export default function HomeScreen() {
       
       <ThemedView style={styles.container}>
         {/* Mode Selector */}
-        <View style={styles.modeSelector}>
+        <View className="flex-row gap-2 mb-4">
           <Pressable
             onPress={() => {
               setMode('chat');
@@ -208,20 +208,25 @@ export default function HomeScreen() {
               setResponse('');
               setError('');
             }}
-            style={({ pressed }) => [
-              styles.modeButton,
-              mode === 'chat' && styles.modeButtonActive,
-              pressed && styles.modeButtonPressed,
-            ]}
+            className="flex-1"
           >
-            <ThemedText
-              style={[
-                styles.modeButtonText,
-                mode === 'chat' && styles.modeButtonTextActive,
-              ]}
-            >
-              Chat
-            </ThemedText>
+            {({ pressed }) => (
+              <View
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                  mode === 'chat'
+                    ? 'bg-blue-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                } ${pressed ? 'opacity-70' : ''}`}
+              >
+                <ThemedText
+                  className={`text-sm font-semibold ${
+                    mode === 'chat' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  Chat
+                </ThemedText>
+              </View>
+            )}
           </Pressable>
           <Pressable
             onPress={() => {
@@ -231,20 +236,25 @@ export default function HomeScreen() {
               setError('');
               loadWorkoutQueue().then(setWorkoutQueue);
             }}
-            style={({ pressed }) => [
-              styles.modeButton,
-              mode === 'modify_workout' && styles.modeButtonActive,
-              pressed && styles.modeButtonPressed,
-            ]}
+            className="flex-1"
           >
-            <ThemedText
-              style={[
-                styles.modeButtonText,
-                mode === 'modify_workout' && styles.modeButtonTextActive,
-              ]}
-            >
-              Modify Workout Queue
-            </ThemedText>
+            {({ pressed }) => (
+              <View
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                  mode === 'modify_workout'
+                    ? 'bg-blue-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                } ${pressed ? 'opacity-70' : ''}`}
+              >
+                <ThemedText
+                  className={`text-sm font-semibold ${
+                    mode === 'modify_workout' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  Modify Workout Queue
+                </ThemedText>
+              </View>
+            )}
           </Pressable>
         </View>
 
@@ -363,20 +373,22 @@ export default function HomeScreen() {
         />
 
         <Pressable
-          style={({ pressed }) => [
-            styles.sendButton,
-            pressed && styles.sendButtonPressed,
-            (loading || llm.isGenerating || !llm.isReady) && styles.sendButtonDisabled,
-          ]}
           onPress={sendToLlama}
           disabled={loading || llm.isGenerating || !llm.isReady}
+          className={`bg-blue-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
+            (loading || llm.isGenerating || !llm.isReady) ? 'opacity-50' : ''
+          }`}
         >
-          {(loading || llm.isGenerating) ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText type="defaultSemiBold" className="text-white">
-              Send
-            </ThemedText>
+          {({ pressed }) => (
+            <View className={pressed ? 'opacity-70' : ''}>
+              {(loading || llm.isGenerating) ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <ThemedText type="defaultSemiBold" className="text-white">
+                  Send
+                </ThemedText>
+              )}
+            </View>
           )}
         </Pressable>
 
@@ -436,21 +448,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     color: '#000',
   },
-  sendButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  sendButtonPressed: {
-    opacity: 0.7,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
   errorContainer: {
     backgroundColor: '#ffebee',
     padding: 12,
@@ -500,34 +497,6 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     color: '#e65100',
-  },
-  modeSelector: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#e0e0e0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  modeButtonPressed: {
-    opacity: 0.7,
-  },
-  modeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  modeButtonTextActive: {
-    color: '#fff',
   },
   infoBox: {
     backgroundColor: '#e3f2fd',

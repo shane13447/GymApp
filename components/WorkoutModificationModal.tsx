@@ -1,7 +1,7 @@
+import type { ProposedChanges } from '@/services/workout-queue-modifier';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
-import type { ProposedChanges } from '@/services/workout-queue-modifier';
 
 interface WorkoutModificationModalProps {
   visible: boolean;
@@ -181,28 +181,39 @@ export default function WorkoutModificationModal({
           )}
 
           {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
+          <View className="flex-row gap-3 mt-4">
             <Pressable
               onPress={onCancel}
-              style={({ pressed }) => [
-                styles.button,
-                styles.cancelButton,
-                pressed && styles.buttonPressed,
-              ]}
+              className="flex-1"
             >
-              <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              {({ pressed }) => (
+                <View
+                  className={`bg-gray-200 dark:bg-gray-700 py-3 px-5 rounded-lg items-center justify-center ${
+                    pressed ? 'opacity-70' : ''
+                  }`}
+                >
+                  <ThemedText className="text-gray-900 dark:text-gray-100 text-base font-semibold">
+                    Cancel
+                  </ThemedText>
+                </View>
+              )}
             </Pressable>
             <Pressable
               onPress={onConfirm}
               disabled={!hasChanges}
-              style={({ pressed }) => [
-                styles.button,
-                styles.confirmButton,
-                pressed && styles.buttonPressed,
-                !hasChanges && styles.buttonDisabled,
-              ]}
+              className={`flex-1 ${!hasChanges ? 'opacity-50' : ''}`}
             >
-              <ThemedText style={styles.confirmButtonText}>Confirm Changes</ThemedText>
+              {({ pressed }) => (
+                <View
+                  className={`bg-blue-500 py-3 px-5 rounded-lg items-center justify-center ${
+                    pressed ? 'opacity-70' : ''
+                  }`}
+                >
+                  <ThemedText className="text-white text-base font-semibold">
+                    Confirm Changes
+                  </ThemedText>
+                </View>
+              )}
             </Pressable>
           </View>
         </ThemedView>
@@ -351,41 +362,6 @@ const styles = StyleSheet.create({
   noChangesText: {
     fontSize: 16,
     color: '#666',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#e0e0e0',
-  },
-  confirmButton: {
-    backgroundColor: '#007AFF',
-  },
-  buttonPressed: {
-    opacity: 0.7,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  cancelButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  confirmButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 
