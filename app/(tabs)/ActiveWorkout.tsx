@@ -135,17 +135,14 @@ export default function ActiveWorkout() {
     if (!progression || !progression.trim()) return lastWeight;
 
     try {
-      // Parse progression (e.g., "+5lbs", "+2.5kg", "+5", "+10 lbs")
+      // Parse progression as integer (e.g., "5", "10", "2.5")
       const progressionStr = progression.trim();
-      const progressionMatch = progressionStr.match(/^\+?\s*([\d.]+)\s*(lbs?|kg|lb)?/i);
+      const progressionAmount = parseFloat(progressionStr);
       
-      if (!progressionMatch) {
+      if (isNaN(progressionAmount)) {
         // If progression format is invalid, just return last weight
         return lastWeight;
       }
-
-      const progressionAmount = parseFloat(progressionMatch[1]);
-      const progressionUnit = progressionMatch[2]?.toLowerCase() || '';
 
       // Parse last weight (e.g., "135 lbs", "60kg", "135")
       const lastWeightMatch = lastWeight.match(/([\d.]+)\s*(lbs?|kg|lb)?/i);
@@ -155,7 +152,7 @@ export default function ActiveWorkout() {
         const lastWeightNum = parseFloat(lastWeight);
         if (!isNaN(lastWeightNum)) {
           const newWeight = lastWeightNum + progressionAmount;
-          return progressionUnit ? `${newWeight} ${progressionUnit}` : newWeight.toString();
+          return newWeight.toString();
         }
         return lastWeight;
       }
@@ -166,12 +163,9 @@ export default function ActiveWorkout() {
       // Calculate new weight
       const newWeight = lastWeightAmount + progressionAmount;
 
-      // Determine unit to use (prefer lastWeightUnit, fallback to progressionUnit)
-      const unit = lastWeightUnit || progressionUnit;
-
-      // Format result
-      if (unit) {
-        return `${newWeight} ${unit}`;
+      // Format result with original unit if present
+      if (lastWeightUnit) {
+        return `${newWeight} ${lastWeightUnit}`;
       } else {
         return newWeight.toString();
       }

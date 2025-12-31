@@ -6,7 +6,7 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import type { Workout, WorkoutExercise } from './ActiveWorkout';
+import type { Workout } from './ActiveWorkout';
 
 const WORKOUTS_STORAGE_KEY = 'gymApp_workouts';
 
@@ -120,7 +120,7 @@ export default function HistoryScreen() {
                 <ThemedView key={dateKey} className="mb-4">
                   <Collapsible
                     title={
-                      <View className="flex-row items-center justify-between w-full pr-4">
+                      <View className="flex-row items-center gap-20 w-full pr-4">
                         <ThemedText className="font-semibold text-lg">{dateKey}</ThemedText>
                         <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
                           {totalWorkouts} workout{totalWorkouts !== 1 ? 's' : ''}

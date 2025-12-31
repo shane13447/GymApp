@@ -39,7 +39,7 @@ export interface Program {
   createdAt: string;
 }
 
-type ViewMode = 'list' | 'create' | 'view';
+type ViewMode = 'list' | 'create' | 'view' | 'edit';
 
 export default function ProgramsScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -306,6 +306,43 @@ export default function ProgramsScreen() {
   const viewProgram = (programId: string) => {
     setSelectedProgramId(programId);
     setViewMode('view');
+  };
+
+  const editProgram = (programId: string) => {
+    const program = programs.find((p) => p.id === programId);
+    if (program) {
+      setSelectedProgramId(programId);
+      setProgramName(program.name);
+      setWorkoutDays(program.workoutDays);
+      setCurrentDayIndex(0);
+      setSelectedExercises(program.workoutDays[0]?.exercises || []);
+      setCreateStep(2); // Start at configuration step
+      setViewMode('edit');
+    }
+  };
+
+  const updateProgram = async () => {
+    if (!programName.trim() || !selectedProgramId) {
+      alert('Please enter a program name');
+      return;
+    }
+
+    const updatedProgram: Program = {
+      id: selectedProgramId,
+      name: programName.trim(),
+      workoutDays: workoutDays,
+      createdAt: programs.find((p) => p.id === selectedProgramId)?.createdAt || new Date().toISOString(),
+    };
+
+    const updatedPrograms = programs.map((p) =>
+      p.id === selectedProgramId ? updatedProgram : p
+    );
+    setPrograms(updatedPrograms);
+    await savePrograms(updatedPrograms);
+    clearProgram();
+    setViewMode('list');
+    setSelectedProgramId(null);
+    console.log('Program updated and saved:', JSON.stringify(updatedProgram, null, 2));
   };
 
   const selectedProgram = programs.find((p) => p.id === selectedProgramId);
@@ -828,12 +865,13 @@ export default function ProgramsScreen() {
                     <ThemedText className="text-sm font-semibold">Progression</ThemedText>
                     <TextInput
                       className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-                      placeholder="e.g., +5lbs/week"
+                      placeholder="e.g., 5"
                       placeholderTextColor="#999"
                       value={exercise.progression}
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'progression', value, day.dayNumber)
                       }
+                      keyboardType="numeric"
                       style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
@@ -867,6 +905,191 @@ export default function ProgramsScreen() {
     );
   }
 
+  // Edit Program View (reuses create program configuration UI)
+  if (viewMode === 'edit' && selectedProgram) {
+    return (
+      <ParallaxScrollView>
+        <ThemedView className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-4">
+            <Pressable onPress={() => {
+              clearProgram();
+              setViewMode('list');
+              setSelectedProgramId(null);
+            }}>
+              {({ pressed }) => (
+                <View
+                  className="px-3 py-1 rounded-lg"
+                  style={pressed && { backgroundColor: 'rgba(0,0,0,0.1)', opacity: 0.7 }}
+                >
+                  <ThemedText className="text-lg font-semibold">‹ Back</ThemedText>
+                </View>
+              )}
+            </Pressable>
+            <ThemedText type="title">Edit Program</ThemedText>
+          </View>
+        </ThemedView>
+
+        <ThemedView className="mt-5 gap-4">
+          <ThemedView className="gap-2 mb-4">
+            <ThemedText className="text-base font-semibold">
+              Program Name
+            </ThemedText>
+            <TextInput
+              className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
+              placeholder="Enter program name..."
+              placeholderTextColor="#999"
+              value={programName}
+              onChangeText={setProgramName}
+              style={[{ color: '#ffffff', fontSize: 16 }]}
+            />
+          </ThemedView>
+
+          {/* Group exercises by day */}
+          {workoutDays.map((day, dayIndex) => (
+            <ThemedView key={day.dayNumber} className="gap-3 mb-4">
+              <ThemedText className="text-base font-semibold">
+                Day {day.dayNumber} ({day.exercises.length} exercise{day.exercises.length !== 1 ? 's' : ''})
+              </ThemedText>
+
+              <ScrollView showsVerticalScrollIndicator={true}>
+                {day.exercises.map((exercise, index) => (
+              <View
+                key={`${exercise.name}-${index}`}
+                className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
+              >
+                <View className="flex-row items-center gap-2 mb-3">
+                  <View className="bg-blue-500 w-8 h-8 rounded-full items-center justify-center">
+                    <ThemedText className="text-white font-bold text-sm">
+                      {index + 1}
+                    </ThemedText>
+                  </View>
+                  <ThemedText className="font-bold text-lg flex-1">
+                    {exercise.name}
+                  </ThemedText>
+                </View>
+
+                {/* Equipment and Muscles Dropdown */}
+                <Collapsible title="Equipment & Muscles Worked">
+                  <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Equipment: {exercise.equipment}
+                  </ThemedText>
+                  <View className="flex-row flex-wrap gap-1">
+                    {exercise.muscle_groups_worked.map((group) => (
+                      <View
+                        key={group}
+                        className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded"
+                      >
+                        <ThemedText className="text-xs capitalize">
+                          {group}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </Collapsible>
+
+                {/* Input Fields */}
+                <View className="mt-3 gap-3">
+                  <ThemedView className="gap-1">
+                    <ThemedText className="text-sm font-semibold">Sets</ThemedText>
+                    <TextInput
+                      className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                      placeholder="e.g., 3"
+                      placeholderTextColor="#999"
+                      value={exercise.sets}
+                      onChangeText={(value) =>
+                        updateExerciseField(exercise.name, 'sets', value, day.dayNumber)
+                      }
+                      keyboardType="numeric"
+                      style={{ color: '#ffffff' }}
+                    />
+                  </ThemedView>
+
+                  <ThemedView className="gap-1">
+                    <ThemedText className="text-sm font-semibold">Reps</ThemedText>
+                    <TextInput
+                      className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                      placeholder="e.g., 8-10"
+                      placeholderTextColor="#999"
+                      value={exercise.reps}
+                      onChangeText={(value) =>
+                        updateExerciseField(exercise.name, 'reps', value, day.dayNumber)
+                      }
+                      style={{ color: '#ffffff' }}
+                    />
+                  </ThemedView>
+
+                  <ThemedView className="gap-1">
+                    <ThemedText className="text-sm font-semibold">Weight</ThemedText>
+                    <TextInput
+                      className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                      placeholder="e.g., 135 lbs or RPE 8"
+                      placeholderTextColor="#999"
+                      value={exercise.weight}
+                      onChangeText={(value) =>
+                        updateExerciseField(exercise.name, 'weight', value, day.dayNumber)
+                      }
+                      style={{ color: '#ffffff' }}
+                    />
+                  </ThemedView>
+
+                  <ThemedView className="gap-1">
+                    <ThemedText className="text-sm font-semibold">Rest Time</ThemedText>
+                    <TextInput
+                      className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                      placeholder="e.g., 90 seconds"
+                      placeholderTextColor="#999"
+                      value={exercise.restTime}
+                      onChangeText={(value) =>
+                        updateExerciseField(exercise.name, 'restTime', value, day.dayNumber)
+                      }
+                      style={{ color: '#ffffff' }}
+                    />
+                  </ThemedView>
+
+                  <ThemedView className="gap-1">
+                    <ThemedText className="text-sm font-semibold">Progression</ThemedText>
+                    <TextInput
+                      className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                      placeholder="e.g., 5"
+                      placeholderTextColor="#999"
+                      value={exercise.progression}
+                      onChangeText={(value) =>
+                        updateExerciseField(exercise.name, 'progression', value, day.dayNumber)
+                      }
+                      keyboardType="numeric"
+                      style={{ color: '#ffffff' }}
+                    />
+                  </ThemedView>
+                  </View>
+                </View>
+              ))}
+              </ScrollView>
+            </ThemedView>
+          ))}
+
+          {/* Update Program Button - At bottom */}
+          <Pressable
+            onPress={updateProgram}
+          >
+            {({ pressed }) => (
+              <View
+                className="bg-green-500 rounded-lg p-4 border-2 border-white"
+                style={[
+                  { marginTop: 16 },
+                  pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <ThemedText className="text-white text-center font-semibold text-lg">
+                  ✓ Update Program
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+        </ThemedView>
+      </ParallaxScrollView>
+    );
+  }
+
   // View Program Details
   if (viewMode === 'view' && selectedProgram) {
     return (
@@ -888,18 +1111,18 @@ export default function ProgramsScreen() {
         </ThemedView>
 
         <ThemedView className="mt-5 gap-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
+          <View className="mb-4">
+            <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               {selectedProgram.workoutDays.length} day{selectedProgram.workoutDays.length !== 1 ? 's' : ''} • {selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercise{selectedProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0) !== 1 ? 's' : ''}
             </ThemedText>
-            <View className="flex-row gap-2">
+            <View className="gap-2">
               {currentProgramId !== selectedProgram.id && (
                 <Pressable
                   onPress={() => setCurrentProgram(selectedProgram.id)}
                 >
                   {({ pressed }) => (
                     <View
-                      className="bg-green-500 px-4 py-2 rounded-lg border-2 border-white"
+                      className="bg-blue-500 px-4 py-2 rounded-lg border-2 border-white"
                       style={pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}
                     >
                       <ThemedText className="text-white text-sm font-semibold">
@@ -916,6 +1139,20 @@ export default function ProgramsScreen() {
                   </ThemedText>
                 </View>
               )}
+              <Pressable
+                onPress={() => editProgram(selectedProgram.id)}
+              >
+                {({ pressed }) => (
+                  <View
+                    className="bg-blue-500 px-4 py-2 rounded-lg border-2 border-white"
+                    style={pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }}
+                  >
+                    <ThemedText className="text-white text-sm font-semibold">
+                      Edit Program
+                    </ThemedText>
+                  </View>
+                )}
+              </Pressable>
               <Pressable
                 onPress={() => deleteProgram(selectedProgram.id)}
               >

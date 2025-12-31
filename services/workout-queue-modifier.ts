@@ -23,7 +23,7 @@ Each exercise object contains:
 - reps: string (e.g., "8-12")
 - sets: string (e.g., "3")
 - restTime: string (e.g., "180")
-- progression: string (e.g., "+5lbs/week")
+- progression: string (e.g., "5")
 
 YOUR TASKS:
 1. CHANGE WEIGHT: Update the "weight" field for specific exercises
