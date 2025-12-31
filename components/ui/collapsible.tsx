@@ -1,4 +1,4 @@
-import { PropsWithChildren, useState } from 'react';
+import { PropsWithChildren, ReactNode, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -7,7 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
+export function Collapsible({ children, title }: PropsWithChildren & { title: string | ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const theme = useColorScheme() ?? 'light';
 
@@ -15,19 +15,25 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
     <ThemedView>
       <Pressable
         onPress={() => setIsOpen((value) => !value)}
-        className="flex-row items-center gap-1.5"
+        className="flex-row items-start gap-1.5"
       >
         {({ pressed }) => (
-          <View className={pressed ? 'opacity-70' : ''}>
-            <View className="flex-row items-center gap-1.5">
+          <View className={pressed ? 'opacity-70' : ''} style={{ flex: 1 }}>
+            <View className="flex-row items-start gap-1.5">
               <IconSymbol
                 name="chevron.right"
                 size={18}
                 weight="medium"
                 color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
-                style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
+                style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }], marginTop: 2 }}
               />
-              <ThemedText type="defaultSemiBold">{title}</ThemedText>
+              <View style={{ flex: 1 }}>
+                {typeof title === 'string' ? (
+                  <ThemedText type="defaultSemiBold">{title}</ThemedText>
+                ) : (
+                  title
+                )}
+              </View>
             </View>
           </View>
         )}

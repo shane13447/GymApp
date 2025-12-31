@@ -23,7 +23,7 @@ import type { Exercise } from './Programs';
 type CoachMode = 'chat' | 'modify_workout';
 
 export default function HomeScreen() {
-  const [mode, setMode] = useState<CoachMode>('chat');
+  const [mode, setMode] = useState<CoachMode>('modify_workout');
   const [inputText, setInputText] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
@@ -123,7 +123,7 @@ export default function HomeScreen() {
         const chat: Message[] = [
           { 
             role: 'system', 
-            content: 'you are a fitness coach, provide exercises only in the form of JSON objects listing the exercise containing sets, reps, weight, rest time and muscle groups worked, a full workout routine shout be an array of these JSON objects' 
+            content: 'you are a fitness coach, provide motivational advice and help with workout planning and execution' 
           },
           { 
             role: 'user', 
@@ -203,6 +203,34 @@ export default function HomeScreen() {
         <View className="flex-row gap-2 mb-4">
           <Pressable
             onPress={() => {
+              setMode('modify_workout');
+              setInputText('');
+              setResponse('');
+              setError('');
+              loadWorkoutQueue().then(setWorkoutQueue);
+            }}
+            className="flex-1"
+          >
+            {({ pressed }) => (
+              <View
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                  mode === 'modify_workout'
+                    ? 'bg-blue-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                } ${pressed ? 'opacity-70' : ''}`}
+              >
+                <ThemedText
+                  className={`text-sm font-semibold ${
+                    mode === 'modify_workout' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  Modify Workouts
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => {
               setMode('chat');
               setInputText('');
               setResponse('');
@@ -228,34 +256,6 @@ export default function HomeScreen() {
               </View>
             )}
           </Pressable>
-          <Pressable
-            onPress={() => {
-              setMode('modify_workout');
-              setInputText('');
-              setResponse('');
-              setError('');
-              loadWorkoutQueue().then(setWorkoutQueue);
-            }}
-            className="flex-1"
-          >
-            {({ pressed }) => (
-              <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
-                  mode === 'modify_workout'
-                    ? 'bg-blue-500'
-                    : 'bg-gray-200 dark:bg-gray-700'
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                <ThemedText
-                  className={`text-sm font-semibold ${
-                    mode === 'modify_workout' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
-                  }`}
-                >
-                  Modify Workout Queue
-                </ThemedText>
-              </View>
-            )}
-          </Pressable>
         </View>
 
         <ThemedText type="subtitle" style={styles.label}>
@@ -272,11 +272,12 @@ export default function HomeScreen() {
                 "Add barbell curl to day 1", "Swap bench press with dumbbell press",
                 "Change squat to 225 lbs and add deadlift"
               </ThemedText>
-              {workoutQueue.length > 0 && (
-                <ThemedText style={styles.infoBoxText}>
-                  📋 {workoutQueue.length} workout{workoutQueue.length !== 1 ? 's' : ''} in queue
+              {workoutQueue.length > 0 //&& (
+               /* <ThemedText style={styles.infoBoxText}>
+                 📋 {workoutQueue.length} workout{workoutQueue.length !== 1 ? 's' : ''} in queue
                 </ThemedText>
-              )}
+              )*/
+              }
             </ThemedView>
 
             {/* Workout Queue List */}
@@ -502,7 +503,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e3f2fd',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 0,
     gap: 4,
   },
   infoBoxText: {
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   queueContainer: {
-    marginTop: 12,
+    marginTop: 0,
     marginBottom: 12,
     maxHeight: 300,
   },
