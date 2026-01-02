@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -43,12 +43,16 @@ const WORKOUT_QUEUE_STORAGE_KEY = 'gymApp_workoutQueue';
 
 export default function ActiveWorkout() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const fromQueue = params.fromQueue === 'true';
   const [programs, setPrograms] = useState<Program[]>([]);
   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [workoutExercises, setWorkoutExercises] = useState<WorkoutExercise[]>([]);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingFromQueue, setLoadingFromQueue] = useState(false);
+  const queueLoadedRef = useRef(false);
 
   // Load programs and current program
   useEffect(() => {
@@ -63,12 +67,20 @@ export default function ActiveWorkout() {
     }
   }, [currentProgram]);
 
-  // Initialize workout exercises when program or day changes
+  // Load from workout queue if fromQueue param is true
   useEffect(() => {
-    if (currentProgram && currentProgram.workoutDays.length > 0) {
+    if (fromQueue && workoutQueue.length > 0 && programs.length > 0 && !queueLoadedRef.current) {
+      queueLoadedRef.current = true;
+      loadWorkoutFromQueue();
+    }
+  }, [fromQueue, workoutQueue, programs]);
+
+  // Initialize workout exercises when program or day changes (skip if loading from queue)
+  useEffect(() => {
+    if (currentProgram && currentProgram.workoutDays.length > 0 && !loadingFromQueue) {
       initializeWorkoutExercises();
     }
-  }, [currentProgram, selectedDayIndex]);
+  }, [currentProgram, selectedDayIndex, loadingFromQueue]);
 
   const initializeWorkoutExercises = async () => {
     if (!currentProgram || currentProgram.workoutDays.length === 0) return;
@@ -241,6 +253,130 @@ export default function ActiveWorkout() {
     }
   };
 
+  const loadWorkoutFromQueue = async () => {
+    try {
+      if (workoutQueue.length === 0) {
+        Alert.alert(
+          'No Workout Queue',
+          'No workouts in queue. Please create a program and add workouts to the queue first.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+        return;
+      }
+
+      setLoadingFromQueue(true);
+
+      // Get the first workout from the queue
+      const firstWorkout = workoutQueue[0];
+
+      // Find the program that matches the queue item
+      const program = programs.find((p) => p.id === firstWorkout.programId);
+      
+      if (!program) {
+        setLoadingFromQueue(false);
+        Alert.alert(
+          'Program Not Found',
+          `Could not find program "${firstWorkout.programName}". It may have been deleted.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+        return;
+      }
+
+      // Find the day index that matches the queue item's day number
+      const dayIndex = program.workoutDays.findIndex(
+        (day) => day.dayNumber === firstWorkout.dayNumber
+      );
+
+      if (dayIndex === -1) {
+        setLoadingFromQueue(false);
+        Alert.alert(
+          'Day Not Found',
+          `Could not find day ${firstWorkout.dayNumber} in program "${program.name}".`,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+        return;
+      }
+
+      // Set the current program and day
+      setCurrentProgram(program);
+      setSelectedDayIndex(dayIndex);
+      await AsyncStorage.setItem(CURRENT_PROGRAM_STORAGE_KEY, program.id);
+
+      // Initialize workout exercises with pre-populated weights
+      await initializeWorkoutExercisesFromQueue(firstWorkout);
+      
+      setLoadingFromQueue(false);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error loading workout from queue:', error);
+      setLoadingFromQueue(false);
+      Alert.alert('Error', 'Failed to load workout from queue');
+    }
+  };
+
+  const initializeWorkoutExercisesFromQueue = async (queueItem: WorkoutQueueItem) => {
+    try {
+      // Load previous workouts to get last logged weights
+      const storedWorkouts = await AsyncStorage.getItem(WORKOUTS_STORAGE_KEY);
+      const workouts: Workout[] = storedWorkouts ? JSON.parse(storedWorkouts) : [];
+
+      // Filter workouts for the program and completed workouts only
+      const programWorkouts = workouts.filter(
+        (w) => w.programId === queueItem.programId && w.completed
+      );
+
+      // Create workout exercises with auto-populated weights from queue exercises
+      const initialExercises: WorkoutExercise[] = await Promise.all(
+        queueItem.exercises.map(async (ex) => {
+          // Priority 1: Use queue item's weight if available
+          // Priority 2: Calculate from last logged weight + progression as fallback
+          let finalWeight = ex.weight || '';
+          
+          if (!finalWeight) {
+            // Find the last logged weight for this exercise
+            const lastWeight = getLastLoggedWeight(ex.name, programWorkouts);
+            
+            // Calculate auto-populated weight (last logged + progression)
+            const autoWeight = calculateAutoWeight(lastWeight, ex.progression);
+            finalWeight = autoWeight || '';
+          }
+
+          return {
+            ...ex,
+            loggedWeight: finalWeight,
+            loggedReps: '',
+          };
+        })
+      );
+
+      setWorkoutExercises(initialExercises);
+    } catch (error) {
+      console.error('Error initializing workout exercises from queue:', error);
+      // Fallback to empty values if there's an error
+      const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
+        ...ex,
+        loggedWeight: ex.weight || '', // Use queue weight as fallback
+        loggedReps: '',
+      }));
+      setWorkoutExercises(initialExercises);
+    }
+  };
+
   const saveWorkoutQueue = async (queue: WorkoutQueueItem[]) => {
     try {
       await AsyncStorage.setItem(WORKOUT_QUEUE_STORAGE_KEY, JSON.stringify(queue, null, 2));
@@ -256,22 +392,22 @@ export default function ActiveWorkout() {
       const stored = await AsyncStorage.getItem(WORKOUT_QUEUE_STORAGE_KEY);
       if (stored) {
         const existingQueue: WorkoutQueueItem[] = JSON.parse(stored);
-        // If queue is for current program and has items, trim to 4 items if needed
+        // If queue is for current program and has items, trim to 3 items if needed
         if (existingQueue.length > 0 && existingQueue[0].programId === program.id) {
-          // Trim queue to 4 items if it has more than 4
-          if (existingQueue.length > 4) {
-            const trimmedQueue = existingQueue.slice(0, 4);
+          // Trim queue to 3 items if it has more than 3
+          if (existingQueue.length > 3) {
+            const trimmedQueue = existingQueue.slice(0, 3);
             await saveWorkoutQueue(trimmedQueue);
           }
           return;
         }
       }
 
-      // Generate next 4 workouts cycling through program days
+      // Generate next 3 workouts cycling through program days
       const queue: WorkoutQueueItem[] = [];
       const totalDays = program.workoutDays.length;
       
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 3; i++) {
         const dayIndex = i % totalDays;
         const day = program.workoutDays[dayIndex];
         
@@ -358,9 +494,9 @@ export default function ActiveWorkout() {
         queue = queue.slice(1);
       }
 
-      // Add next workout to maintain 4 items in queue
-      // Only add if queue has less than 4 items
-      while (queue.length < 4) {
+      // Add next workout to maintain 3 items in queue
+      // Only add if queue has less than 3 items
+      while (queue.length < 3) {
         const totalDays = currentProgram.workoutDays.length;
         const lastDayNumber = queue.length > 0 
           ? queue[queue.length - 1].dayNumber 
@@ -382,9 +518,9 @@ export default function ActiveWorkout() {
         });
       }
 
-      // Ensure queue doesn't exceed 4 items (trim if needed)
-      if (queue.length > 4) {
-        queue = queue.slice(0, 4);
+      // Ensure queue doesn't exceed 3 items (trim if needed)
+      if (queue.length > 3) {
+        queue = queue.slice(0, 3);
       }
 
       await saveWorkoutQueue(queue);

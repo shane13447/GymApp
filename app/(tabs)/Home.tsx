@@ -33,7 +33,7 @@ export default function HomeScreen() {
       
       <ThemedView className="mt-5 gap-4">
         <Pressable 
-          onPress={() => router.push('/(tabs)/ActiveWorkout')}
+          onPress={() => router.push('/(tabs)/ActiveWorkout?fromQueue=true')}
         >
           {({ pressed }) => (
             <View 
