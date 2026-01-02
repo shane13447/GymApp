@@ -348,9 +348,29 @@ export default function HomeScreen() {
             {/* Workout Queue List */}
             {workoutQueue.length > 0 && (
               <ThemedView style={styles.queueContainer}>
-                <ThemedText type="subtitle" style={styles.queueTitle}>
-                  Current Workout Queue
-                </ThemedText>
+                <View style={styles.queueTitleContainer}>
+                  <ThemedText type="subtitle" style={styles.queueTitle}>
+                    Current Workout Queue
+                  </ThemedText>
+                  <Pressable 
+                    onPress={async () => {
+                      // Refresh workout queue to reflect any new changes
+                      const updatedQueue = await loadWorkoutQueue();
+                      setWorkoutQueue(updatedQueue);
+                    }}
+                  >
+                    {({ pressed }) => (
+                      <View 
+                        className="bg-green-500 rounded-lg px-4 py-2 border-2 border-white"
+                        style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+                      >
+                        <ThemedText className="text-white text-center font-semibold text-sm">
+                          Refresh Queue
+                        </ThemedText>
+                      </View>
+                    )}
+                  </Pressable>
+                </View>
                 <ScrollView 
                   ref={queueScrollViewRef}
                   style={styles.queueScrollView} 
@@ -581,8 +601,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     maxHeight: 300,
   },
-  queueTitle: {
+  queueTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
+    gap: 8,
+  },
+  queueTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: 'bold',
   },
