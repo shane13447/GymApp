@@ -1,5 +1,5 @@
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -33,7 +33,7 @@ export default function HomeScreen() {
       
       <ThemedView className="mt-5 gap-4">
         <Pressable 
-          onPress={() => router.push('/(tabs)/ActiveWorkout?fromQueue=true')}
+          onPress={() => router.push('/(tabs)/ActiveWorkout')}
         >
           {({ pressed }) => (
             <View 

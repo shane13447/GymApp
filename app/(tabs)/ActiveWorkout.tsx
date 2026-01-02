@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -43,8 +44,6 @@ const WORKOUT_QUEUE_STORAGE_KEY = 'gymApp_workoutQueue';
 
 export default function ActiveWorkout() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const fromQueue = params.fromQueue === 'true';
   const [programs, setPrograms] = useState<Program[]>([]);
   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
@@ -52,35 +51,64 @@ export default function ActiveWorkout() {
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingFromQueue, setLoadingFromQueue] = useState(false);
+  const [isLoadedFromQueue, setIsLoadedFromQueue] = useState(false);
   const queueLoadedRef = useRef(false);
 
-  // Load programs and current program
+  // Load programs and current program on mount
   useEffect(() => {
     loadPrograms();
-    loadWorkoutQueue();
   }, []);
 
-  // Initialize or update workout queue when program changes
+  // Reload queue and reset flags when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Reset flags when screen comes into focus
+      queueLoadedRef.current = false;
+      setIsLoadedFromQueue(false);
+      
+      // Reload queue from storage (it may have been updated after completing a workout)
+      const reloadQueue = async () => {
+        try {
+          const stored = await AsyncStorage.getItem(WORKOUT_QUEUE_STORAGE_KEY);
+          if (stored) {
+            const queue: WorkoutQueueItem[] = JSON.parse(stored);
+            setWorkoutQueue(queue);
+          } else {
+            setWorkoutQueue([]);
+          }
+        } catch (error) {
+          console.error('Error loading workout queue:', error);
+        }
+      };
+      
+      reloadQueue();
+    }, [])
+  );
+
+  // PRIORITY: Load from workout queue if it has items (highest priority)
+  // This runs after both programs and queue are loaded
   useEffect(() => {
-    if (currentProgram) {
+    if (workoutQueue.length > 0 && programs.length > 0 && !queueLoadedRef.current) {
+      queueLoadedRef.current = true;
+      setIsLoadedFromQueue(true);
+      loadWorkoutFromQueue();
+      return; // Don't proceed with program-based initialization
+    }
+  }, [workoutQueue, programs]);
+
+  // Initialize or update workout queue when program changes (only if queue is empty)
+  useEffect(() => {
+    if (currentProgram && workoutQueue.length === 0 && !queueLoadedRef.current) {
       initializeWorkoutQueue(currentProgram);
     }
-  }, [currentProgram]);
+  }, [currentProgram, workoutQueue.length]);
 
-  // Load from workout queue if fromQueue param is true
+  // Initialize workout exercises when program or day changes (only if queue is empty and not loading from queue)
   useEffect(() => {
-    if (fromQueue && workoutQueue.length > 0 && programs.length > 0 && !queueLoadedRef.current) {
-      queueLoadedRef.current = true;
-      loadWorkoutFromQueue();
-    }
-  }, [fromQueue, workoutQueue, programs]);
-
-  // Initialize workout exercises when program or day changes (skip if loading from queue)
-  useEffect(() => {
-    if (currentProgram && currentProgram.workoutDays.length > 0 && !loadingFromQueue) {
+    if (currentProgram && currentProgram.workoutDays.length > 0 && !loadingFromQueue && workoutQueue.length === 0 && !isLoadedFromQueue) {
       initializeWorkoutExercises();
     }
-  }, [currentProgram, selectedDayIndex, loadingFromQueue]);
+  }, [currentProgram, selectedDayIndex, loadingFromQueue, isLoadedFromQueue, workoutQueue.length]);
 
   const initializeWorkoutExercises = async () => {
     if (!currentProgram || currentProgram.workoutDays.length === 0) return;
@@ -184,6 +212,51 @@ export default function ActiveWorkout() {
     } catch (error) {
       console.error('Error calculating auto weight:', error);
       return lastWeight;
+    }
+  };
+
+  // Apply progression to exercises when creating queue items
+  const applyProgressionToExercises = async (
+    exercises: ProgramExercise[],
+    programId: string
+  ): Promise<ProgramExercise[]> => {
+    try {
+      // Load previous workouts to get last logged weights
+      const storedWorkouts = await AsyncStorage.getItem(WORKOUTS_STORAGE_KEY);
+      const workouts: Workout[] = storedWorkouts ? JSON.parse(storedWorkouts) : [];
+
+      // Filter workouts for the program and completed workouts only
+      const programWorkouts = workouts.filter(
+        (w) => w.programId === programId && w.completed
+      );
+
+      // Apply progression to each exercise
+      const progressedExercises: ProgramExercise[] = await Promise.all(
+        exercises.map(async (ex) => {
+          // If exercise already has a weight, keep it (user may have set it manually)
+          if (ex.weight && ex.weight.trim()) {
+            return ex;
+          }
+
+          // Find the last logged weight for this exercise
+          const lastWeight = getLastLoggedWeight(ex.name, programWorkouts);
+
+          // Calculate progressed weight (last logged + progression)
+          const progressedWeight = calculateAutoWeight(lastWeight, ex.progression);
+
+          // Return exercise with progressed weight
+          return {
+            ...ex,
+            weight: progressedWeight || ex.weight || '',
+          };
+        })
+      );
+
+      return progressedExercises;
+    } catch (error) {
+      console.error('Error applying progression to exercises:', error);
+      // Return original exercises if there's an error
+      return exercises;
     }
   };
 
@@ -411,12 +484,15 @@ export default function ActiveWorkout() {
         const dayIndex = i % totalDays;
         const day = program.workoutDays[dayIndex];
         
+        // Apply progression to exercises
+        const progressedExercises = await applyProgressionToExercises(day.exercises, program.id);
+        
         queue.push({
           id: `queue-${Date.now()}-${i}`,
           programId: program.id,
           programName: program.name,
           dayNumber: day.dayNumber,
-          exercises: day.exercises,
+          exercises: progressedExercises,
         });
       }
       
@@ -509,12 +585,18 @@ export default function ActiveWorkout() {
         const nextDayIndex = (lastDayIndex + 1) % totalDays;
         const nextDay = currentProgram.workoutDays[nextDayIndex];
 
+        // Apply progression to exercises
+        const progressedExercises = await applyProgressionToExercises(
+          nextDay.exercises,
+          currentProgram.id
+        );
+
         queue.push({
           id: `queue-${Date.now()}-${queue.length}`,
           programId: currentProgram.id,
           programName: currentProgram.name,
           dayNumber: nextDay.dayNumber,
-          exercises: nextDay.exercises,
+          exercises: progressedExercises,
         });
       }
 
@@ -589,8 +671,8 @@ export default function ActiveWorkout() {
             </ThemedText>
           </ThemedView>
 
-          {/* Day Selector */}
-          {currentProgram.workoutDays.length > 1 && (
+          {/* Day Selector - Only show when NOT loading from queue */}
+          {currentProgram.workoutDays.length > 1 && !isLoadedFromQueue && (
             <ThemedView className="gap-2">
               <ThemedText className="text-base font-semibold">Select Workout Day</ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -626,10 +708,10 @@ export default function ActiveWorkout() {
           )}
 
           {/* Exercises */}
-          {selectedDay && (
+          {(selectedDay || workoutExercises.length > 0) && (
             <ThemedView className="gap-4">
               <ThemedText className="text-lg font-semibold">
-                Exercises ({selectedDay.exercises.length})
+                Exercises ({workoutExercises.length})
               </ThemedText>
               <ScrollView showsVerticalScrollIndicator={true}>
                 {workoutExercises.map((exercise, index) => (
