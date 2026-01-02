@@ -141,7 +141,7 @@ export default function ProgramsScreen() {
         // Add exercise with default program fields
         const programExercise: ProgramExercise = {
           ...exercise,
-          weight: 'RPE 8',
+          weight: '0',
           reps: '8-12',
           sets: '3',
           restTime: '180',
@@ -837,12 +837,13 @@ export default function ProgramsScreen() {
                     <ThemedText className="text-sm font-semibold">Weight</ThemedText>
                     <TextInput
                       className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-                      placeholder="e.g., 135 lbs or RPE 8"
+                      placeholder="e.g., 60.0"
                       placeholderTextColor="#999"
                       value={exercise.weight}
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'weight', value, day.dayNumber)
                       }
+                      keyboardType="numeric"
                       style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
@@ -857,6 +858,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'restTime', value, day.dayNumber)
                       }
+                      keyboardType="numeric"
                       style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
@@ -1022,12 +1024,13 @@ export default function ProgramsScreen() {
                     <ThemedText className="text-sm font-semibold">Weight</ThemedText>
                     <TextInput
                       className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-                      placeholder="e.g., 135 lbs or RPE 8"
+                      placeholder="e.g., 60.0"
                       placeholderTextColor="#999"
                       value={exercise.weight}
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'weight', value, day.dayNumber)
                       }
+                      keyboardType="numeric"
                       style={{ color: '#ffffff' }}
                     />
                   </ThemedView>
@@ -1042,6 +1045,7 @@ export default function ProgramsScreen() {
                       onChangeText={(value) =>
                         updateExerciseField(exercise.name, 'restTime', value, day.dayNumber)
                       }
+                      keyboardType="numeric"
                       style={{ color: '#ffffff' }}
                     />
                   </ThemedView>

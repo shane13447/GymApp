@@ -9,12 +9,13 @@ import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import exercisesData from '@/data/exerciseSelection.json';
 import {
-  applyModifications,
-  buildModificationPrompt,
-  formatProposedChanges,
+  applyNewWorkoutQueue,
+  buildQueueGenerationPrompt,
+  compareWorkoutQueues,
+  differencesToProposedChanges,
   loadWorkoutQueue,
-  parseModificationResponse,
-  WORKOUT_MODIFICATION_SYSTEM_PROMPT,
+  parseGeneratedQueue,
+  WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { WorkoutQueueItem } from './ActiveWorkout';
@@ -32,6 +33,7 @@ export default function HomeScreen() {
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const [availableExercises, setAvailableExercises] = useState<Exercise[]>([]);
+  const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const queueScrollViewRef = useRef<ScrollView>(null);
 
   // Initialize Executorch LLM - Llama 3.2 1B (smaller, faster model)
@@ -39,6 +41,21 @@ export default function HomeScreen() {
     model: LLAMA3_2_1B,
     preventLoad: false // Auto-load on mount
   });
+
+  // Configure LLM with larger context window for workout modifications
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          contextWindowLength: 16384, // Increase to 8k to match Llama 3.2's capability
+        },
+        generationConfig: {
+          outputTokenBatchSize: 10, // Process tokens in batches for better performance
+          batchTimeInterval: 100, // Update interval for streaming
+        },
+      });
+    }
+  }, [llm.isReady]);
 
   // Load workout queue and available exercises on mount
   useEffect(() => {
@@ -95,6 +112,7 @@ export default function HomeScreen() {
     setLoading(true);
     setError('');
     setResponse('');
+    setGeneratedQueue(null);
 
     try {
       if (mode === 'modify_workout') {
@@ -105,11 +123,20 @@ export default function HomeScreen() {
           return;
         }
 
-        const userPrompt = buildModificationPrompt(inputText, workoutQueue, availableExercises);
+        // Build prompt with ONLY workout queue data (no other user context)
+        const userPrompt = buildQueueGenerationPrompt(inputText, workoutQueue);
+        
+        // Log prompt lengths for debugging
+        const systemPromptLength = WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT.length;
+        const userPromptLength = userPrompt.length;
+        const totalLength = systemPromptLength + userPromptLength;
+        console.log(`Prompt lengths - System: ${systemPromptLength}, User: ${userPromptLength}, Total: ${totalLength}`);
+        
+        // Send to Executorch with only workout queue context
         const chat: Message[] = [
           { 
             role: 'system', 
-            content: WORKOUT_MODIFICATION_SYSTEM_PROMPT
+            content: WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT
           },
           { 
             role: 'user', 
@@ -147,48 +174,65 @@ export default function HomeScreen() {
   // Handle response when in modify_workout mode
   useEffect(() => {
     if (mode === 'modify_workout' && llm.response && !llm.isGenerating && loading) {
-      const modifications = parseModificationResponse(llm.response);
-      if (modifications) {
-        const formatted = formatProposedChanges(modifications, workoutQueue);
-        setProposedChanges(formatted);
-        setShowModal(true);
+      console.log('Processing LLM response for workout queue generation');
+      
+      // Parse the generated queue
+      const newQueue = parseGeneratedQueue(llm.response);
+      
+      if (newQueue && newQueue.length > 0) {
+        setGeneratedQueue(newQueue);
+        
+        // Compare old vs new to find differences
+        const differences = compareWorkoutQueues(workoutQueue, newQueue);
+        
+        if (differences.length > 0) {
+          // Convert to ProposedChanges format for display
+          const formatted = differencesToProposedChanges(differences);
+          setProposedChanges(formatted);
+          setShowModal(true);
+        } else {
+          Alert.alert('No Changes', 'The generated workout queue is identical to the current one.');
+        }
+        
         setLoading(false);
       } else {
-        setError('Could not parse modification response. Please try again.');
+        console.warn('Failed to parse generated queue from response');
+        setError('Could not parse workout queue from response. Please try again.');
         setLoading(false);
       }
     }
   }, [llm.response, llm.isGenerating, mode, loading, workoutQueue]);
 
   const handleConfirmChanges = async () => {
-    if (!proposedChanges) return;
+    if (!generatedQueue) {
+      Alert.alert('Error', 'No generated queue to apply.');
+      return;
+    }
 
     try {
-      // Re-parse the response to get the modifications
-      const modifications = parseModificationResponse(llm.response || '');
-      if (modifications) {
-        const success = await applyModifications(modifications, availableExercises);
-        if (success) {
-          // Reload workout queue
-          const updatedQueue = await loadWorkoutQueue();
-          setWorkoutQueue(updatedQueue);
-          Alert.alert('Success', 'Workout queue has been updated!');
-          setShowModal(false);
-          setProposedChanges(null);
-          setInputText('');
-        } else {
-          Alert.alert('Error', 'Failed to apply modifications.');
-        }
+      const success = await applyNewWorkoutQueue(generatedQueue);
+      if (success) {
+        // Reload workout queue
+        const updatedQueue = await loadWorkoutQueue();
+        setWorkoutQueue(updatedQueue);
+        Alert.alert('Success', 'Workout queue has been updated!');
+        setShowModal(false);
+        setProposedChanges(null);
+        setGeneratedQueue(null);
+        setInputText('');
+      } else {
+        Alert.alert('Error', 'Failed to apply new workout queue.');
       }
-    } catch (err) {
-      console.error('Error applying modifications:', err);
-      Alert.alert('Error', 'Failed to apply modifications.');
+    } catch (error) {
+      console.error('Error applying changes:', error);
+      Alert.alert('Error', 'Failed to apply changes.');
     }
   };
 
   const handleCancelChanges = () => {
     setShowModal(false);
     setProposedChanges(null);
+    setGeneratedQueue(null);
   };
 
   return (
@@ -268,9 +312,9 @@ export default function HomeScreen() {
           <>
             <ThemedView style={styles.infoBox}>
               <ThemedText style={styles.infoBoxText}>
-                💡 Examples: "Change bench press to 185 lbs", "Remove all chest exercises", 
+                💡 Examples: "Change bench press to 84 kg", "Remove all chest exercises", 
                 "Add barbell curl to day 1", "Swap bench press with dumbbell press",
-                "Change squat to 225 lbs and add deadlift"
+                "Change squat to 102 kg and add deadlift"
               </ThemedText>
               {workoutQueue.length > 0 //&& (
                /* <ThemedText style={styles.infoBoxText}>

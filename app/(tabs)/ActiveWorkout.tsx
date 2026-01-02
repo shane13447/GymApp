@@ -144,8 +144,8 @@ export default function ActiveWorkout() {
         return lastWeight;
       }
 
-      // Parse last weight (e.g., "135 lbs", "60kg", "135")
-      const lastWeightMatch = lastWeight.match(/([\d.]+)\s*(lbs?|kg|lb)?/i);
+      // Parse last weight (e.g., "61.2 kg", "60kg", "61.2")
+      const lastWeightMatch = lastWeight.match(/([\d.]+)\s*(kg)?/i);
       
       if (!lastWeightMatch) {
         // If last weight format is invalid, try to parse as number
@@ -256,17 +256,22 @@ export default function ActiveWorkout() {
       const stored = await AsyncStorage.getItem(WORKOUT_QUEUE_STORAGE_KEY);
       if (stored) {
         const existingQueue: WorkoutQueueItem[] = JSON.parse(stored);
-        // If queue is for current program and has items, keep it
+        // If queue is for current program and has items, trim to 4 items if needed
         if (existingQueue.length > 0 && existingQueue[0].programId === program.id) {
+          // Trim queue to 4 items if it has more than 4
+          if (existingQueue.length > 4) {
+            const trimmedQueue = existingQueue.slice(0, 4);
+            await saveWorkoutQueue(trimmedQueue);
+          }
           return;
         }
       }
 
-      // Generate next 5 workouts cycling through program days
+      // Generate next 4 workouts cycling through program days
       const queue: WorkoutQueueItem[] = [];
       const totalDays = program.workoutDays.length;
       
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         const dayIndex = i % totalDays;
         const day = program.workoutDays[dayIndex];
         
@@ -353,26 +358,34 @@ export default function ActiveWorkout() {
         queue = queue.slice(1);
       }
 
-      // Add next workout to maintain 5 items in queue
-      const totalDays = currentProgram.workoutDays.length;
-      const lastDayNumber = queue.length > 0 
-        ? queue[queue.length - 1].dayNumber 
-        : selectedDayIndex + 1;
-      
-      // Find next day (cycle through)
-      const lastDayIndex = currentProgram.workoutDays.findIndex(
-        day => day.dayNumber === lastDayNumber
-      );
-      const nextDayIndex = (lastDayIndex + 1) % totalDays;
-      const nextDay = currentProgram.workoutDays[nextDayIndex];
+      // Add next workout to maintain 4 items in queue
+      // Only add if queue has less than 4 items
+      while (queue.length < 4) {
+        const totalDays = currentProgram.workoutDays.length;
+        const lastDayNumber = queue.length > 0 
+          ? queue[queue.length - 1].dayNumber 
+          : selectedDayIndex + 1;
+        
+        // Find next day (cycle through)
+        const lastDayIndex = currentProgram.workoutDays.findIndex(
+          day => day.dayNumber === lastDayNumber
+        );
+        const nextDayIndex = (lastDayIndex + 1) % totalDays;
+        const nextDay = currentProgram.workoutDays[nextDayIndex];
 
-      queue.push({
-        id: `queue-${Date.now()}`,
-        programId: currentProgram.id,
-        programName: currentProgram.name,
-        dayNumber: nextDay.dayNumber,
-        exercises: nextDay.exercises,
-      });
+        queue.push({
+          id: `queue-${Date.now()}-${queue.length}`,
+          programId: currentProgram.id,
+          programName: currentProgram.name,
+          dayNumber: nextDay.dayNumber,
+          exercises: nextDay.exercises,
+        });
+      }
+
+      // Ensure queue doesn't exceed 4 items (trim if needed)
+      if (queue.length > 4) {
+        queue = queue.slice(0, 4);
+      }
 
       await saveWorkoutQueue(queue);
     } catch (error) {
@@ -574,6 +587,7 @@ export default function ActiveWorkout() {
                           onChangeText={(value) =>
                             updateLoggedValue(exercise.name, 'loggedWeight', value)
                           }
+                          keyboardType="decimal-pad"
                           style={{ color: '#ffffff' }}
                         />
                       </ThemedView>
