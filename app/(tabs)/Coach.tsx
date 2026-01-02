@@ -14,6 +14,7 @@ import {
   compareWorkoutQueues,
   differencesToProposedChanges,
   loadWorkoutQueue,
+  mergeQueueWithOriginal,
   parseGeneratedQueue,
   WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT,
   type ProposedChanges,
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const [availableExercises, setAvailableExercises] = useState<Exercise[]>([]);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const queueScrollViewRef = useRef<ScrollView>(null);
+  const lastProcessedResponseRef = useRef<string>('');
 
   // Initialize Executorch LLM - Llama 3.2 1B (smaller, faster model)
   const llm = useLLM({ 
@@ -79,15 +81,16 @@ export default function HomeScreen() {
     if (llm.response) {
       setResponse(llm.response);
     }
-    // Clear loading state when generation completes
-    if (!llm.isGenerating && loading) {
+    // Clear loading state when generation completes (only in chat mode)
+    // In modify_workout mode, let the dedicated handler manage loading state
+    if (!llm.isGenerating && loading && mode === 'chat') {
       setLoading(false);
       // Clear error if we have a response
       if (llm.response) {
         setError('');
       }
     }
-  }, [llm.response, llm.isGenerating, loading]);
+  }, [llm.response, llm.isGenerating, loading, mode]);
 
   // Watch for errors from Executorch
   useEffect(() => {
@@ -113,6 +116,7 @@ export default function HomeScreen() {
     setError('');
     setResponse('');
     setGeneratedQueue(null);
+    lastProcessedResponseRef.current = ''; // Reset processed response tracker
 
     try {
       if (mode === 'modify_workout') {
@@ -173,13 +177,29 @@ export default function HomeScreen() {
 
   // Handle response when in modify_workout mode
   useEffect(() => {
-    if (mode === 'modify_workout' && llm.response && !llm.isGenerating && loading) {
+    // Only process if we're in modify_workout mode, have a response, and generation is complete
+    // Also check if we haven't already processed this exact response
+    if (
+      mode === 'modify_workout' && 
+      llm.response && 
+      !llm.isGenerating &&
+      llm.response !== lastProcessedResponseRef.current
+    ) {
       console.log('Processing LLM response for workout queue generation');
+      console.log('Executorch response:', llm.response);
+      console.log('Response length:', llm.response.length);
       
-      // Parse the generated queue
-      const newQueue = parseGeneratedQueue(llm.response);
+      // Mark this response as processed
+      lastProcessedResponseRef.current = llm.response;
       
-      if (newQueue && newQueue.length > 0) {
+      // Parse the generated queue, passing original queue to help infer missing fields
+      const parsedQueue = parseGeneratedQueue(llm.response, workoutQueue);
+      
+      if (parsedQueue && parsedQueue.length > 0) {
+        // Merge with original queue to preserve items that weren't returned
+        const newQueue = mergeQueueWithOriginal(parsedQueue, workoutQueue);
+        console.log('Successfully parsed queue with', parsedQueue.length, 'items');
+        console.log('After merging with original:', newQueue.length, 'items');
         setGeneratedQueue(newQueue);
         
         // Compare old vs new to find differences
@@ -197,11 +217,12 @@ export default function HomeScreen() {
         setLoading(false);
       } else {
         console.warn('Failed to parse generated queue from response');
-        setError('Could not parse workout queue from response. Please try again.');
+        console.warn('Response content:', llm.response.substring(0, 500));
+        setError('Could not parse workout queue from response. The AI may have returned invalid JSON. Please try again.');
         setLoading(false);
       }
     }
-  }, [llm.response, llm.isGenerating, mode, loading, workoutQueue]);
+  }, [llm.response, llm.isGenerating, mode, workoutQueue]);
 
   const handleConfirmChanges = async () => {
     if (!generatedQueue) {
