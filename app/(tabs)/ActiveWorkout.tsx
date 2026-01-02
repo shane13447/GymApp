@@ -233,18 +233,14 @@ export default function ActiveWorkout() {
       // Apply progression to each exercise
       const progressedExercises: ProgramExercise[] = await Promise.all(
         exercises.map(async (ex) => {
-          // If exercise already has a weight, keep it (user may have set it manually)
-          if (ex.weight && ex.weight.trim()) {
-            return ex;
-          }
-
+          // Always use last logged weight from completed workouts (not program weight)
           // Find the last logged weight for this exercise
           const lastWeight = getLastLoggedWeight(ex.name, programWorkouts);
 
           // Calculate progressed weight (last logged + progression)
           const progressedWeight = calculateAutoWeight(lastWeight, ex.progression);
 
-          // Return exercise with progressed weight
+          // Return exercise with progressed weight (override program weight)
           return {
             ...ex,
             weight: progressedWeight || ex.weight || '',
