@@ -464,19 +464,44 @@ const attemptFixMalformedQueueResponse = (response: string): string | null => {
   }
 };
 
-// Helper function to fix JSON by adding missing closing brackets and braces
+// Helper function to fix JSON by correcting specific LLM malformation patterns
 const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
   try {
-    // First, fix the pattern where `]\s*,` should be `]},\s*{` (missing object closing between array items)
-    // This regex finds: closing bracket, whitespace, comma, whitespace (but not already followed by opening brace)
-    // We'll replace it with: closing bracket, closing brace, comma, whitespace, opening brace
-    // The negative lookahead (?!\s*{) ensures we don't replace when '{' already follows
-    let fixed = jsonString.replace(/\](\s*),(\s*)(?!\s*{)/g, (match, whitespace1, whitespace2) => {
-      // Fix: add closing brace before comma, opening brace after
-      return `]}${whitespace1},${whitespace2}{`;
-    });
-
-    // Now count brackets and braces to find what's missing at the end
+    let fixed = jsonString;
+    let madeChanges = false;
+    
+    // IMPORTANT: Only fix specific known LLM malformation patterns
+    // Do NOT add characters that aren't needed
+    
+    // Pattern 1: LLM outputs `]}[{` between queue items when it should be `]},{`
+    // The LLM outputs: ] } [ { when it should output ] } , {
+    // This replaces the `[` with `,` while keeping the structure
+    const originalFixed = fixed;
+    fixed = fixed.replace(/\](\s*)\}(\s*)\[(\s*)\{/g, ']$1}$2,$3{');
+    if (fixed !== originalFixed) {
+      madeChanges = true;
+      console.log('Fixed pattern: ]}[{ -> ]},{');
+    }
+    
+    // Pattern 2: LLM outputs `][{` (missing } entirely) when it should be `]},{`
+    // Only apply if there's no } between ] and [ AND it's followed by "id"
+    const beforePattern2 = fixed;
+    fixed = fixed.replace(/\](\s*)\[(\s*)\{(?="id")/g, ']$1},$2{');
+    if (fixed !== beforePattern2) {
+      madeChanges = true;
+      console.log('Fixed pattern: ][{"id" -> ]},{"id"');
+    }
+    
+    // Pattern 3: Missing comma between queue items: `]}{` should be `]},{`
+    // This is when exercises ] closes, object } closes, but comma is missing before next {
+    const beforePattern3 = fixed;
+    fixed = fixed.replace(/\](\s*)\}(\s*)\{(?="id")/g, ']$1}$2,{');
+    if (fixed !== beforePattern3) {
+      madeChanges = true;
+      console.log('Fixed pattern: ]}{"id" -> ]},{"id"');
+    }
+    
+    // Now count brackets and braces to find what's missing ONLY at the end
     let bracketCount = 0;
     let braceCount = 0;
     let inString = false;
@@ -485,7 +510,6 @@ const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
     for (let i = 0; i < fixed.length; i++) {
       const char = fixed[i];
       
-      // Handle escape sequences
       if (escapeNext) {
         escapeNext = false;
         continue;
@@ -496,16 +520,13 @@ const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
         continue;
       }
       
-      // Track string boundaries
       if (char === '"' && !escapeNext) {
         inString = !inString;
         continue;
       }
       
-      // Don't count brackets/braces inside strings
       if (inString) continue;
       
-      // Count brackets and braces
       if (char === '[') bracketCount++;
       if (char === ']') bracketCount--;
       if (char === '{') braceCount++;
@@ -514,27 +535,30 @@ const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
     
     // If brackets/braces are balanced, return the fixed string
     if (bracketCount === 0 && braceCount === 0) {
-      if (fixed !== jsonString) {
-        console.log('Fixed JSON structural issues (missing }, { between objects)');
+      if (madeChanges) {
+        console.log('Fixed JSON structural issues');
       }
       return fixed;
     }
     
+    // Only add closing characters at the END for unclosed structures
     // Close braces first (inner structures), then brackets (outer array)
-    // Add closing braces for any unclosed braces
+    const originalLength = fixed.length;
+    
     while (braceCount > 0) {
       fixed += '}';
       braceCount--;
     }
     
-    // Add closing brackets for any unclosed brackets
     while (bracketCount > 0) {
       fixed += ']';
       bracketCount--;
     }
     
-    console.log('Fixed JSON by adding missing closing brackets/braces');
-    console.log(`Added ${fixed.length - jsonString.length} characters to close JSON structure`);
+    const addedChars = fixed.length - originalLength;
+    if (addedChars > 0) {
+      console.log(`Fixed JSON by adding ${addedChars} closing character(s) at end`);
+    }
     
     return fixed;
   } catch (e) {
@@ -562,6 +586,14 @@ export const parseGeneratedQueue = (
         lines.pop();
       }
       cleanedResponse = lines.join('\n').trim();
+    }
+    
+    // EARLY FIX: Apply structural fixes BEFORE bracket counting
+    // This ensures the bracket counting works correctly on fixed JSON
+    const earlyFixedResponse = fixJSONBracketsAndBraces(cleanedResponse);
+    if (earlyFixedResponse && earlyFixedResponse !== cleanedResponse) {
+      console.log('Applied early structural fixes to JSON response');
+      cleanedResponse = earlyFixedResponse;
     }
     
     // Try to extract JSON array - use bracket matching to find the correct closing bracket
