@@ -10,13 +10,13 @@ import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import exercisesData from '@/data/exerciseSelection.json';
 import {
   applyNewWorkoutQueue,
-  buildQueueGenerationPrompt,
+  buildCompressedPrompt,
   compareWorkoutQueues,
+  COMPRESSED_SYSTEM_PROMPT,
   differencesToProposedChanges,
   loadWorkoutQueue,
   mergeQueueWithOriginal,
-  parseGeneratedQueue,
-  WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT,
+  parseQueueFormatResponse,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { WorkoutQueueItem } from './ActiveWorkout';
@@ -38,22 +38,22 @@ export default function HomeScreen() {
   const queueScrollViewRef = useRef<ScrollView>(null);
   const lastProcessedResponseRef = useRef<string>('');
 
-  // Initialize Executorch LLM - Llama 3.2 3B QLoRA (quantized, optimized for mobile)
+  // Initialize Executorch LLM - Llama 3.2 3B QLoRA (better quality)
   const llm = useLLM({ 
     model: LLAMA3_2_3B_QLORA,
     preventLoad: false // Auto-load on mount
   });
 
-  // Configure LLM with larger context window for workout modifications
+  // Configure LLM with optimized settings for queue format output
   useEffect(() => {
     if (llm.isReady) {
       llm.configure({
         chatConfig: {
-          contextWindowLength: 16384, // 16k context window for Llama 3.2 3B
+          contextWindowLength: 8192, // 3B model can handle more context
         },
         generationConfig: {
-          outputTokenBatchSize: 10, // Process tokens in batches for better performance
-          batchTimeInterval: 100, // Update interval for streaming
+          outputTokenBatchSize: 32, // Increased batch size for faster generation
+          batchTimeInterval: 50, // Faster updates
         },
       });
     }
@@ -120,27 +120,28 @@ export default function HomeScreen() {
 
     try {
       if (mode === 'modify_workout') {
-        // Workout modification mode
+        // Workout modification mode using COMPRESSED encoding for faster response
         if (workoutQueue.length === 0) {
           setError('No workout queue found. Please create a program and start a workout first.');
           setLoading(false);
           return;
         }
 
-        // Build prompt with ONLY workout queue data (no other user context)
-        const userPrompt = buildQueueGenerationPrompt(inputText, workoutQueue);
+        // Build compressed prompt (much smaller than full JSON)
+        const userPrompt = buildCompressedPrompt(inputText, workoutQueue);
         
         // Log prompt lengths for debugging
-        const systemPromptLength = WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT.length;
+        const systemPromptLength = COMPRESSED_SYSTEM_PROMPT.length;
         const userPromptLength = userPrompt.length;
         const totalLength = systemPromptLength + userPromptLength;
-        console.log(`Prompt lengths - System: ${systemPromptLength}, User: ${userPromptLength}, Total: ${totalLength}`);
+        console.log(`[COMPRESSED] Prompt lengths - System: ${systemPromptLength}, User: ${userPromptLength}, Total: ${totalLength}`);
+        console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
         
-        // Send to Executorch with only workout queue context
+        // Send to Executorch with compressed format
         const chat: Message[] = [
           { 
             role: 'system', 
-            content: WORKOUT_QUEUE_GENERATION_SYSTEM_PROMPT
+            content: COMPRESSED_SYSTEM_PROMPT
           },
           { 
             role: 'user', 
@@ -175,7 +176,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Handle response when in modify_workout mode
+  // Handle response when in modify_workout mode - Queue format (same as input)
   useEffect(() => {
     // Only process if we're in modify_workout mode, have a response, and generation is complete
     // Also check if we haven't already processed this exact response
@@ -185,21 +186,21 @@ export default function HomeScreen() {
       !llm.isGenerating &&
       llm.response !== lastProcessedResponseRef.current
     ) {
-      console.log('Processing LLM response for workout queue generation');
-      console.log('Executorch response:', llm.response);
-      console.log('Response length:', llm.response.length);
+      console.log('[QUEUE FORMAT] Processing LLM response');
+      console.log('[QUEUE FORMAT] Response:', llm.response);
+      console.log('[QUEUE FORMAT] Response length:', llm.response.length);
       
       // Mark this response as processed
       lastProcessedResponseRef.current = llm.response;
       
-      // Parse the generated queue, passing original queue to help infer missing fields
-      const parsedQueue = parseGeneratedQueue(llm.response, workoutQueue);
+      // Parse the queue format response (same format as input)
+      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue);
       
       if (parsedQueue && parsedQueue.length > 0) {
         // Merge with original queue to preserve items that weren't returned
         const newQueue = mergeQueueWithOriginal(parsedQueue, workoutQueue);
-        console.log('Successfully parsed queue with', parsedQueue.length, 'items');
-        console.log('After merging with original:', newQueue.length, 'items');
+        console.log('[QUEUE FORMAT] Parsed queue with', parsedQueue.length, 'items');
+        console.log('[QUEUE FORMAT] After merging:', newQueue.length, 'items');
         setGeneratedQueue(newQueue);
         
         // Compare old vs new to find differences
@@ -216,9 +217,9 @@ export default function HomeScreen() {
         
         setLoading(false);
       } else {
-        console.warn('Failed to parse generated queue from response');
-        console.warn('Response content:', llm.response.substring(0, 500));
-        setError('Could not parse workout queue from response. The AI may have returned invalid JSON. Please try again.');
+        console.warn('[QUEUE FORMAT] Failed to parse response');
+        console.warn('[QUEUE FORMAT] Response content:', llm.response);
+        setError('Could not parse queue from response. Expected format like "Q0:D1:BBP/80/5/5,BBS/100/5/5". Please try again.');
         setLoading(false);
       }
     }
@@ -348,29 +349,9 @@ export default function HomeScreen() {
             {/* Workout Queue List */}
             {workoutQueue.length > 0 && (
               <ThemedView style={styles.queueContainer}>
-                <View style={styles.queueTitleContainer}>
-                  <ThemedText type="subtitle" style={styles.queueTitle}>
-                    Current Workout Queue
-                  </ThemedText>
-                  <Pressable 
-                    onPress={async () => {
-                      // Refresh workout queue to reflect any new changes
-                      const updatedQueue = await loadWorkoutQueue();
-                      setWorkoutQueue(updatedQueue);
-                    }}
-                  >
-                    {({ pressed }) => (
-                      <View 
-                        className="bg-green-500 rounded-lg px-4 py-2 border-2 border-white"
-                        style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
-                      >
-                        <ThemedText className="text-white text-center font-semibold text-sm">
-                          Refresh Queue
-                        </ThemedText>
-                      </View>
-                    )}
-                  </Pressable>
-                </View>
+                <ThemedText type="subtitle" style={styles.queueTitle}>
+                  Current Workout Queue
+                </ThemedText>
                 <ScrollView 
                   ref={queueScrollViewRef}
                   style={styles.queueScrollView} 
@@ -441,7 +422,7 @@ export default function HomeScreen() {
         {llm.isReady && (
           <ThemedView style={styles.infoContainer}>
             <ThemedText style={styles.infoText}>
-              ✓ Using Executorch - Llama 3.2 3B QLoRA (on-device, offline-capable)
+              ✓ Using Executorch - Llama 3.2 1B (on-device, offline-capable)
             </ThemedText>
           </ThemedView>
         )}
@@ -601,15 +582,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     maxHeight: 300,
   },
-  queueTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
   queueTitle: {
-    flex: 1,
+    marginBottom: 8,
     fontSize: 16,
     fontWeight: 'bold',
   },
