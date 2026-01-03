@@ -64,6 +64,201 @@ export const getExerciseFromAbbreviation = (abbrev: string): { name: string; equ
 };
 
 // =============================================================================
+// MUSCLE GROUP DETECTION & REQUEST PREPROCESSING
+// =============================================================================
+
+// Muscle group keyword mappings (keyword -> actual muscle names in exercise data)
+const MUSCLE_GROUP_KEYWORDS: Record<string, string[]> = {
+  // Primary muscle groups
+  'chest': ['chest'],
+  'back': ['lats', 'traps'],
+  'shoulders': ['shoulders'],
+  'shoulder': ['shoulders'],
+  'legs': ['quads', 'glutes', 'hamstrings', 'calves'],
+  'leg': ['quads', 'glutes', 'hamstrings', 'calves'],
+  'biceps': ['biceps'],
+  'bicep': ['biceps'],
+  'triceps': ['triceps'],
+  'tricep': ['triceps'],
+  'forearms': ['forearms'],
+  'forearm': ['forearms'],
+  'abs': ['abs'],
+  'core': ['abs'],
+  
+  // Compound groups
+  'arms': ['biceps', 'triceps'],
+  'arm': ['biceps', 'triceps'],
+  'upper body': ['chest', 'lats', 'traps', 'shoulders', 'biceps', 'triceps'],
+  'lower body': ['quads', 'glutes', 'hamstrings', 'calves'],
+  'push': ['chest', 'shoulders', 'triceps'],
+  'pull': ['lats', 'traps', 'biceps'],
+};
+
+// Find exercises in queue that match a muscle group (returns name and weight)
+const findExercisesInQueueByMuscleGroup = (
+  queue: WorkoutQueueItem[],
+  targetMuscles: string[]
+): { name: string; weight: number }[] => {
+  const matchingExercises: { name: string; weight: number }[] = [];
+  const seenNames = new Set<string>();
+  
+  for (const queueItem of queue) {
+    for (const exercise of queueItem.exercises) {
+      const exerciseMuscles = exercise.muscle_groups_worked || [];
+      
+      // Match if exercise works ANY of the target muscles
+      const isMatch = exerciseMuscles.some(muscle => 
+        targetMuscles.includes(muscle.toLowerCase())
+      );
+      
+      if (isMatch && !seenNames.has(exercise.name)) {
+        seenNames.add(exercise.name);
+        matchingExercises.push({ 
+          name: exercise.name, 
+          weight: typeof exercise.weight === 'number' ? exercise.weight : parseFloat(String(exercise.weight)) || 0 
+        });
+      }
+    }
+  }
+  
+  return matchingExercises;
+};
+
+// Detect percentage change in request (e.g., "by 20%", "by 10 percent")
+const detectPercentageChange = (request: string): { percentage: number; isIncrease: boolean } | null => {
+  const lowerRequest = request.toLowerCase();
+  
+  // Check for increase/reduce keywords
+  const isIncrease = lowerRequest.includes('increase') || lowerRequest.includes('raise') || lowerRequest.includes('add');
+  const isDecrease = lowerRequest.includes('reduce') || lowerRequest.includes('decrease') || lowerRequest.includes('lower');
+  
+  if (!isIncrease && !isDecrease) {
+    return null;
+  }
+  
+  // Match patterns like "by 20%", "by 20 percent", "by 20 %"
+  const percentMatch = lowerRequest.match(/by\s+(\d+(?:\.\d+)?)\s*(%|percent)/);
+  if (percentMatch) {
+    return {
+      percentage: parseFloat(percentMatch[1]),
+      isIncrease: isIncrease
+    };
+  }
+  
+  return null;
+};
+
+// Detect muscle group keywords in user request
+const detectMuscleGroupInRequest = (request: string): { keyword: string; muscles: string[] } | null => {
+  const lowerRequest = request.toLowerCase();
+  
+  // Check for muscle group keywords (longer phrases first)
+  const sortedKeywords = Object.keys(MUSCLE_GROUP_KEYWORDS).sort((a, b) => b.length - a.length);
+  
+  for (const keyword of sortedKeywords) {
+    // Look for patterns like "all chest", "chest exercises", "all bicep exercises"
+    const patterns = [
+      `all ${keyword}`,
+      `${keyword} exercises`,
+      `${keyword} exercise`,
+      `every ${keyword}`,
+    ];
+    
+    for (const pattern of patterns) {
+      if (lowerRequest.includes(pattern)) {
+        return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
+      }
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Preprocess user request to replace muscle group references with explicit weight changes.
+ * Pre-calculates percentage changes to remove math from LLM responsibility.
+ * 
+ * Example:
+ *   Input: "reduce all chest exercises by 20%"
+ *   Output: "change BBP weight to 44, CHP weight to 44, THM weight to 32"
+ */
+export const preprocessMuscleGroupRequest = (
+  request: string,
+  queue: WorkoutQueueItem[]
+): { processedRequest: string; wasProcessed: boolean; matchedExercises: string[] } => {
+  const detected = detectMuscleGroupInRequest(request);
+  
+  if (!detected) {
+    return { processedRequest: request, wasProcessed: false, matchedExercises: [] };
+  }
+  
+  // Find exercises in the queue that match this muscle group (with weights)
+  const matchingExercises = findExercisesInQueueByMuscleGroup(queue, detected.muscles);
+  
+  if (matchingExercises.length === 0) {
+    console.log(`[PREPROCESS] No ${detected.keyword} exercises found in queue`);
+    return { processedRequest: request, wasProcessed: false, matchedExercises: [] };
+  }
+  
+  const exerciseNames = matchingExercises.map(e => e.name);
+  console.log(`[PREPROCESS] Found ${detected.keyword} exercises:`, exerciseNames);
+  
+  // Check for percentage change
+  const percentChange = detectPercentageChange(request);
+  
+  if (percentChange) {
+    // Pre-calculate weights - remove math from LLM
+    const multiplier = percentChange.isIncrease 
+      ? 1 + (percentChange.percentage / 100)
+      : 1 - (percentChange.percentage / 100);
+    
+    const weightChanges = matchingExercises.map(exercise => {
+      const abbrev = getExerciseAbbreviation(exercise.name);
+      const newWeight = Math.round(exercise.weight * multiplier * 10) / 10; // Round to 1 decimal
+      return `${abbrev} weight to ${newWeight}`;
+    });
+    
+    console.log(`[PREPROCESS] Pre-calculated weights (${percentChange.isIncrease ? '+' : '-'}${percentChange.percentage}%):`, weightChanges);
+    
+    // Build the explicit weight change request
+    const processedRequest = `change ${weightChanges.join(', ')}`;
+    console.log(`[PREPROCESS] Rewrote request: "${request}" -> "${processedRequest}"`);
+    
+    return { processedRequest, wasProcessed: true, matchedExercises: exerciseNames };
+  }
+  
+  // No percentage - just use abbreviations for non-percentage requests (like removals)
+  const abbreviations = matchingExercises.map(e => getExerciseAbbreviation(e.name));
+  console.log(`[PREPROCESS] Converted to abbreviations:`, abbreviations);
+  
+  const abbrevList = abbreviations.join(', ');
+  const lowerRequest = request.toLowerCase();
+  let processedRequest = request;
+  
+  // Try different replacement patterns
+  const replacements = [
+    { find: `all ${detected.keyword} exercises`, replace: abbrevList },
+    { find: `all ${detected.keyword} exercise`, replace: abbrevList },
+    { find: `${detected.keyword} exercises`, replace: abbrevList },
+    { find: `${detected.keyword} exercise`, replace: abbrevList },
+    { find: `every ${detected.keyword} exercise`, replace: abbrevList },
+    { find: `every ${detected.keyword}`, replace: abbrevList },
+    { find: `all ${detected.keyword}`, replace: abbrevList },
+  ];
+  
+  for (const { find, replace } of replacements) {
+    const index = lowerRequest.indexOf(find);
+    if (index !== -1) {
+      processedRequest = request.substring(0, index) + replace + request.substring(index + find.length);
+      console.log(`[PREPROCESS] Rewrote request: "${request}" -> "${processedRequest}"`);
+      return { processedRequest, wasProcessed: true, matchedExercises: exerciseNames };
+    }
+  }
+  
+  return { processedRequest: request, wasProcessed: false, matchedExercises: [] };
+};
+
+// =============================================================================
 // COMPRESSED ENCODING SYSTEM - System Prompt & Encoding Format
 // =============================================================================
 
@@ -84,19 +279,19 @@ ABBREVIATIONS: ${generateAbbreviationList()}
 MUSCLES: chest=BBP,CHP,THM,IDP,DF|back=BDL,BOR,LP,TR,ODR,PU,RDL|shoulders=OHP,DSP,DAP,DLR,RDF|legs=BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT|biceps=HC,SBC,PC|triceps=TPD,DSK|forearms=FC,RFC
 
 RULES:
-- Apply ALL requested changes to the queue
-- Keep unchanged exercises exactly the same
-- For % changes, calculate new value
-- Remove=omit, Add=append with defaults (5/3 for reps/sets)
+- Apply ALL requested changes
+- NEVER remove exercises unless user says "remove"
+- Keep ALL unchanged exercises exactly the same
+- Output must have same number of exercises unless adding/removing
 
 EXAMPLES:
-In: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
-Req: "change bench to 84kg and deadlift to 130kg"
-Out: Q0:D1:BBP/84/5/5,BBS/100/5/5;Q1:D2:BDL/130/3/3
+In: Q0:D1:BBP/80/5/5,CHP/60/8/4,THM/40/8/3,DLR/15/10/3;Q1:D2:BDL/120/3/3
+Req: "change BBP weight to 70, CHP weight to 50, THM weight to 35"
+Out: Q0:D1:BBP/70/5/5,CHP/50/8/4,THM/35/8/3,DLR/15/10/3;Q1:D2:BDL/120/3/3
 
 In: Q0:D1:BBP/80/5/5,BBS/100/5/5
-Req: "remove squat, add deadlift at 100kg"
-Out: Q0:D1:BBP/80/5/5,BDL/100/5/3
+Req: "remove squat"
+Out: Q0:D1:BBP/80/5/5
 
 Output ONLY the queue.`;
 
