@@ -75,47 +75,30 @@ const generateAbbreviationList = (): string => {
 };
 
 // Compressed system prompt - output in same format as input
-export const COMPRESSED_SYSTEM_PROMPT = `You modify workout queues. Output the MODIFIED queue in the SAME format as input.
+export const COMPRESSED_SYSTEM_PROMPT = `Modify workout queue. Output COMPLETE modified queue in SAME format.
 
-INPUT/OUTPUT FORMAT:
-Q<index>:D<dayNum>:<exercises>;Q<index>:D<dayNum>:<exercises>
-Each exercise: ABBREV/weight/reps/sets separated by commas
+FORMAT: Q<idx>:D<day>:ABBREV/weight/reps/sets,ABBREV/weight/reps/sets;Q<idx>:D<day>:...
 
-ABBREVIATIONS:
-${generateAbbreviationList()}
+ABBREVIATIONS: ${generateAbbreviationList()}
 
-MUSCLE GROUPS:
-chest: BBP,CHP,THM,IDP,DF
-back: BDL,BOR,LP,TR,ODR,PU,RDL
-shoulders: OHP,DSP,DAP,DLR,RDF
-legs: BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT
-biceps: HC,SBC,PC
-triceps: TPD,DSK
-forearms: FC,RFC
+MUSCLES: chest=BBP,CHP,THM,IDP,DF|back=BDL,BOR,LP,TR,ODR,PU,RDL|shoulders=OHP,DSP,DAP,DLR,RDF|legs=BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT|biceps=HC,SBC,PC|triceps=TPD,DSK|forearms=FC,RFC
 
 RULES:
-- Output the COMPLETE queue with ALL your changes applied
-- Apply EVERY change the user requests - don't miss any!
-- Keep exercises you don't modify exactly the same
-- For % changes, calculate the new value
-- To remove an exercise, omit it from output
-- To add an exercise, include it in the list
-- If user asks for multiple changes, apply ALL of them
+- Apply ALL requested changes to the queue
+- Keep unchanged exercises exactly the same
+- For % changes, calculate new value
+- Remove=omit, Add=append with defaults (5/3 for reps/sets)
 
-EXAMPLE:
-Input: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
-Request: "change bench press to 84kg"
-Output: Q0:D1:BBP/84/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
+EXAMPLES:
+In: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
+Req: "change bench to 84kg and deadlift to 130kg"
+Out: Q0:D1:BBP/84/5/5,BBS/100/5/5;Q1:D2:BDL/130/3/3
 
-Input: Q0:D1:BBP/80/5/5,BBS/100/5/5
-Request: "remove squat"
-Output: Q0:D1:BBP/80/5/5
+In: Q0:D1:BBP/80/5/5,BBS/100/5/5
+Req: "remove squat, add deadlift at 100kg"
+Out: Q0:D1:BBP/80/5/5,BDL/100/5/3
 
-Input: Q0:D1:BBP/80/5/5
-Request: "add deadlift at 100kg"
-Output: Q0:D1:BBP/80/5/5,BDL/100/5/3
-
-Output ONLY the modified queue. No explanation.`;
+Output ONLY the queue.`;
 
 // =============================================================================
 // COMPRESSED ENCODING - Encoder (Queue -> Compressed Input)
