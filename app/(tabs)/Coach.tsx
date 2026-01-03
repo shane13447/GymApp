@@ -427,7 +427,7 @@ export default function HomeScreen() {
         {llm.isReady && (
           <ThemedView style={styles.infoContainer}>
             <ThemedText style={styles.infoText}>
-              ✓ Using Executorch - Llama 3.2 1B (on-device, offline-capable)
+              ✓ Using Executorch - Llama 3.2 3B QLoRA (on-device, offline-capable)
             </ThemedText>
           </ThemedView>
         )}
