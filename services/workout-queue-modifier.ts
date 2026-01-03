@@ -89,7 +89,9 @@ chest: BBP,CHP,THM,IDP,DF
 back: BDL,BOR,LP,TR,ODR,PU,RDL
 shoulders: OHP,DSP,DAP,DLR,RDF
 legs: BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT
-arms: HC,SBC,PC,TPD,DSK,FC,RFC
+biceps: HC,SBC,PC
+triceps: TPD,DSK
+forearms: FC,RFC
 
 RULES:
 - Output the COMPLETE queue with ALL your changes applied
