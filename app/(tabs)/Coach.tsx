@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { LLAMA3_2_1B, Message, useLLM } from 'react-native-executorch';
+import { LLAMA3_2_3B_QLORA, Message, useLLM } from 'react-native-executorch';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -38,9 +38,9 @@ export default function HomeScreen() {
   const queueScrollViewRef = useRef<ScrollView>(null);
   const lastProcessedResponseRef = useRef<string>('');
 
-  // Initialize Executorch LLM - Llama 3.2 1B (smaller, faster model)
+  // Initialize Executorch LLM - Llama 3.2 3B QLoRA (quantized, optimized for mobile)
   const llm = useLLM({ 
-    model: LLAMA3_2_1B,
+    model: LLAMA3_2_3B_QLORA,
     preventLoad: false // Auto-load on mount
   });
 
@@ -49,7 +49,7 @@ export default function HomeScreen() {
     if (llm.isReady) {
       llm.configure({
         chatConfig: {
-          contextWindowLength: 16384, // Increase to 8k to match Llama 3.2's capability
+          contextWindowLength: 16384, // 16k context window for Llama 3.2 3B
         },
         generationConfig: {
           outputTokenBatchSize: 10, // Process tokens in batches for better performance
@@ -441,7 +441,7 @@ export default function HomeScreen() {
         {llm.isReady && (
           <ThemedView style={styles.infoContainer}>
             <ThemedText style={styles.infoText}>
-              ✓ Using Executorch - Llama 3.2 1B (on-device, offline-capable)
+              ✓ Using Executorch - Llama 3.2 3B QLoRA (on-device, offline-capable)
             </ThemedText>
           </ThemedView>
         )}
