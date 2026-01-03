@@ -4,6 +4,610 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WORKOUT_QUEUE_STORAGE_KEY = 'gymApp_workoutQueue';
 
+// =============================================================================
+// COMPRESSED ENCODING SYSTEM - Exercise Abbreviations
+// =============================================================================
+
+// Exercise abbreviation mapping: abbreviation -> full exercise data
+export const EXERCISE_ABBREVIATIONS: Record<string, { name: string; equipment: string; muscle_groups_worked: string[] }> = {
+  'BBS': { name: 'Barbell Back Squat', equipment: 'Barbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings', 'abs'] },
+  'BBP': { name: 'Barbell Bench Press', equipment: 'Barbell', muscle_groups_worked: ['chest', 'triceps', 'shoulders'] },
+  'BDL': { name: 'Barbell Deadlift', equipment: 'Barbell', muscle_groups_worked: ['hamstrings', 'glutes', 'lats', 'traps', 'forearms'] },
+  'BHT': { name: 'Barbell Hip Thrust', equipment: 'Barbell', muscle_groups_worked: ['glutes', 'hamstrings'] },
+  'BLU': { name: 'Barbell Lunge', equipment: 'Barbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
+  'BSH': { name: 'Barbell Shrugs', equipment: 'Barbell', muscle_groups_worked: ['traps', 'forearms'] },
+  'BOR': { name: 'Bent Over Barbell Row', equipment: 'Barbell', muscle_groups_worked: ['lats', 'traps', 'biceps', 'forearms'] },
+  'BSS': { name: 'Bulgarian Split Squat', equipment: 'Dumbbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
+  'CP': { name: 'Calf Press', equipment: '', muscle_groups_worked: ['calves'] },
+  'CRD': { name: 'Calf Raises (Holding Dumbbells)', equipment: 'Dumbbell', muscle_groups_worked: ['calves'] },
+  'CHP': { name: 'Chest Press', equipment: '', muscle_groups_worked: ['chest', 'shoulders', 'triceps'] },
+  'DC': { name: 'Decline Crunches', equipment: '', muscle_groups_worked: ['abs'] },
+  'DAP': { name: 'Dumbbell Arnold Press', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders', 'triceps'] },
+  'DF': { name: 'Dumbbell Flyes', equipment: 'Dumbbell', muscle_groups_worked: ['chest', 'shoulders'] },
+  'DGS': { name: 'Dumbbell Goblet Squat', equipment: 'Dumbbell', muscle_groups_worked: ['quads', 'glutes', 'abs'] },
+  'DLR': { name: 'Dumbbell Lateral Raise', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
+  'DSP': { name: 'Dumbbell Shoulder Press', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
+  'DSK': { name: 'Dumbbell Skullcrushers', equipment: 'Dumbbell', muscle_groups_worked: ['triceps'] },
+  'FC': { name: 'Fingertip Curls', equipment: '', muscle_groups_worked: ['forearms'] },
+  'HC': { name: 'Hammer Curls', equipment: 'Dumbbell', muscle_groups_worked: ['biceps', 'forearms'] },
+  'HSC': { name: 'Hamstring Curls', equipment: '', muscle_groups_worked: ['hamstrings'] },
+  'IDP': { name: 'Incline Dumbbell Press', equipment: 'Dumbbell', muscle_groups_worked: ['chest', 'shoulders', 'triceps'] },
+  'LP': { name: 'Lat Pulldowns', equipment: '', muscle_groups_worked: ['lats'] },
+  'LE': { name: 'Leg Extensions', equipment: '', muscle_groups_worked: ['quads'] },
+  'LPR': { name: 'Leg Press', equipment: '', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
+  'ODR': { name: 'One-Arm Dumbbell Row', equipment: 'Dumbbell', muscle_groups_worked: ['lats', 'biceps', 'shoulders'] },
+  'OHP': { name: 'Overhead Barbell Press (Military Press)', equipment: 'Barbell', muscle_groups_worked: ['shoulders', 'triceps', 'chest'] },
+  'PC': { name: 'Preacher Curl', equipment: 'Barbell', muscle_groups_worked: ['biceps'] },
+  'PU': { name: 'Pull-Ups', equipment: '', muscle_groups_worked: ['lats'] },
+  'RDF': { name: 'Rear Delt Fly', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
+  'RFC': { name: 'Reverse Grip Forearm Curls', equipment: '', muscle_groups_worked: ['forearms'] },
+  'RDL': { name: 'Romanian Deadlift', equipment: 'Barbell', muscle_groups_worked: ['hamstrings', 'glutes', 'forearms'] },
+  'SBC': { name: 'Seated Dumbbell Bicep Curl', equipment: 'Dumbbell', muscle_groups_worked: ['biceps', 'forearms'] },
+  'THM': { name: 'The Hug Machine', equipment: '', muscle_groups_worked: ['chest'] },
+  'TR': { name: 'Triangle Rows', equipment: '', muscle_groups_worked: ['lats', 'traps'] },
+  'TPD': { name: 'Triceps Pushdown', equipment: 'Cable', muscle_groups_worked: ['triceps'] },
+};
+
+// Reverse mapping: full exercise name -> abbreviation
+export const EXERCISE_NAME_TO_ABBREV: Record<string, string> = Object.fromEntries(
+  Object.entries(EXERCISE_ABBREVIATIONS).map(([abbrev, data]) => [data.name, abbrev])
+);
+
+// Get abbreviation for an exercise name (returns name if no abbreviation found)
+export const getExerciseAbbreviation = (exerciseName: string): string => {
+  return EXERCISE_NAME_TO_ABBREV[exerciseName] || exerciseName;
+};
+
+// Get full exercise data from abbreviation
+export const getExerciseFromAbbreviation = (abbrev: string): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
+  return EXERCISE_ABBREVIATIONS[abbrev] || null;
+};
+
+// =============================================================================
+// COMPRESSED ENCODING SYSTEM - System Prompt & Encoding Format
+// =============================================================================
+
+// Generate the abbreviation list for the system prompt
+const generateAbbreviationList = (): string => {
+  return Object.entries(EXERCISE_ABBREVIATIONS)
+    .map(([abbrev, data]) => `${abbrev}=${data.name}`)
+    .join(',');
+};
+
+// Compressed system prompt - output in same format as input
+export const COMPRESSED_SYSTEM_PROMPT = `You modify workout queues. Output the MODIFIED queue in the SAME format as input.
+
+INPUT/OUTPUT FORMAT:
+Q<index>:D<dayNum>:<exercises>;Q<index>:D<dayNum>:<exercises>
+Each exercise: ABBREV/weight/reps/sets separated by commas
+
+ABBREVIATIONS:
+${generateAbbreviationList()}
+
+MUSCLE GROUPS:
+chest: BBP,CHP,THM,IDP,DF
+back: BDL,BOR,LP,TR,ODR,PU,RDL
+shoulders: OHP,DSP,DAP,DLR,RDF
+legs: BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT
+arms: HC,SBC,PC,TPD,DSK,FC,RFC
+
+RULES:
+- Output the COMPLETE queue with your changes applied
+- Keep exercises you don't modify exactly the same
+- Only change what the user requests
+- For % changes, calculate the new value
+- To remove an exercise, omit it from output
+- To add an exercise, include it in the list
+
+EXAMPLE:
+Input: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
+Request: "change bench press to 84kg"
+Output: Q0:D1:BBP/84/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
+
+Input: Q0:D1:BBP/80/5/5,BBS/100/5/5
+Request: "remove squat"
+Output: Q0:D1:BBP/80/5/5
+
+Input: Q0:D1:BBP/80/5/5
+Request: "add deadlift at 100kg"
+Output: Q0:D1:BBP/80/5/5,BDL/100/5/3
+
+Output ONLY the modified queue. No explanation.`;
+
+// =============================================================================
+// COMPRESSED ENCODING - Encoder (Queue -> Compressed Input)
+// =============================================================================
+
+// Encode workout queue to compressed format for LLM input
+export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
+  // Format: Q<index>:D<dayNum>:<exercise1Abbrev>/<weight>/<reps>/<sets>,<exercise2>...;Q<index>...
+  const encoded = queue.map((item, queueIndex) => {
+    const exercises = item.exercises.map(ex => {
+      const abbrev = getExerciseAbbreviation(ex.name);
+      // Use compact format: ABBREV/weight/reps/sets
+      return `${abbrev}/${ex.weight || '0'}/${ex.reps || '8-12'}/${ex.sets || '3'}`;
+    }).join(',');
+    
+    return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
+  }).join(';');
+  
+  return encoded;
+};
+
+// Build compressed prompt for LLM
+export const buildCompressedPrompt = (
+  userRequest: string,
+  queue: WorkoutQueueItem[]
+): string => {
+  const encodedQueue = encodeQueueForLLM(queue);
+  return `Queue:${encodedQueue}
+Request:${userRequest}`;
+};
+
+// =============================================================================
+// COMPRESSED ENCODING - Decoder (Compressed Output -> Queue Changes)
+// =============================================================================
+
+export interface CompressedChange {
+  type: 'weight' | 'reps' | 'sets' | 'remove' | 'add' | 'swap';
+  queueIndex: number;
+  exerciseIndex?: number;
+  value?: string;
+  newExerciseAbbrev?: string;
+  newWeight?: string;
+  newReps?: string;
+  newSets?: string;
+}
+
+// Parse a single compressed change token
+const parseCompressedToken = (token: string): CompressedChange | null => {
+  const trimmed = token.trim();
+  if (!trimmed || trimmed === 'NOCHANGE') return null;
+  
+  try {
+    // Add operation: <queueIndex>.+<ABBREV>.w<weight>.r<reps>.s<sets>
+    const addMatch = trimmed.match(/^(\d+)\.\+([A-Z]+)(?:\.w([^.]+))?(?:\.r([^.]+))?(?:\.s([^.]+))?$/);
+    if (addMatch) {
+      return {
+        type: 'add',
+        queueIndex: parseInt(addMatch[1], 10),
+        newExerciseAbbrev: addMatch[2],
+        newWeight: addMatch[3] || '0',
+        newReps: addMatch[4] || '8-12',
+        newSets: addMatch[5] || '3',
+      };
+    }
+    
+    // Swap operation: <queueIndex>.<exerciseIndex>.sw<ABBREV>
+    const swapMatch = trimmed.match(/^(\d+)\.(\d+)\.sw([A-Z]+)$/);
+    if (swapMatch) {
+      return {
+        type: 'swap',
+        queueIndex: parseInt(swapMatch[1], 10),
+        exerciseIndex: parseInt(swapMatch[2], 10),
+        newExerciseAbbrev: swapMatch[3],
+      };
+    }
+    
+    // Remove operation: <queueIndex>.<exerciseIndex>.x
+    const removeMatch = trimmed.match(/^(\d+)\.(\d+)\.x$/);
+    if (removeMatch) {
+      return {
+        type: 'remove',
+        queueIndex: parseInt(removeMatch[1], 10),
+        exerciseIndex: parseInt(removeMatch[2], 10),
+      };
+    }
+    
+    // Weight change: <queueIndex>.<exerciseIndex>.w<value>
+    const weightMatch = trimmed.match(/^(\d+)\.(\d+)\.w(.+)$/);
+    if (weightMatch) {
+      return {
+        type: 'weight',
+        queueIndex: parseInt(weightMatch[1], 10),
+        exerciseIndex: parseInt(weightMatch[2], 10),
+        value: weightMatch[3],
+      };
+    }
+    
+    // Reps change: <queueIndex>.<exerciseIndex>.r<value>
+    const repsMatch = trimmed.match(/^(\d+)\.(\d+)\.r(.+)$/);
+    if (repsMatch) {
+      return {
+        type: 'reps',
+        queueIndex: parseInt(repsMatch[1], 10),
+        exerciseIndex: parseInt(repsMatch[2], 10),
+        value: repsMatch[3],
+      };
+    }
+    
+    // Sets change: <queueIndex>.<exerciseIndex>.s<value>
+    const setsMatch = trimmed.match(/^(\d+)\.(\d+)\.s(.+)$/);
+    if (setsMatch) {
+      return {
+        type: 'sets',
+        queueIndex: parseInt(setsMatch[1], 10),
+        exerciseIndex: parseInt(setsMatch[2], 10),
+        value: setsMatch[3],
+      };
+    }
+    
+    console.warn('Unknown compressed token format:', trimmed);
+    return null;
+  } catch (error) {
+    console.error('Error parsing compressed token:', trimmed, error);
+    return null;
+  }
+};
+
+// Parse full compressed response from LLM
+export const parseCompressedResponse = (response: string): CompressedChange[] => {
+  const trimmed = response.trim();
+  
+  // Handle NOCHANGE as the entire response
+  if (trimmed === 'NOCHANGE' || trimmed === '') {
+    return [];
+  }
+  
+  // First, split by newlines and only keep lines that look like valid change tokens
+  // Valid tokens start with a digit (queue index) like "0.0.w84" or "1.+HC.w20"
+  const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  // Find lines that contain valid change tokens (start with digit and contain a dot)
+  const validLines: string[] = [];
+  for (const line of lines) {
+    // A valid change line starts with a digit followed by a dot
+    if (/^\d+\./.test(line)) {
+      // Only take the part before any whitespace or invalid characters
+      // This handles cases where LLM adds extra text after the token
+      const match = line.match(/^[\d.+\-\w|]+/);
+      if (match) {
+        validLines.push(match[0]);
+      }
+    }
+    // Ignore NOCHANGE if it appears alongside valid changes
+    // (LLM sometimes outputs both the change AND "NOCHANGE" confusingly)
+  }
+  
+  // If no valid lines found, check if first line is NOCHANGE
+  if (validLines.length === 0) {
+    if (lines[0] === 'NOCHANGE') {
+      return [];
+    }
+    // Try the first line anyway (might be a single token)
+    validLines.push(lines[0]);
+  }
+  
+  // Now split by | and parse each token
+  const changes: CompressedChange[] = [];
+  for (const line of validLines) {
+    const tokens = line.split('|').map(t => t.trim()).filter(t => t.length > 0);
+    
+    for (const token of tokens) {
+      const parsed = parseCompressedToken(token);
+      if (parsed) {
+        changes.push(parsed);
+        console.log('[COMPRESSED] Successfully parsed token:', token, '->', parsed);
+      }
+    }
+  }
+  
+  return changes;
+};
+
+// =============================================================================
+// QUEUE FORMAT PARSER - Parse LLM output in same format as input
+// =============================================================================
+
+// Parse queue format output: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
+export const parseQueueFormatResponse = (
+  response: string,
+  originalQueue: WorkoutQueueItem[]
+): WorkoutQueueItem[] | null => {
+  try {
+    const trimmed = response.trim();
+    console.log('[QUEUE FORMAT] Parsing response:', trimmed);
+    
+    // Find the queue format string (starts with Q and contains :D)
+    // Handle cases where LLM adds extra text before/after
+    const queueMatch = trimmed.match(/Q\d+:D\d+:[^;]+(;Q\d+:D\d+:[^;]+)*/);
+    if (!queueMatch) {
+      console.warn('[QUEUE FORMAT] No queue format found in response');
+      return null;
+    }
+    
+    const queueString = queueMatch[0];
+    console.log('[QUEUE FORMAT] Extracted queue string:', queueString);
+    
+    // Split into queue items by ;
+    const queueItemStrings = queueString.split(';').filter(s => s.trim().length > 0);
+    
+    const newQueue: WorkoutQueueItem[] = [];
+    
+    for (const itemString of queueItemStrings) {
+      // Parse: Q<index>:D<dayNum>:<exercises>
+      const match = itemString.match(/Q(\d+):D(\d+):(.+)/);
+      if (!match) {
+        console.warn('[QUEUE FORMAT] Could not parse queue item:', itemString);
+        continue;
+      }
+      
+      const queueIndex = parseInt(match[1], 10);
+      const dayNumber = parseInt(match[2], 10);
+      const exercisesString = match[3];
+      
+      // Get original queue item to preserve id, programId, programName
+      const originalItem = originalQueue[queueIndex];
+      if (!originalItem) {
+        console.warn('[QUEUE FORMAT] No original queue item at index:', queueIndex);
+        continue;
+      }
+      
+      // Parse exercises: ABBREV/weight/reps/sets,ABBREV/weight/reps/sets
+      const exerciseStrings = exercisesString.split(',').filter(s => s.trim().length > 0);
+      const exercises: ProgramExercise[] = [];
+      
+      for (const exString of exerciseStrings) {
+        const parts = exString.split('/');
+        if (parts.length < 4) {
+          console.warn('[QUEUE FORMAT] Invalid exercise format:', exString);
+          continue;
+        }
+        
+        const abbrev = parts[0].trim();
+        const weight = parts[1]?.trim() || '0';
+        const reps = parts[2]?.trim() || '8-12';
+        const sets = parts[3]?.trim() || '3';
+        
+        // Look up exercise data from abbreviation
+        const exerciseData = getExerciseFromAbbreviation(abbrev);
+        
+        if (exerciseData) {
+          exercises.push({
+            name: exerciseData.name,
+            equipment: exerciseData.equipment,
+            muscle_groups_worked: exerciseData.muscle_groups_worked,
+            weight,
+            reps,
+            sets,
+            restTime: '180',
+            progression: '',
+          });
+        } else {
+          // If abbreviation not found, try to find matching exercise in original
+          const originalEx = originalItem.exercises.find(
+            ex => getExerciseAbbreviation(ex.name) === abbrev || ex.name.includes(abbrev)
+          );
+          if (originalEx) {
+            exercises.push({
+              ...originalEx,
+              weight,
+              reps,
+              sets,
+            });
+          } else {
+            console.warn('[QUEUE FORMAT] Unknown exercise abbreviation:', abbrev);
+            // Add with abbreviation as name as fallback
+            exercises.push({
+              name: abbrev,
+              equipment: '',
+              muscle_groups_worked: [],
+              weight,
+              reps,
+              sets,
+              restTime: '180',
+              progression: '',
+            });
+          }
+        }
+      }
+      
+      newQueue.push({
+        id: originalItem.id,
+        programId: originalItem.programId,
+        programName: originalItem.programName,
+        dayNumber: dayNumber,
+        exercises,
+      });
+    }
+    
+    console.log('[QUEUE FORMAT] Parsed', newQueue.length, 'queue items');
+    return newQueue.length > 0 ? newQueue : null;
+  } catch (error) {
+    console.error('[QUEUE FORMAT] Error parsing response:', error);
+    return null;
+  }
+};
+
+// Apply compressed changes to workout queue
+export const applyCompressedChanges = (
+  queue: WorkoutQueueItem[],
+  changes: CompressedChange[]
+): WorkoutQueueItem[] => {
+  // Deep clone the queue to avoid mutations
+  const newQueue: WorkoutQueueItem[] = JSON.parse(JSON.stringify(queue));
+  
+  // Track removals to process after other changes
+  const removals: { queueIndex: number; exerciseIndex: number }[] = [];
+  
+  for (const change of changes) {
+    const queueItem = newQueue[change.queueIndex];
+    if (!queueItem) {
+      console.warn(`Queue index ${change.queueIndex} out of bounds`);
+      continue;
+    }
+    
+    switch (change.type) {
+      case 'weight':
+        if (change.exerciseIndex !== undefined && queueItem.exercises[change.exerciseIndex]) {
+          queueItem.exercises[change.exerciseIndex].weight = change.value || '0';
+        }
+        break;
+        
+      case 'reps':
+        if (change.exerciseIndex !== undefined && queueItem.exercises[change.exerciseIndex]) {
+          queueItem.exercises[change.exerciseIndex].reps = change.value || '8-12';
+        }
+        break;
+        
+      case 'sets':
+        if (change.exerciseIndex !== undefined && queueItem.exercises[change.exerciseIndex]) {
+          queueItem.exercises[change.exerciseIndex].sets = change.value || '3';
+        }
+        break;
+        
+      case 'remove':
+        if (change.exerciseIndex !== undefined) {
+          removals.push({ queueIndex: change.queueIndex, exerciseIndex: change.exerciseIndex });
+        }
+        break;
+        
+      case 'add':
+        if (change.newExerciseAbbrev) {
+          const exerciseData = getExerciseFromAbbreviation(change.newExerciseAbbrev);
+          if (exerciseData) {
+            const newExercise: ProgramExercise = {
+              name: exerciseData.name,
+              equipment: exerciseData.equipment,
+              muscle_groups_worked: exerciseData.muscle_groups_worked,
+              weight: change.newWeight || '0',
+              reps: change.newReps || '8-12',
+              sets: change.newSets || '3',
+              restTime: '180',
+              progression: '',
+            };
+            queueItem.exercises.push(newExercise);
+          } else {
+            console.warn(`Unknown exercise abbreviation: ${change.newExerciseAbbrev}`);
+          }
+        }
+        break;
+        
+      case 'swap':
+        if (change.exerciseIndex !== undefined && change.newExerciseAbbrev) {
+          const exerciseData = getExerciseFromAbbreviation(change.newExerciseAbbrev);
+          if (exerciseData && queueItem.exercises[change.exerciseIndex]) {
+            const oldExercise = queueItem.exercises[change.exerciseIndex];
+            queueItem.exercises[change.exerciseIndex] = {
+              name: exerciseData.name,
+              equipment: exerciseData.equipment,
+              muscle_groups_worked: exerciseData.muscle_groups_worked,
+              weight: oldExercise.weight || '0',
+              reps: oldExercise.reps || '8-12',
+              sets: oldExercise.sets || '3',
+              restTime: oldExercise.restTime || '180',
+              progression: oldExercise.progression || '',
+            };
+          } else {
+            console.warn(`Unknown exercise abbreviation for swap: ${change.newExerciseAbbrev}`);
+          }
+        }
+        break;
+    }
+  }
+  
+  // Process removals in reverse order to maintain correct indices
+  removals.sort((a, b) => {
+    if (a.queueIndex !== b.queueIndex) return b.queueIndex - a.queueIndex;
+    return b.exerciseIndex - a.exerciseIndex;
+  });
+  
+  for (const removal of removals) {
+    const queueItem = newQueue[removal.queueIndex];
+    if (queueItem && queueItem.exercises[removal.exerciseIndex]) {
+      queueItem.exercises.splice(removal.exerciseIndex, 1);
+    }
+  }
+  
+  return newQueue;
+};
+
+// Convert compressed changes to ProposedChanges for UI display
+export const compressedChangesToProposed = (
+  changes: CompressedChange[],
+  originalQueue: WorkoutQueueItem[]
+): ProposedChanges => {
+  const weightChanges: ProposedChanges['weightChanges'] = [];
+  const removals: ProposedChanges['removals'] = [];
+  const additions: ProposedChanges['additions'] = [];
+  const swaps: ProposedChanges['swaps'] = [];
+  
+  for (const change of changes) {
+    const queueItem = originalQueue[change.queueIndex];
+    if (!queueItem) continue;
+    
+    switch (change.type) {
+      case 'weight':
+        if (change.exerciseIndex !== undefined) {
+          const exercise = queueItem.exercises[change.exerciseIndex];
+          if (exercise) {
+            weightChanges.push({
+              queueItemId: queueItem.id,
+              queueItemName: queueItem.programName,
+              dayNumber: queueItem.dayNumber,
+              exerciseName: exercise.name,
+              oldWeight: exercise.weight || '0',
+              newWeight: change.value || '0',
+            });
+          }
+        }
+        break;
+        
+      case 'remove':
+        if (change.exerciseIndex !== undefined) {
+          const exercise = queueItem.exercises[change.exerciseIndex];
+          if (exercise) {
+            removals.push({
+              queueItemId: queueItem.id,
+              queueItemName: queueItem.programName,
+              dayNumber: queueItem.dayNumber,
+              exerciseName: exercise.name,
+              muscleGroup: exercise.muscle_groups_worked?.[0] || 'unknown',
+            });
+          }
+        }
+        break;
+        
+      case 'add':
+        if (change.newExerciseAbbrev) {
+          const exerciseData = getExerciseFromAbbreviation(change.newExerciseAbbrev);
+          if (exerciseData) {
+            additions.push({
+              queueItemId: queueItem.id,
+              queueItemName: queueItem.programName,
+              dayNumber: queueItem.dayNumber,
+              exerciseName: exerciseData.name,
+              weight: change.newWeight || '0',
+              reps: change.newReps || '8-12',
+              sets: change.newSets || '3',
+              equipment: exerciseData.equipment,
+              muscle_groups_worked: exerciseData.muscle_groups_worked,
+            });
+          }
+        }
+        break;
+        
+      case 'swap':
+        if (change.exerciseIndex !== undefined && change.newExerciseAbbrev) {
+          const oldExercise = queueItem.exercises[change.exerciseIndex];
+          const newExerciseData = getExerciseFromAbbreviation(change.newExerciseAbbrev);
+          if (oldExercise && newExerciseData) {
+            swaps.push({
+              queueItemId: queueItem.id,
+              queueItemName: queueItem.programName,
+              dayNumber: queueItem.dayNumber,
+              oldExerciseName: oldExercise.name,
+              newExerciseName: newExerciseData.name,
+            });
+          }
+        }
+        break;
+    }
+  }
+  
+  return { weightChanges, removals, additions, swaps };
+};
+
 // DEPRECATED: Old system prompt - kept for backwards compatibility
 export const WORKOUT_MODIFICATION_SYSTEM_PROMPT = `Modify workout queue. Items: id,programName,dayNumber,exercises[]. Exercises: name,equipment,muscle_groups_worked[],weight,reps,sets,restTime,progression. Use EXACT queueItemId from queue data. Do NOT use "q1".
 
@@ -35,8 +639,7 @@ RULES:
 - Preserve IDs, programId, programName, dayNumber exactly
 - Defaults for new exercises: weight="0", reps="8-12", sets="3", restTime="180", progression=""
 - Keep same order unless user requests reordering
-- Output must be COMPACT (no line breaks, no indentation, no extra spaces)
-- CRITICAL: All open brackets ([) and braces ({) must be closed before returning the response. Ensure the JSON array is complete and valid by closing all brackets and braces.`;
+- Output must be COMPACT (no line breaks, no indentation, no extra spaces)`;
 
 // Types for modifications
 export interface WeightChange {
@@ -464,128 +1067,6 @@ const attemptFixMalformedQueueResponse = (response: string): string | null => {
   }
 };
 
-// Helper function to fix JSON by correcting specific LLM malformation patterns
-const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
-  try {
-    let fixed = jsonString;
-    let madeChanges = false;
-    
-    // IMPORTANT: Only fix specific known LLM malformation patterns
-    // Do NOT add characters that aren't needed
-    
-    // Pattern 1 (MOST COMMON): LLM outputs `}],"id":` between queue items - missing `{` to open new object
-    // The LLM closes exercises with }], adds comma, but forgets to open new object with {
-    // Example: ..."exercises":[{...}],"id":"queue-2"... should be ..."exercises":[{...}]},{"id":"queue-2"...
-    // We need to add }{ after the ] to close current queue item and open new one
-    const originalFixed = fixed;
-    fixed = fixed.replace(/\}(\s*)\](\s*),(\s*)"id"(\s*):(\s*)"/g, '}$1]$2},$3{"id"$4:$5"');
-    if (fixed !== originalFixed) {
-      madeChanges = true;
-      console.log('Fixed pattern: }],"id": -> }]},{"id": (added },{ to separate queue items)');
-    }
-    
-    // Pattern 2: Same as above but exercises array might not end with } (empty exercises or malformed)
-    // LLM outputs `],"id":` directly without the exercise-closing }
-    const beforePattern2 = fixed;
-    fixed = fixed.replace(/\](\s*),(\s*)"id"(\s*):(\s*)"/g, ']$1},$2{"id"$3:$4"');
-    if (fixed !== beforePattern2) {
-      madeChanges = true;
-      console.log('Fixed pattern: ],"id": -> ]},{"id": (separated merged queue items)');
-    }
-    
-    // Pattern 3: LLM outputs `]}[{` between queue items when it should be `]},{`
-    // The LLM outputs: ] } [ { when it should output ] } , {
-    const beforePattern3 = fixed;
-    fixed = fixed.replace(/\](\s*)\}(\s*)\[(\s*)\{/g, ']$1}$2,$3{');
-    if (fixed !== beforePattern3) {
-      madeChanges = true;
-      console.log('Fixed pattern: ]}[{ -> ]},{');
-    }
-    
-    // Pattern 4: LLM outputs `][{` (missing } entirely) when it should be `]},{`
-    // Only apply if there's no } between ] and [ AND it's followed by "id"
-    const beforePattern4 = fixed;
-    fixed = fixed.replace(/\](\s*)\[(\s*)\{(?="id")/g, ']$1},$2{');
-    if (fixed !== beforePattern4) {
-      madeChanges = true;
-      console.log('Fixed pattern: ][{"id" -> ]},{"id"');
-    }
-    
-    // Pattern 5: Missing comma between queue items: `]}{` should be `]},{`
-    // This is when exercises ] closes, object } closes, but comma is missing before next {
-    const beforePattern5 = fixed;
-    fixed = fixed.replace(/\](\s*)\}(\s*)\{(?="id")/g, ']$1}$2,{');
-    if (fixed !== beforePattern5) {
-      madeChanges = true;
-      console.log('Fixed pattern: ]}{"id" -> ]},{"id"');
-    }
-    
-    // Now count brackets and braces to find what's missing ONLY at the end
-    let bracketCount = 0;
-    let braceCount = 0;
-    let inString = false;
-    let escapeNext = false;
-    
-    for (let i = 0; i < fixed.length; i++) {
-      const char = fixed[i];
-      
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-      
-      if (char === '\\') {
-        escapeNext = true;
-        continue;
-      }
-      
-      if (char === '"' && !escapeNext) {
-        inString = !inString;
-        continue;
-      }
-      
-      if (inString) continue;
-      
-      if (char === '[') bracketCount++;
-      if (char === ']') bracketCount--;
-      if (char === '{') braceCount++;
-      if (char === '}') braceCount--;
-    }
-    
-    // If brackets/braces are balanced, return the fixed string
-    if (bracketCount === 0 && braceCount === 0) {
-      if (madeChanges) {
-        console.log('Fixed JSON structural issues');
-      }
-      return fixed;
-    }
-    
-    // Only add closing characters at the END for unclosed structures
-    // Close braces first (inner structures), then brackets (outer array)
-    const originalLength = fixed.length;
-    
-    while (braceCount > 0) {
-      fixed += '}';
-      braceCount--;
-    }
-    
-    while (bracketCount > 0) {
-      fixed += ']';
-      bracketCount--;
-    }
-    
-    const addedChars = fixed.length - originalLength;
-    if (addedChars > 0) {
-      console.log(`Fixed JSON by adding ${addedChars} closing character(s) at end`);
-    }
-    
-    return fixed;
-  } catch (e) {
-    console.error('Error fixing JSON brackets/braces:', e);
-    return null;
-  }
-};
-
 // NEW: Parse the generated workout queue from LLM response
 export const parseGeneratedQueue = (
   response: string,
@@ -605,14 +1086,6 @@ export const parseGeneratedQueue = (
         lines.pop();
       }
       cleanedResponse = lines.join('\n').trim();
-    }
-    
-    // EARLY FIX: Apply structural fixes BEFORE bracket counting
-    // This ensures the bracket counting works correctly on fixed JSON
-    const earlyFixedResponse = fixJSONBracketsAndBraces(cleanedResponse);
-    if (earlyFixedResponse && earlyFixedResponse !== cleanedResponse) {
-      console.log('Applied early structural fixes to JSON response');
-      cleanedResponse = earlyFixedResponse;
     }
     
     // Try to extract JSON array - use bracket matching to find the correct closing bracket
@@ -705,29 +1178,6 @@ export const parseGeneratedQueue = (
           }
         }
       } catch (e) {
-        // Try to fix JSON by adding missing brackets/braces
-        const fixedJson = fixJSONBracketsAndBraces(jsonString);
-        if (fixedJson) {
-          try {
-            const parsed = JSON.parse(fixedJson);
-            if (Array.isArray(parsed)) {
-              console.log('Successfully parsed JSON after fixing brackets/braces');
-              // Validate items before returning
-              const validItems = parsed.filter((item: any) => {
-                return item && 
-                       item.id && 
-                       item.programName && 
-                       typeof item.dayNumber === 'number' &&
-                       Array.isArray(item.exercises);
-              });
-              if (validItems.length > 0) {
-                return validItems as WorkoutQueueItem[];
-              }
-            }
-          } catch (fixError) {
-            console.error('Failed to parse even after fixing brackets/braces:', fixError);
-          }
-        }
         // If we can't parse it, return null
         return null;
       }
@@ -753,25 +1203,7 @@ export const parseGeneratedQueue = (
         console.error('First 200 chars of response:', jsonString.substring(0, 200));
       }
       
-      // Try to fix JSON by adding missing brackets/braces
-      const fixedJson = fixJSONBracketsAndBraces(jsonString);
-      if (fixedJson) {
-        try {
-          parsed = JSON.parse(fixedJson);
-          if (Array.isArray(parsed)) {
-            console.log('Successfully parsed JSON after fixing brackets/braces');
-            // Continue with validation logic below (will fall through)
-          } else {
-            console.warn('Parsed JSON is not an array after fixing');
-            return null;
-          }
-        } catch (fixError) {
-          console.error('Failed to parse even after fixing brackets/braces:', fixError);
-          return null;
-        }
-      } else {
-        return null;
-      }
+      return null;
     }
     
     // Validate it's an array
