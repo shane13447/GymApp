@@ -35,7 +35,8 @@ RULES:
 - Preserve IDs, programId, programName, dayNumber exactly
 - Defaults for new exercises: weight="0", reps="8-12", sets="3", restTime="180", progression=""
 - Keep same order unless user requests reordering
-- Output must be COMPACT (no line breaks, no indentation, no extra spaces)`;
+- Output must be COMPACT (no line breaks, no indentation, no extra spaces)
+- CRITICAL: All open brackets ([) and braces ({) must be closed before returning the response. Ensure the JSON array is complete and valid by closing all brackets and braces.`;
 
 // Types for modifications
 export interface WeightChange {
