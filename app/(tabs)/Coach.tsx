@@ -15,8 +15,8 @@ import {
   COMPRESSED_SYSTEM_PROMPT,
   differencesToProposedChanges,
   loadWorkoutQueue,
-  mergeQueueWithOriginal,
   parseQueueFormatResponse,
+  preprocessMuscleGroupRequest,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { WorkoutQueueItem } from './ActiveWorkout';
@@ -127,8 +127,15 @@ export default function HomeScreen() {
           return;
         }
 
-        // Build compressed prompt (much smaller than full JSON)
-        const userPrompt = buildCompressedPrompt(inputText, workoutQueue);
+        // Preprocess request to replace muscle group references with explicit exercise names
+        const { processedRequest, wasProcessed, matchedExercises } = preprocessMuscleGroupRequest(inputText, workoutQueue);
+        
+        if (wasProcessed) {
+          console.log(`[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`);
+        }
+        
+        // Build compressed prompt with processed request
+        const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
         
         // Log prompt lengths for debugging
         const systemPromptLength = COMPRESSED_SYSTEM_PROMPT.length;
@@ -197,14 +204,12 @@ export default function HomeScreen() {
       const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue);
       
       if (parsedQueue && parsedQueue.length > 0) {
-        // Merge with original queue to preserve items that weren't returned
-        const newQueue = mergeQueueWithOriginal(parsedQueue, workoutQueue);
+        // Use parsed queue directly (no merge - allows removals to work)
         console.log('[QUEUE FORMAT] Parsed queue with', parsedQueue.length, 'items');
-        console.log('[QUEUE FORMAT] After merging:', newQueue.length, 'items');
-        setGeneratedQueue(newQueue);
+        setGeneratedQueue(parsedQueue);
         
         // Compare old vs new to find differences
-        const differences = compareWorkoutQueues(workoutQueue, newQueue);
+        const differences = compareWorkoutQueues(workoutQueue, parsedQueue);
         
         if (differences.length > 0) {
           // Convert to ProposedChanges format for display
