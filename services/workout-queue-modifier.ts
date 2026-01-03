@@ -473,30 +473,49 @@ const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
     // IMPORTANT: Only fix specific known LLM malformation patterns
     // Do NOT add characters that aren't needed
     
-    // Pattern 1: LLM outputs `]}[{` between queue items when it should be `]},{`
-    // The LLM outputs: ] } [ { when it should output ] } , {
-    // This replaces the `[` with `,` while keeping the structure
+    // Pattern 1 (MOST COMMON): LLM outputs `}],"id":` between queue items - missing `{` to open new object
+    // The LLM closes exercises with }], adds comma, but forgets to open new object with {
+    // Example: ..."exercises":[{...}],"id":"queue-2"... should be ..."exercises":[{...}]},{"id":"queue-2"...
+    // We need to add }{ after the ] to close current queue item and open new one
     const originalFixed = fixed;
-    fixed = fixed.replace(/\](\s*)\}(\s*)\[(\s*)\{/g, ']$1}$2,$3{');
+    fixed = fixed.replace(/\}(\s*)\](\s*),(\s*)"id"(\s*):(\s*)"/g, '}$1]$2},$3{"id"$4:$5"');
     if (fixed !== originalFixed) {
+      madeChanges = true;
+      console.log('Fixed pattern: }],"id": -> }]},{"id": (added },{ to separate queue items)');
+    }
+    
+    // Pattern 2: Same as above but exercises array might not end with } (empty exercises or malformed)
+    // LLM outputs `],"id":` directly without the exercise-closing }
+    const beforePattern2 = fixed;
+    fixed = fixed.replace(/\](\s*),(\s*)"id"(\s*):(\s*)"/g, ']$1},$2{"id"$3:$4"');
+    if (fixed !== beforePattern2) {
+      madeChanges = true;
+      console.log('Fixed pattern: ],"id": -> ]},{"id": (separated merged queue items)');
+    }
+    
+    // Pattern 3: LLM outputs `]}[{` between queue items when it should be `]},{`
+    // The LLM outputs: ] } [ { when it should output ] } , {
+    const beforePattern3 = fixed;
+    fixed = fixed.replace(/\](\s*)\}(\s*)\[(\s*)\{/g, ']$1}$2,$3{');
+    if (fixed !== beforePattern3) {
       madeChanges = true;
       console.log('Fixed pattern: ]}[{ -> ]},{');
     }
     
-    // Pattern 2: LLM outputs `][{` (missing } entirely) when it should be `]},{`
+    // Pattern 4: LLM outputs `][{` (missing } entirely) when it should be `]},{`
     // Only apply if there's no } between ] and [ AND it's followed by "id"
-    const beforePattern2 = fixed;
+    const beforePattern4 = fixed;
     fixed = fixed.replace(/\](\s*)\[(\s*)\{(?="id")/g, ']$1},$2{');
-    if (fixed !== beforePattern2) {
+    if (fixed !== beforePattern4) {
       madeChanges = true;
       console.log('Fixed pattern: ][{"id" -> ]},{"id"');
     }
     
-    // Pattern 3: Missing comma between queue items: `]}{` should be `]},{`
+    // Pattern 5: Missing comma between queue items: `]}{` should be `]},{`
     // This is when exercises ] closes, object } closes, but comma is missing before next {
-    const beforePattern3 = fixed;
+    const beforePattern5 = fixed;
     fixed = fixed.replace(/\](\s*)\}(\s*)\{(?="id")/g, ']$1}$2,{');
-    if (fixed !== beforePattern3) {
+    if (fixed !== beforePattern5) {
       madeChanges = true;
       console.log('Fixed pattern: ]}{"id" -> ]},{"id"');
     }
