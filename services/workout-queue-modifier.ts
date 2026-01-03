@@ -464,6 +464,85 @@ const attemptFixMalformedQueueResponse = (response: string): string | null => {
   }
 };
 
+// Helper function to fix JSON by adding missing closing brackets and braces
+const fixJSONBracketsAndBraces = (jsonString: string): string | null => {
+  try {
+    // First, fix the pattern where `]\s*,` should be `]},\s*{` (missing object closing between array items)
+    // This regex finds: closing bracket, whitespace, comma, whitespace (but not already followed by opening brace)
+    // We'll replace it with: closing bracket, closing brace, comma, whitespace, opening brace
+    // The negative lookahead (?!\s*{) ensures we don't replace when '{' already follows
+    let fixed = jsonString.replace(/\](\s*),(\s*)(?!\s*{)/g, (match, whitespace1, whitespace2) => {
+      // Fix: add closing brace before comma, opening brace after
+      return `]}${whitespace1},${whitespace2}{`;
+    });
+
+    // Now count brackets and braces to find what's missing at the end
+    let bracketCount = 0;
+    let braceCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < fixed.length; i++) {
+      const char = fixed[i];
+      
+      // Handle escape sequences
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      // Track string boundaries
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+      
+      // Don't count brackets/braces inside strings
+      if (inString) continue;
+      
+      // Count brackets and braces
+      if (char === '[') bracketCount++;
+      if (char === ']') bracketCount--;
+      if (char === '{') braceCount++;
+      if (char === '}') braceCount--;
+    }
+    
+    // If brackets/braces are balanced, return the fixed string
+    if (bracketCount === 0 && braceCount === 0) {
+      if (fixed !== jsonString) {
+        console.log('Fixed JSON structural issues (missing }, { between objects)');
+      }
+      return fixed;
+    }
+    
+    // Close braces first (inner structures), then brackets (outer array)
+    // Add closing braces for any unclosed braces
+    while (braceCount > 0) {
+      fixed += '}';
+      braceCount--;
+    }
+    
+    // Add closing brackets for any unclosed brackets
+    while (bracketCount > 0) {
+      fixed += ']';
+      bracketCount--;
+    }
+    
+    console.log('Fixed JSON by adding missing closing brackets/braces');
+    console.log(`Added ${fixed.length - jsonString.length} characters to close JSON structure`);
+    
+    return fixed;
+  } catch (e) {
+    console.error('Error fixing JSON brackets/braces:', e);
+    return null;
+  }
+};
+
 // NEW: Parse the generated workout queue from LLM response
 export const parseGeneratedQueue = (
   response: string,
@@ -575,6 +654,29 @@ export const parseGeneratedQueue = (
           }
         }
       } catch (e) {
+        // Try to fix JSON by adding missing brackets/braces
+        const fixedJson = fixJSONBracketsAndBraces(jsonString);
+        if (fixedJson) {
+          try {
+            const parsed = JSON.parse(fixedJson);
+            if (Array.isArray(parsed)) {
+              console.log('Successfully parsed JSON after fixing brackets/braces');
+              // Validate items before returning
+              const validItems = parsed.filter((item: any) => {
+                return item && 
+                       item.id && 
+                       item.programName && 
+                       typeof item.dayNumber === 'number' &&
+                       Array.isArray(item.exercises);
+              });
+              if (validItems.length > 0) {
+                return validItems as WorkoutQueueItem[];
+              }
+            }
+          } catch (fixError) {
+            console.error('Failed to parse even after fixing brackets/braces:', fixError);
+          }
+        }
         // If we can't parse it, return null
         return null;
       }
@@ -600,7 +702,25 @@ export const parseGeneratedQueue = (
         console.error('First 200 chars of response:', jsonString.substring(0, 200));
       }
       
-      return null;
+      // Try to fix JSON by adding missing brackets/braces
+      const fixedJson = fixJSONBracketsAndBraces(jsonString);
+      if (fixedJson) {
+        try {
+          parsed = JSON.parse(fixedJson);
+          if (Array.isArray(parsed)) {
+            console.log('Successfully parsed JSON after fixing brackets/braces');
+            // Continue with validation logic below (will fall through)
+          } else {
+            console.warn('Parsed JSON is not an array after fixing');
+            return null;
+          }
+        } catch (fixError) {
+          console.error('Failed to parse even after fixing brackets/braces:', fixError);
+          return null;
+        }
+      } else {
+        return null;
+      }
     }
     
     // Validate it's an array
