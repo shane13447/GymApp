@@ -92,12 +92,13 @@ legs: BBS,LPR,LE,HSC,BLU,BSS,DGS,BHT
 arms: HC,SBC,PC,TPD,DSK,FC,RFC
 
 RULES:
-- Output the COMPLETE queue with your changes applied
+- Output the COMPLETE queue with ALL your changes applied
+- Apply EVERY change the user requests - don't miss any!
 - Keep exercises you don't modify exactly the same
-- Only change what the user requests
 - For % changes, calculate the new value
 - To remove an exercise, omit it from output
 - To add an exercise, include it in the list
+- If user asks for multiple changes, apply ALL of them
 
 EXAMPLE:
 Input: Q0:D1:BBP/80/5/5,BBS/100/5/5;Q1:D2:BDL/120/3/3
