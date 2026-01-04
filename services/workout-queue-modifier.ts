@@ -180,18 +180,18 @@ const findExercisesInQueueByMuscleGroup = (
 ): { name: string; weight: number }[] => {
   const matchingExercises: { name: string; weight: number }[] = [];
   const seenNames = new Set<string>();
-
+  
   for (const queueItem of queue) {
     for (const exercise of queueItem.exercises) {
       const exerciseMuscles = exercise.muscle_groups_worked || [];
       const isMatch = exerciseMuscles.some((muscle) =>
         targetMuscles.includes(muscle.toLowerCase())
       );
-
+      
       if (isMatch && !seenNames.has(exercise.name)) {
         seenNames.add(exercise.name);
-        matchingExercises.push({
-          name: exercise.name,
+        matchingExercises.push({ 
+          name: exercise.name, 
           weight:
             typeof exercise.weight === 'number'
               ? exercise.weight
@@ -200,7 +200,7 @@ const findExercisesInQueueByMuscleGroup = (
       }
     }
   }
-
+  
   return matchingExercises;
 };
 
@@ -226,7 +226,7 @@ const detectPercentageChange = (
       isIncrease,
     };
   }
-
+  
   return null;
 };
 
@@ -237,7 +237,7 @@ const detectMuscleGroupInRequest = (
   const sortedKeywords = Object.keys(MUSCLE_GROUP_KEYWORDS).sort(
     (a, b) => b.length - a.length
   );
-
+  
   for (const keyword of sortedKeywords) {
     const patterns = [
       `all ${keyword}`,
@@ -245,14 +245,14 @@ const detectMuscleGroupInRequest = (
       `${keyword} exercise`,
       `every ${keyword}`,
     ];
-
+    
     for (const pattern of patterns) {
       if (lowerRequest.includes(pattern)) {
         return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
       }
     }
   }
-
+  
   return null;
 };
 
@@ -270,7 +270,7 @@ export const preprocessMuscleGroupRequest = (
   noMatchesFound: boolean;
 } => {
   const detected = detectMuscleGroupInRequest(request);
-
+  
   if (!detected) {
     return { 
       processedRequest: request, 
@@ -282,7 +282,7 @@ export const preprocessMuscleGroupRequest = (
   }
 
   const matchingExercises = findExercisesInQueueByMuscleGroup(queue, detected.muscles);
-
+  
   if (matchingExercises.length === 0) {
     console.log(`[PREPROCESS] No ${detected.keyword} exercises found in queue`);
     return { 
@@ -296,9 +296,9 @@ export const preprocessMuscleGroupRequest = (
 
   const exerciseNames = matchingExercises.map((e) => e.name);
   const percentChange = detectPercentageChange(request);
-
+  
   if (percentChange) {
-    const multiplier = percentChange.isIncrease
+    const multiplier = percentChange.isIncrease 
       ? 1 + percentChange.percentage / 100
       : 1 - percentChange.percentage / 100;
 
@@ -322,7 +322,7 @@ export const preprocessMuscleGroupRequest = (
   const nameList = semiAbbrevNames.join(', ');
   const lowerRequest = request.toLowerCase();
   let processedRequest = request;
-
+  
   const replacements = [
     { find: `all ${detected.keyword} exercises`, replace: nameList },
     { find: `all ${detected.keyword} exercise`, replace: nameList },
@@ -332,7 +332,7 @@ export const preprocessMuscleGroupRequest = (
     { find: `every ${detected.keyword}`, replace: nameList },
     { find: `all ${detected.keyword}`, replace: nameList },
   ];
-
+  
   for (const { find, replace } of replacements) {
     const index = lowerRequest.indexOf(find);
     if (index !== -1) {
@@ -367,30 +367,45 @@ const generateAbbreviationList = (): string => {
     .join(',');
 };
 
-export const COMPRESSED_SYSTEM_PROMPT = `You modify a workout queue. Output the COMPLETE modified queue.
+export const COMPRESSED_SYSTEM_PROMPT = `You modify a workout queue. Output ONLY the modified queue.
 
-FORMAT: Exercise Name|weight|reps|sets
-- Exercises use readable names with abbreviations: DB=Dumbbell, BB=Barbell, C=Curls, R=Rows, P=Press
-- weight: number (kg)
-- reps: number OR range like "8-12"
-- sets: number
+EXERCISE FORMAT: Name|weight|reps|sets
+Position 1 = Name (copy exactly from input)
+Position 2 = weight (kg number) - WEIGHT changes go here
+Position 3 = reps (number or range) - REPS changes go here  
+Position 4 = sets (number) - SETS changes go here
 
-Queue: Q<idx>:D<day>:Name|wt|reps|sets,Name|wt|reps|sets;Q<idx>:D<day>:...
+Example: "Calf P|5|8-12|3" means Calf P, 5kg weight, 8-12 reps, 3 sets
+To change reps to 20: "Calf P|5|20|3" (replace position 3)
+To change weight to 10: "Calf P|10|8-12|3" (replace position 2)
+
+SEPARATORS - USE ONLY THESE:
+| between the 4 fields (Name|weight|reps|sets)
+, between exercises (Exercise1,Exercise2,Exercise3)
+; between queue items (Q0:...;Q1:...;Q2:...)
+
+NEVER use = as a separator!
+
+Queue: Q0:D<day>:exercises;Q1:D<day>:exercises;Q2:D<day>:exercises
 
 RULES:
-1. COPY every exercise from input to output exactly
-2. ONLY change values the user mentions
-3. Keep exercise names EXACTLY as shown in input
-4. Include ALL days (Q0, Q1, Q2...)
+1. Copy EVERY exercise from input to output (except removals)
+2. Only change the specific field requested
+3. Keep names exactly as shown
+4. Include all Q items
 
 EXAMPLES:
-In: Q0:D1:Decline Crunches|10|8-12|3,Leg Extensions|5|8-12|3;Q1:D2:BB Deadlift|20|8-12|3
+In: Q0:D2:Decline Crunches|10|8-12|3,Leg Extensions|5|8-12|3;Q1:D3:BB Deadlift|20|8-12|3
 Req: "change decline crunches weight to 25"
-Out: Q0:D1:Decline Crunches|25|8-12|3,Leg Extensions|5|8-12|3;Q1:D2:BB Deadlift|20|8-12|3
+Out: Q0:D2:Decline Crunches|25|8-12|3,Leg Extensions|5|8-12|3;Q1:D3:BB Deadlift|20|8-12|3
 
-In: Q0:D1:Seated DB Bicep C|0|8-12|3,Lat Pulldowns|40|8-12|3
-Req: "change lat pulldowns sets to 5"
-Out: Q0:D1:Seated DB Bicep C|0|8-12|3,Lat Pulldowns|40|8-12|5
+In: Q0:D2:Calf P|0|8-12|3,Leg P|5|8-12|3,Leg Extensions|2|8-12|3
+Req: "change calf press reps to 20 and leg extensions reps to 15"
+Out: Q0:D2:Calf P|0|20|3,Leg P|5|8-12|3,Leg Extensions|2|15|3
+
+In: Q0:D2:Fingertip C|0|8-12|3,Lat Pulldowns|40|8-12|3
+Req: "remove fingertip curls"
+Out: Q0:D2:Lat Pulldowns|40|8-12|3
 
 Output ONLY the queue.`;
 
@@ -404,7 +419,7 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
           return `${semiAbbrev}|${ex.weight || '0'}|${ex.reps || '8-12'}|${ex.sets || '3'}`;
         })
         .join(',');
-      return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
+    return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
     })
     .join(';');
 };
@@ -422,38 +437,61 @@ Request:${userRequest}`;
 // QUEUE FORMAT PARSER
 // =============================================================================
 
+/**
+ * Fix common LLM output errors before parsing
+ */
+const preprocessLLMResponse = (response: string): string => {
+  let fixed = response;
+  
+  // Fix: LLM sometimes uses = instead of , between exercises
+  // Pattern: ends with |number followed by = (e.g., "|3=Exercise")
+  // This replaces = with , when it appears between exercises
+  fixed = fixed.replace(/\|(\d+)=([A-Z])/g, '|$1,$2');
+  
+  // Also handle cases like "|3=DB" 
+  fixed = fixed.replace(/\|(\d+(?:\.\d+)?)=(\w)/g, '|$1,$2');
+  
+  if (fixed !== response) {
+    console.log('[QUEUE FORMAT] Fixed separator issues in LLM response');
+  }
+  
+  return fixed;
+};
+
 export const parseQueueFormatResponse = (
   response: string,
   originalQueue: WorkoutQueueItem[]
 ): WorkoutQueueItem[] | null => {
   try {
-    const trimmed = response.trim();
+    // Preprocess to fix common LLM errors
+    const preprocessed = preprocessLLMResponse(response);
+    const trimmed = preprocessed.trim();
     console.log('[QUEUE FORMAT] Parsing response:', trimmed);
-
+    
     const queueMatch = trimmed.match(/Q\d+:D\d+:[^;]+(;Q\d+:D\d+:[^;]+)*/);
     if (!queueMatch) {
       console.warn('[QUEUE FORMAT] No queue format found in response');
       return null;
     }
-
+    
     const queueString = queueMatch[0];
     const queueItemStrings = queueString.split(';').filter((s) => s.trim().length > 0);
     const newQueue: WorkoutQueueItem[] = [];
-
+    
     for (const itemString of queueItemStrings) {
       const match = itemString.match(/Q(\d+):D(\d+):(.+)/);
       if (!match) continue;
-
+      
       const queueIndex = parseInt(match[1], 10);
       const dayNumber = parseInt(match[2], 10);
       const exercisesString = match[3];
-
+      
       const originalItem = originalQueue[queueIndex];
       if (!originalItem) continue;
-
+      
       const exerciseStrings = exercisesString.split(',').filter((s) => s.trim().length > 0);
       const exercises: ProgramExercise[] = [];
-
+      
       for (const exString of exerciseStrings) {
         // Support both pipe (|) and slash (/) separators for compatibility
         const separator = exString.includes('|') ? '|' : '/';
@@ -464,7 +502,7 @@ export const parseQueueFormatResponse = (
         const weight = parts[1]?.trim() || '0';
         const reps = parts[2]?.trim() || '8-12';
         const sets = parts[3]?.trim() || '3';
-
+        
         // Try to find the exercise by:
         // 1. Semi-abbreviated name (e.g., "Seated DB Bicep C")
         // 2. Full name
@@ -474,7 +512,7 @@ export const parseQueueFormatResponse = (
         if (!exerciseData) {
           exerciseData = getExerciseFromAbbreviation(exerciseName);
         }
-
+        
         if (exerciseData) {
           exercises.push({
             name: exerciseData.name,
@@ -514,7 +552,7 @@ export const parseQueueFormatResponse = (
           }
         }
       }
-
+      
       newQueue.push({
         id: originalItem.id,
         programId: originalItem.programId,
@@ -524,7 +562,7 @@ export const parseQueueFormatResponse = (
         position: queueIndex,
       });
     }
-
+    
     console.log('[QUEUE FORMAT] Parsed', newQueue.length, 'queue items');
     return newQueue.length > 0 ? newQueue : null;
   } catch (error) {
@@ -539,18 +577,18 @@ export const parseQueueFormatResponse = (
 
 export interface ProposedChanges {
   weightChanges: Array<{
-    queueItemId: string;
+  queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-    exerciseName: string;
+  exerciseName: string;
     oldWeight: string;
-    newWeight: string;
+  newWeight: string;
   }>;
   repsChanges: Array<{
-    queueItemId: string;
+  queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-    exerciseName: string;
+  exerciseName: string;
     oldReps: string;
     newReps: string;
   }>;
@@ -618,10 +656,10 @@ export const compareWorkoutQueues = (
   const differences: QueueDifference[] = [];
   const oldQueueMap = new Map(oldQueue.map((item) => [item.id, item]));
   const newQueueMap = new Map(newQueue.map((item) => [item.id, item]));
-
+  
   for (const oldItem of oldQueue) {
     const newItem = newQueueMap.get(oldItem.id);
-
+    
     if (!newItem) {
       for (const exercise of oldItem.exercises) {
         differences.push({
@@ -635,7 +673,7 @@ export const compareWorkoutQueues = (
       }
       continue;
     }
-
+    
     const oldExercisesMap = new Map(
       oldItem.exercises.map((ex, idx) => [ex.name, { exercise: ex, index: idx }])
     );
@@ -655,10 +693,10 @@ export const compareWorkoutQueues = (
         });
       }
     }
-
+    
     for (const [exerciseName, { exercise: newExercise }] of newExercisesMap) {
       const oldExerciseData = oldExercisesMap.get(exerciseName);
-
+      
       if (!oldExerciseData) {
         differences.push({
           type: 'added',
@@ -670,7 +708,7 @@ export const compareWorkoutQueues = (
         });
       } else {
         const oldExercise = oldExerciseData.exercise;
-
+        
         // Check for weight changes
         if (oldExercise.weight !== newExercise.weight) {
           differences.push({
@@ -718,7 +756,7 @@ export const compareWorkoutQueues = (
       }
     }
   }
-
+  
   for (const newItem of newQueue) {
     if (!oldQueueMap.has(newItem.id)) {
       for (const exercise of newItem.exercises) {
@@ -733,7 +771,7 @@ export const compareWorkoutQueues = (
       }
     }
   }
-
+  
   return differences;
 };
 
@@ -744,7 +782,7 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
   const removals: ProposedChanges['removals'] = [];
   const additions: ProposedChanges['additions'] = [];
   const swaps: ProposedChanges['swaps'] = [];
-
+  
   for (const diff of differences) {
     switch (diff.type) {
       case 'weight_change':
@@ -757,7 +795,7 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           newWeight: diff.newWeight || '',
         });
         break;
-
+      
       case 'reps_change':
         repsChanges.push({
           queueItemId: diff.queueItemId,
@@ -789,7 +827,7 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           muscleGroup: diff.oldExercise?.muscle_groups_worked?.[0] || 'unknown',
         });
         break;
-
+      
       case 'added':
         if (diff.newExercise) {
           additions.push({
@@ -805,7 +843,7 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           });
         }
         break;
-
+      
       case 'exercise_swap':
         if (diff.exerciseName && diff.newExerciseName) {
           swaps.push({
@@ -860,7 +898,7 @@ export const validateChanges = (
       warnings.push(`Unexpected addition(s): ${addedNames}. These exercises were added but you didn't request addition.`);
     }
   }
-
+  
   return {
     valid: warnings.length === 0,
     warnings,
