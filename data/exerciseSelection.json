@@ -45,7 +45,7 @@
       "muscle_groups_worked": ["calves"]
     },
     {
-      "name": "Calf Raises (Holding Dumbbells)",
+      "name": "Dumbbell Calf Raises",
       "equipment": "Dumbbell",
       "muscle_groups_worked": ["calves"]
     },
@@ -91,7 +91,7 @@
     },
     {
       "name": "Fingertip Curls",
-      "equipment": "",
+      "equipment": "Cable",
       "muscle_groups_worked": ["forearms"]
     },
     {
@@ -151,7 +151,7 @@
     },
     {
       "name": "Reverse Grip Forearm Curls",
-      "equipment": "",
+      "equipment": "Cable",
       "muscle_groups_worked": ["forearms"]
     },
     {
@@ -171,7 +171,7 @@
     },
     {
       "name": "Triangle Rows",
-      "equipment": "",
+      "equipment": "Cable",
       "muscle_groups_worked": ["lats", "traps"]
     },
     {
