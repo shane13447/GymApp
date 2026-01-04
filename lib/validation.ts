@@ -1,0 +1,229 @@
+/**
+ * Validation utilities for the Gym App
+ */
+
+import {
+  MAX_EXERCISE_NAME_LENGTH,
+  MAX_EXERCISES_PER_DAY,
+  MAX_PROGRAM_NAME_LENGTH,
+  MAX_WORKOUT_DAYS,
+  MIN_WORKOUT_DAYS,
+} from '@/constants';
+import type { Program, ProgramExercise, ValidationResult, WorkoutDay } from '@/types';
+
+/**
+ * Validate a program name
+ */
+export const validateProgramName = (name: string): ValidationResult => {
+  const errors: string[] = [];
+
+  if (!name || !name.trim()) {
+    errors.push('Program name is required');
+  } else if (name.trim().length > MAX_PROGRAM_NAME_LENGTH) {
+    errors.push(`Program name must be ${MAX_PROGRAM_NAME_LENGTH} characters or less`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Validate number of workout days
+ */
+export const validateNumberOfDays = (days: number): ValidationResult => {
+  const errors: string[] = [];
+
+  if (isNaN(days)) {
+    errors.push('Number of days must be a valid number');
+  } else if (days < MIN_WORKOUT_DAYS) {
+    errors.push(`Must have at least ${MIN_WORKOUT_DAYS} workout day`);
+  } else if (days > MAX_WORKOUT_DAYS) {
+    errors.push(`Cannot have more than ${MAX_WORKOUT_DAYS} workout days`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Validate a workout day
+ */
+export const validateWorkoutDay = (day: WorkoutDay): ValidationResult => {
+  const errors: string[] = [];
+
+  if (!day.exercises || day.exercises.length === 0) {
+    errors.push(`Day ${day.dayNumber} must have at least one exercise`);
+  } else if (day.exercises.length > MAX_EXERCISES_PER_DAY) {
+    errors.push(`Day ${day.dayNumber} cannot have more than ${MAX_EXERCISES_PER_DAY} exercises`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Validate an exercise
+ */
+export const validateExercise = (exercise: ProgramExercise): ValidationResult => {
+  const errors: string[] = [];
+
+  if (!exercise.name || !exercise.name.trim()) {
+    errors.push('Exercise name is required');
+  } else if (exercise.name.trim().length > MAX_EXERCISE_NAME_LENGTH) {
+    errors.push(`Exercise name must be ${MAX_EXERCISE_NAME_LENGTH} characters or less`);
+  }
+
+  // Validate weight (should be a number or empty)
+  if (exercise.weight && exercise.weight.trim()) {
+    const weightNum = parseFloat(exercise.weight.replace(/[^0-9.]/g, ''));
+    if (isNaN(weightNum) && exercise.weight.trim() !== '') {
+      errors.push('Weight must be a valid number');
+    } else if (weightNum < 0) {
+      errors.push('Weight cannot be negative');
+    }
+  }
+
+  // Validate sets (should be a positive integer)
+  if (exercise.sets && exercise.sets.trim()) {
+    const setsNum = parseInt(exercise.sets, 10);
+    if (isNaN(setsNum)) {
+      errors.push('Sets must be a valid number');
+    } else if (setsNum < 1) {
+      errors.push('Must have at least 1 set');
+    } else if (setsNum > 20) {
+      errors.push('Cannot have more than 20 sets');
+    }
+  }
+
+  // Validate rest time (should be a positive number in seconds)
+  if (exercise.restTime && exercise.restTime.trim()) {
+    const restNum = parseInt(exercise.restTime, 10);
+    if (isNaN(restNum)) {
+      errors.push('Rest time must be a valid number');
+    } else if (restNum < 0) {
+      errors.push('Rest time cannot be negative');
+    } else if (restNum > 600) {
+      errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Validate an entire program
+ */
+export const validateProgram = (program: Partial<Program>): ValidationResult => {
+  const errors: string[] = [];
+
+  // Validate name
+  const nameValidation = validateProgramName(program.name || '');
+  errors.push(...nameValidation.errors);
+
+  // Validate workout days
+  if (!program.workoutDays || program.workoutDays.length === 0) {
+    errors.push('Program must have at least one workout day');
+  } else {
+    const daysValidation = validateNumberOfDays(program.workoutDays.length);
+    errors.push(...daysValidation.errors);
+
+    // Validate each day
+    for (const day of program.workoutDays) {
+      const dayValidation = validateWorkoutDay(day);
+      errors.push(...dayValidation.errors);
+
+      // Validate each exercise
+      for (const exercise of day.exercises) {
+        const exerciseValidation = validateExercise(exercise);
+        errors.push(...exerciseValidation.errors.map((e) => `Day ${day.dayNumber}: ${e}`));
+      }
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Parse and validate weight input
+ * Returns the numeric value and unit
+ */
+export const parseWeight = (
+  weight: string
+): { value: number; unit: string; isValid: boolean } => {
+  if (!weight || !weight.trim()) {
+    return { value: 0, unit: '', isValid: true };
+  }
+
+  const match = weight.trim().match(/^([\d.]+)\s*(kg|lbs?|lb)?$/i);
+  if (!match) {
+    return { value: 0, unit: '', isValid: false };
+  }
+
+  const value = parseFloat(match[1]);
+  const unit = match[2]?.toLowerCase() || '';
+
+  return {
+    value: isNaN(value) ? 0 : value,
+    unit: unit === 'lb' ? 'lbs' : unit,
+    isValid: !isNaN(value) && value >= 0,
+  };
+};
+
+/**
+ * Format weight with unit
+ */
+export const formatWeight = (value: number, unit: string = 'kg'): string => {
+  if (value === 0) return '';
+  return `${value} ${unit}`;
+};
+
+/**
+ * Parse reps input (can be a range like "8-12" or a single number)
+ */
+export const parseReps = (reps: string): { min: number; max: number; isValid: boolean } => {
+  if (!reps || !reps.trim()) {
+    return { min: 0, max: 0, isValid: true };
+  }
+
+  const trimmed = reps.trim();
+
+  // Check for range (e.g., "8-12")
+  const rangeMatch = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (rangeMatch) {
+    const min = parseInt(rangeMatch[1], 10);
+    const max = parseInt(rangeMatch[2], 10);
+    return {
+      min,
+      max,
+      isValid: !isNaN(min) && !isNaN(max) && min > 0 && max >= min,
+    };
+  }
+
+  // Check for single number
+  const num = parseInt(trimmed, 10);
+  if (!isNaN(num) && num > 0) {
+    return { min: num, max: num, isValid: true };
+  }
+
+  return { min: 0, max: 0, isValid: false };
+};
+
+/**
+ * Format reps for display
+ */
+export const formatReps = (min: number, max: number): string => {
+  if (min === max) return min.toString();
+  return `${min}-${max}`;
+};
