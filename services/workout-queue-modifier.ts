@@ -3,8 +3,8 @@
  * Handles AI-powered workout queue modifications using compressed encoding
  */
 
-import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 import * as db from '@/services/database';
+import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
 // =============================================================================
 // COMPRESSED ENCODING SYSTEM - Exercise Abbreviations
@@ -367,47 +367,57 @@ const generateAbbreviationList = (): string => {
     .join(',');
 };
 
-export const COMPRESSED_SYSTEM_PROMPT = `You modify a workout queue. Output ONLY the modified queue.
+/**
+ * IronLogic System Prompt - TOON (Token Optimized Object Notation) Format
+ * 
+ * This prompt instructs the LLM to act as IronLogic, a gym coaching engine
+ * that modifies workout queues using a highly compressed pipe-delimited format.
+ */
+export const COMPRESSED_SYSTEM_PROMPT = `<role>
+IronLogic: Gym Queue Modifier. Output TOON only. No text.
+</role>
 
-EXERCISE FORMAT: Name|weight|reps|sets
-Position 1 = Name (copy exactly from input)
-Position 2 = weight (kg number) - WEIGHT changes go here
-Position 3 = reps (number or range) - REPS changes go here  
-Position 4 = sets (number) - SETS changes go here
+<format>
+QUEUE: Q0:D<day>:exercises;Q1:D<day>:exercises;Q2:D<day>:exercises
+EXERCISE: name|kg|reps|sets
+Columns: 1=name 2=kg 3=reps 4=sets
+</format>
 
-Example: "Calf P|5|8-12|3" means Calf P, 5kg weight, 8-12 reps, 3 sets
-To change reps to 20: "Calf P|5|20|3" (replace position 3)
-To change weight to 10: "Calf P|10|8-12|3" (replace position 2)
+<critical>
+- COPY ALL exercises from input (except removals)
+- COPY ALL Q items (Q0;Q1;Q2)
+- Change ONLY the column requested:
+  * "weight" = column 2 (kg)
+  * "reps" = column 3
+  * "sets" = column 4
+- Preserve exact values in unchanged columns
+</critical>
 
-SEPARATORS - USE ONLY THESE:
-| between the 4 fields (Name|weight|reps|sets)
-, between exercises (Exercise1,Exercise2,Exercise3)
-; between queue items (Q0:...;Q1:...;Q2:...)
+<examples>
+IN: Q0:D2:A|10|8-10|3,B|5|12|4;Q1:D3:C|20|6|3
+REQ: change A weight to 25
+OUT: Q0:D2:A|25|8-10|3,B|5|12|4;Q1:D3:C|20|6|3
 
-NEVER use = as a separator!
+IN: Q0:D2:A|0|10-15|3,B|5|15|3
+REQ: change A reps to 20
+OUT: Q0:D2:A|0|20|3,B|5|15|3
 
-Queue: Q0:D<day>:exercises;Q1:D<day>:exercises;Q2:D<day>:exercises
+IN: Q0:D2:A|0|6|3,B|40|5|3,C|20|8|3
+REQ: change B sets to 5
+OUT: Q0:D2:A|0|6|3,B|40|5|5,C|20|8|3
 
-RULES:
-1. Copy EVERY exercise from input to output (except removals)
-2. Only change the specific field requested
-3. Keep names exactly as shown
-4. Include all Q items
+IN: Q0:D2:A|10|8|3,B|5|12|4;Q1:D3:C|20|6|3
+REQ: change A weight to 15 and C reps to 10
+OUT: Q0:D2:A|15|8|3,B|5|12|4;Q1:D3:C|20|10|3
 
-EXAMPLES:
-In: Q0:D2:Decline Crunches|10|8-12|3,Leg Extensions|5|8-12|3;Q1:D3:BB Deadlift|20|8-12|3
-Req: "change decline crunches weight to 25"
-Out: Q0:D2:Decline Crunches|25|8-12|3,Leg Extensions|5|8-12|3;Q1:D3:BB Deadlift|20|8-12|3
+IN: Q0:D2:A|0|6|3,B|40|5|3
+REQ: remove A
+OUT: Q0:D2:B|40|5|3
+</examples>
 
-In: Q0:D2:Calf P|0|8-12|3,Leg P|5|8-12|3,Leg Extensions|2|8-12|3
-Req: "change calf press reps to 20 and leg extensions reps to 15"
-Out: Q0:D2:Calf P|0|20|3,Leg P|5|8-12|3,Leg Extensions|2|15|3
-
-In: Q0:D2:Fingertip C|0|8-12|3,Lat Pulldowns|40|8-12|3
-Req: "remove fingertip curls"
-Out: Q0:D2:Lat Pulldowns|40|8-12|3
-
-Output ONLY the queue.`;
+<task>
+Output modified queue. Include ALL exercises and ALL Q items.
+</task>`;
 
 export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
   return queue
@@ -569,6 +579,376 @@ export const parseQueueFormatResponse = (
     console.error('[QUEUE FORMAT] Error parsing response:', error);
     return null;
   }
+};
+
+// =============================================================================
+// QUEUE REPAIR SYSTEM
+// =============================================================================
+
+/**
+ * Detect what type of change was requested from user input
+ */
+type ChangeType = 'weight' | 'reps' | 'sets' | 'remove' | 'add' | 'unknown';
+
+export const detectRequestedChangeType = (request: string): ChangeType[] => {
+  const lowerRequest = request.toLowerCase();
+  const types: ChangeType[] = [];
+  
+  if (lowerRequest.includes('weight') || lowerRequest.includes('kg')) {
+    types.push('weight');
+  }
+  if (lowerRequest.includes('rep')) {
+    types.push('reps');
+  }
+  if (lowerRequest.includes('set')) {
+    types.push('sets');
+  }
+  if (lowerRequest.includes('remove') || lowerRequest.includes('delete')) {
+    types.push('remove');
+  }
+  if (lowerRequest.includes('add') || lowerRequest.includes('insert')) {
+    types.push('add');
+  }
+  
+  return types.length > 0 ? types : ['unknown'];
+};
+
+/**
+ * Extract target exercise names from user request
+ * Returns normalized exercise names that were mentioned
+ */
+export const extractTargetExercises = (
+  request: string,
+  queue: WorkoutQueueItem[]
+): string[] => {
+  const lowerRequest = request.toLowerCase();
+  const targetNames: string[] = [];
+  
+  // Get all exercise names from the queue
+  const allExercises: string[] = [];
+  for (const item of queue) {
+    for (const ex of item.exercises) {
+      if (!allExercises.includes(ex.name)) {
+        allExercises.push(ex.name);
+      }
+    }
+  }
+  
+  // Check which exercises are mentioned in the request
+  for (const name of allExercises) {
+    const lowerName = name.toLowerCase();
+    const semiAbbrev = toSemiAbbreviated(name).toLowerCase();
+    
+    // Check various forms of the name
+    if (
+      lowerRequest.includes(lowerName) ||
+      lowerRequest.includes(semiAbbrev) ||
+      lowerRequest.includes(lowerName.replace(/\s+/g, '')) ||
+      // Check key words from the name
+      lowerName.split(' ').every(word => 
+        word.length < 3 || lowerRequest.includes(word)
+      )
+    ) {
+      targetNames.push(name);
+    }
+  }
+  
+  return targetNames;
+};
+
+/**
+ * Fuzzy match an exercise name to the known exercise database
+ */
+export const fuzzyMatchExerciseName = (
+  name: string,
+  knownExercises: { name: string; equipment: string; muscle_groups_worked: string[] }[]
+): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
+  const lowerName = name.toLowerCase().trim();
+  
+  // Try exact match first
+  for (const ex of knownExercises) {
+    if (ex.name.toLowerCase() === lowerName) {
+      return ex;
+    }
+  }
+  
+  // Try semi-abbreviated match
+  const expanded = fromSemiAbbreviated(name);
+  for (const ex of knownExercises) {
+    if (ex.name.toLowerCase() === expanded.toLowerCase()) {
+      return ex;
+    }
+  }
+  
+  // Try contains match
+  for (const ex of knownExercises) {
+    const exLower = ex.name.toLowerCase();
+    if (exLower.includes(lowerName) || lowerName.includes(exLower)) {
+      return ex;
+    }
+  }
+  
+  // Try word-based fuzzy match
+  const nameWords = lowerName.split(/\s+/).filter(w => w.length > 2);
+  for (const ex of knownExercises) {
+    const exWords = ex.name.toLowerCase().split(/\s+/);
+    const matchCount = nameWords.filter(w => 
+      exWords.some(ew => ew.includes(w) || w.includes(ew))
+    ).length;
+    if (matchCount >= Math.ceil(nameWords.length * 0.6)) {
+      return ex;
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Safety Net: Restore exercises that were dropped but not explicitly removed
+ */
+export const restoreDroppedExercises = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  request: string
+): WorkoutQueueItem[] => {
+  const changeTypes = detectRequestedChangeType(request);
+  const isRemovalRequest = changeTypes.includes('remove');
+  
+  // If not a removal request, or if it is but we need to be careful
+  const targetExercises = isRemovalRequest 
+    ? extractTargetExercises(request, originalQueue)
+    : [];
+  
+  const repairedQueue: WorkoutQueueItem[] = [];
+  
+  for (let i = 0; i < originalQueue.length; i++) {
+    const originalItem = originalQueue[i];
+    const parsedItem = parsedQueue[i];
+    
+    if (!parsedItem) {
+      // Entire queue item was dropped - restore it
+      console.log(`[REPAIR] Restoring dropped queue item Q${i}`);
+      repairedQueue.push({ ...originalItem });
+      continue;
+    }
+    
+    // Build a map of parsed exercises by name
+    const parsedExerciseMap = new Map<string, ProgramExercise>();
+    for (const ex of parsedItem.exercises) {
+      parsedExerciseMap.set(ex.name.toLowerCase(), ex);
+      // Also map semi-abbreviated name
+      const semiAbbrev = toSemiAbbreviated(ex.name).toLowerCase();
+      if (semiAbbrev !== ex.name.toLowerCase()) {
+        parsedExerciseMap.set(semiAbbrev, ex);
+      }
+    }
+    
+    // Check which original exercises are missing
+    const restoredExercises: ProgramExercise[] = [...parsedItem.exercises];
+    
+    for (const originalEx of originalItem.exercises) {
+      const lowerName = originalEx.name.toLowerCase();
+      const semiAbbrev = toSemiAbbreviated(originalEx.name).toLowerCase();
+      
+      // Check if exercise exists in parsed output
+      const existsInParsed = 
+        parsedExerciseMap.has(lowerName) ||
+        parsedExerciseMap.has(semiAbbrev) ||
+        parsedItem.exercises.some(pe => 
+          pe.name.toLowerCase() === lowerName ||
+          toSemiAbbreviated(pe.name).toLowerCase() === semiAbbrev
+        );
+      
+      if (!existsInParsed) {
+        // Exercise was dropped - check if it was targeted for removal
+        const wasTargeted = targetExercises.some(target => 
+          target.toLowerCase() === lowerName ||
+          toSemiAbbreviated(target).toLowerCase() === semiAbbrev ||
+          lowerName.includes(target.toLowerCase()) ||
+          target.toLowerCase().includes(lowerName)
+        );
+        
+        if (!wasTargeted && isRemovalRequest) {
+          // Exercise was dropped but not targeted - restore it
+          console.log(`[REPAIR] Restoring dropped exercise: ${originalEx.name}`);
+          restoredExercises.push({ ...originalEx });
+        } else if (!isRemovalRequest) {
+          // Not a removal request at all - definitely restore it
+          console.log(`[REPAIR] Restoring dropped exercise: ${originalEx.name}`);
+          restoredExercises.push({ ...originalEx });
+        }
+      }
+    }
+    
+    repairedQueue.push({
+      ...parsedItem,
+      exercises: restoredExercises,
+    });
+  }
+  
+  return repairedQueue;
+};
+
+/**
+ * Strict Column Enforcement: Fix changes applied to wrong columns
+ */
+export const enforceColumnChanges = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  request: string
+): WorkoutQueueItem[] => {
+  const changeTypes = detectRequestedChangeType(request);
+  const targetExercises = extractTargetExercises(request, originalQueue);
+  
+  // Extract the new value from the request
+  const valueMatch = request.match(/to\s+(\d+(?:\.\d+)?)/i);
+  const newValue = valueMatch ? valueMatch[1] : null;
+  
+  if (!newValue || changeTypes.includes('unknown') || changeTypes.includes('remove') || changeTypes.includes('add')) {
+    return parsedQueue; // Can't enforce without knowing the intended value
+  }
+  
+  const repairedQueue: WorkoutQueueItem[] = [];
+  
+  for (let i = 0; i < parsedQueue.length; i++) {
+    const parsedItem = parsedQueue[i];
+    const originalItem = originalQueue[i];
+    
+    if (!parsedItem || !originalItem) {
+      repairedQueue.push(parsedItem || originalItem);
+      continue;
+    }
+    
+    const repairedExercises: ProgramExercise[] = [];
+    
+    for (const parsedEx of parsedItem.exercises) {
+      const originalEx = originalItem.exercises.find(
+        oe => oe.name.toLowerCase() === parsedEx.name.toLowerCase() ||
+              toSemiAbbreviated(oe.name).toLowerCase() === toSemiAbbreviated(parsedEx.name).toLowerCase()
+      );
+      
+      if (!originalEx) {
+        repairedExercises.push(parsedEx);
+        continue;
+      }
+      
+      // Check if this exercise was targeted
+      const isTargeted = targetExercises.some(target => 
+        target.toLowerCase() === originalEx.name.toLowerCase() ||
+        toSemiAbbreviated(target).toLowerCase() === toSemiAbbreviated(originalEx.name).toLowerCase()
+      );
+      
+      if (!isTargeted) {
+        // Not targeted - should preserve original values
+        // But only fix if LLM made unwanted changes
+        const repairedEx = { ...parsedEx };
+        
+        // If weight changed but we're not changing weight, restore it
+        if (!changeTypes.includes('weight') && parsedEx.weight !== originalEx.weight) {
+          console.log(`[REPAIR] Restoring weight for ${originalEx.name}: ${parsedEx.weight} -> ${originalEx.weight}`);
+          repairedEx.weight = originalEx.weight;
+        }
+        
+        // If reps changed but we're not changing reps, restore it
+        if (!changeTypes.includes('reps') && parsedEx.reps !== originalEx.reps) {
+          console.log(`[REPAIR] Restoring reps for ${originalEx.name}: ${parsedEx.reps} -> ${originalEx.reps}`);
+          repairedEx.reps = originalEx.reps;
+        }
+        
+        // If sets changed but we're not changing sets, restore it
+        if (!changeTypes.includes('sets') && parsedEx.sets !== originalEx.sets) {
+          console.log(`[REPAIR] Restoring sets for ${originalEx.name}: ${parsedEx.sets} -> ${originalEx.sets}`);
+          repairedEx.sets = originalEx.sets;
+        }
+        
+        repairedExercises.push(repairedEx);
+      } else {
+        // This exercise WAS targeted - ensure the change is in the right column
+        const repairedEx = { ...parsedEx };
+        
+        if (changeTypes.includes('weight') && !changeTypes.includes('reps') && !changeTypes.includes('sets')) {
+          // Weight-only change: restore reps and sets if they changed
+          if (parsedEx.reps !== originalEx.reps) {
+            console.log(`[REPAIR] Restoring reps for targeted ${originalEx.name}: ${parsedEx.reps} -> ${originalEx.reps}`);
+            repairedEx.reps = originalEx.reps;
+          }
+          if (parsedEx.sets !== originalEx.sets) {
+            console.log(`[REPAIR] Restoring sets for targeted ${originalEx.name}: ${parsedEx.sets} -> ${originalEx.sets}`);
+            repairedEx.sets = originalEx.sets;
+          }
+          // Ensure weight actually changed
+          if (parsedEx.weight === originalEx.weight && newValue) {
+            console.log(`[REPAIR] Applying weight change for ${originalEx.name}: ${originalEx.weight} -> ${newValue}`);
+            repairedEx.weight = newValue;
+          }
+        }
+        
+        if (changeTypes.includes('reps') && !changeTypes.includes('weight') && !changeTypes.includes('sets')) {
+          // Reps-only change: restore weight and sets if they changed
+          if (parsedEx.weight !== originalEx.weight) {
+            console.log(`[REPAIR] Restoring weight for targeted ${originalEx.name}: ${parsedEx.weight} -> ${originalEx.weight}`);
+            repairedEx.weight = originalEx.weight;
+          }
+          if (parsedEx.sets !== originalEx.sets) {
+            console.log(`[REPAIR] Restoring sets for targeted ${originalEx.name}: ${parsedEx.sets} -> ${originalEx.sets}`);
+            repairedEx.sets = originalEx.sets;
+          }
+          // Ensure reps actually changed
+          if (parsedEx.reps === originalEx.reps && newValue) {
+            console.log(`[REPAIR] Applying reps change for ${originalEx.name}: ${originalEx.reps} -> ${newValue}`);
+            repairedEx.reps = newValue;
+          }
+        }
+        
+        if (changeTypes.includes('sets') && !changeTypes.includes('weight') && !changeTypes.includes('reps')) {
+          // Sets-only change: restore weight and reps if they changed
+          if (parsedEx.weight !== originalEx.weight) {
+            console.log(`[REPAIR] Restoring weight for targeted ${originalEx.name}: ${parsedEx.weight} -> ${originalEx.weight}`);
+            repairedEx.weight = originalEx.weight;
+          }
+          if (parsedEx.reps !== originalEx.reps) {
+            console.log(`[REPAIR] Restoring reps for targeted ${originalEx.name}: ${parsedEx.reps} -> ${originalEx.reps}`);
+            repairedEx.reps = originalEx.reps;
+          }
+          // Ensure sets actually changed
+          if (parsedEx.sets === originalEx.sets && newValue) {
+            console.log(`[REPAIR] Applying sets change for ${originalEx.name}: ${originalEx.sets} -> ${newValue}`);
+            repairedEx.sets = newValue;
+          }
+        }
+        
+        repairedExercises.push(repairedEx);
+      }
+    }
+    
+    repairedQueue.push({
+      ...parsedItem,
+      exercises: repairedExercises,
+    });
+  }
+  
+  return repairedQueue;
+};
+
+/**
+ * Main Queue Repair Function
+ * Combines all repair strategies to fix LLM output issues
+ */
+export const repairQueue = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  request: string
+): WorkoutQueueItem[] => {
+  console.log('[REPAIR] Starting queue repair...');
+  
+  // Step 1: Restore dropped exercises (Safety Net)
+  let repairedQueue = restoreDroppedExercises(originalQueue, parsedQueue, request);
+  
+  // Step 2: Enforce correct column changes
+  repairedQueue = enforceColumnChanges(originalQueue, repairedQueue, request);
+  
+  console.log('[REPAIR] Queue repair complete');
+  return repairedQueue;
 };
 
 // =============================================================================
