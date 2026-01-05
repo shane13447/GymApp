@@ -12,9 +12,8 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import exercisesData from '@/data/exerciseSelection.json';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as db from '@/services/database';
 import {
   buildCompressedPrompt,
@@ -23,6 +22,7 @@ import {
   differencesToProposedChanges,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
+  repairQueue,
   validateChanges,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
@@ -147,10 +147,15 @@ export default function CoachScreen() {
       console.log('[QUEUE FORMAT] Processing LLM response');
       lastProcessedResponseRef.current = llm.response;
 
-      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue);
+      let parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue);
 
       if (parsedQueue && parsedQueue.length > 0) {
         console.log('[QUEUE FORMAT] Parsed queue with', parsedQueue.length, 'items');
+        
+        // Apply queue repair to fix LLM issues
+        parsedQueue = repairQueue(workoutQueue, parsedQueue, inputText);
+        console.log('[QUEUE FORMAT] Repaired queue');
+        
         setGeneratedQueue(parsedQueue);
 
         const differences = compareWorkoutQueues(workoutQueue, parsedQueue);
