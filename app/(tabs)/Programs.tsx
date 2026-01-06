@@ -341,7 +341,7 @@ export default function ProgramsScreen() {
           >
             {({ pressed }) => (
               <View
-                className="bg-blue-500 rounded-lg p-4"
+                className="bg-blue-500 rounded-full p-4"
                 style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
                 <ThemedText className="text-white text-center font-semibold text-lg">
@@ -444,7 +444,7 @@ export default function ProgramsScreen() {
           >
             {({ pressed }) => (
               <View
-                className="bg-green-500 rounded-lg p-4"
+                className="bg-green-500 rounded-full p-4"
                 style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
                 <ThemedText className="text-white text-center font-semibold text-lg">
@@ -499,7 +499,7 @@ export default function ProgramsScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className="bg-gray-200 dark:bg-gray-700 py-2 rounded-lg"
+                    className="bg-gray-200 dark:bg-gray-700 py-2 rounded-full"
                     style={pressed && { opacity: 0.8 }}
                   >
                     <ThemedText className="text-center font-semibold">← Previous Day</ThemedText>
@@ -513,7 +513,7 @@ export default function ProgramsScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className="bg-gray-200 dark:bg-gray-700 py-2 rounded-lg"
+                    className="bg-gray-200 dark:bg-gray-700 py-2 rounded-full"
                     style={pressed && { opacity: 0.8 }}
                   >
                     <ThemedText className="text-center font-semibold">Next Day →</ThemedText>
@@ -526,7 +526,7 @@ export default function ProgramsScreen() {
           <Pressable onPress={() => setShowExerciseList(!showExerciseList)}>
             {({ pressed }) => (
               <View
-                className={`rounded-lg p-4 ${showExerciseList ? 'bg-blue-600' : 'bg-blue-500'}`}
+                className={`rounded-full p-4 ${showExerciseList ? 'bg-blue-600' : 'bg-blue-500'}`}
                 style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
                 <ThemedText className="text-white text-center font-semibold text-lg">
@@ -575,7 +575,7 @@ export default function ProgramsScreen() {
 
                 return (
                   <View
-                    className="bg-green-500 rounded-lg p-4"
+                    className="bg-green-500 rounded-full p-4"
                     style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                   >
                     <ThemedText className="text-white text-center font-semibold text-lg">
@@ -681,7 +681,7 @@ export default function ProgramsScreen() {
           >
             {({ pressed }) => (
               <View
-                className={`bg-green-500 rounded-lg p-4 ${isSaving ? 'opacity-50' : ''}`}
+                className={`bg-green-500 rounded-full p-4 ${isSaving ? 'opacity-50' : ''}`}
                 style={pressed && !isSaving && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
                 {isSaving ? (
@@ -739,7 +739,7 @@ export default function ProgramsScreen() {
                 <Pressable onPress={() => handleSetCurrentProgram(selectedProgram.id)}>
                   {({ pressed }) => (
                     <View
-                      className="bg-blue-500 px-4 py-3 rounded-lg"
+                      className="bg-blue-500 px-4 py-3 rounded-full"
                       style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                     >
                       <ThemedText className="text-white text-center font-semibold">
@@ -750,7 +750,7 @@ export default function ProgramsScreen() {
                 </Pressable>
               )}
               {currentProgramId === selectedProgram.id && (
-                <View className="bg-green-500 px-4 py-3 rounded-lg">
+                <View className="bg-green-500 px-4 py-3 rounded-full">
                   <ThemedText className="text-white text-center font-semibold">
                     ✓ Current Program
                   </ThemedText>
@@ -759,7 +759,7 @@ export default function ProgramsScreen() {
               <Pressable onPress={() => editProgram(selectedProgram.id)}>
                 {({ pressed }) => (
                   <View
-                    className="bg-blue-500 px-4 py-3 rounded-lg"
+                    className="bg-blue-500 px-4 py-3 rounded-full"
                     style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                   >
                     <ThemedText className="text-white text-center font-semibold">
@@ -773,7 +773,7 @@ export default function ProgramsScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className="bg-red-500 px-4 py-3 rounded-lg"
+                    className="bg-red-500 px-4 py-3 rounded-full"
                     style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                   >
                     <ThemedText className="text-white text-center font-semibold">

@@ -441,7 +441,7 @@ export default function ActiveWorkout() {
           <Pressable onPress={() => router.back()}>
             {({ pressed }) => (
               <View
-                className="bg-blue-500 rounded-lg p-4 mt-4"
+                className="bg-blue-500 rounded-full p-4 mt-4"
                 style={pressed && { opacity: 0.8 }}
               >
                 <ThemedText className="text-white text-center font-semibold">Go Back</ThemedText>
@@ -518,7 +518,7 @@ export default function ActiveWorkout() {
           >
             {({ pressed }) => (
               <View
-                className={`bg-green-500 rounded-lg p-4 ${isSaving ? 'opacity-50' : ''}`}
+                className={`bg-green-500 rounded-full p-4 ${isSaving ? 'opacity-50' : ''}`}
                 style={pressed && !isSaving && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
               >
                 {isSaving ? (

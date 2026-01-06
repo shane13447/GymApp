@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
+import { Pressable, RefreshControl, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -222,7 +222,27 @@ export default function HistoryScreen() {
       }
     >
       <ThemedView className="flex-1">
-        <ThemedText type="title">History</ThemedText>
+        <View className="flex-row items-center justify-between">
+          <ThemedText type="title">History</ThemedText>
+          <Pressable
+            onPress={handleRefresh}
+            disabled={isRefreshing}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh workout history"
+          >
+            {({ pressed }) => (
+              <View
+                className={`bg-blue-500 px-4 py-2 rounded-full ${
+                  isRefreshing ? 'opacity-50' : ''
+                } ${pressed && !isRefreshing ? 'opacity-70' : ''}`}
+              >
+                <ThemedText className="text-white font-semibold text-sm">
+                  {isRefreshing ? '↻ Refreshing...' : '↻ Refresh'}
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+        </View>
 
         <ThemedView className="mt-5 gap-4">
           {workoutsByDate.map((dateGroup) => (

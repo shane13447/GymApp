@@ -16,6 +16,17 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import * as db from '@/services/database';
 import type { Program, Workout, WorkoutQueueItem } from '@/types';
 
+// Get unique muscle groups from a workout queue item
+const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
+  const muscleGroups = new Set<string>();
+  workout.exercises.forEach((ex) => {
+    ex.muscle_groups_worked.forEach((group) => {
+      muscleGroups.add(group);
+    });
+  });
+  return Array.from(muscleGroups).sort();
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -177,7 +188,7 @@ export default function HomeScreen() {
         >
           {({ pressed }) => (
             <View
-              className="bg-green-500 rounded-lg p-4"
+              className="bg-green-500 rounded-full p-4"
               style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
             >
               <ThemedText className="text-white text-center font-semibold text-lg">
@@ -198,22 +209,41 @@ export default function HomeScreen() {
               <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
                 Day {nextWorkout.dayNumber} • {nextWorkout.exercises.length} exercises
               </ThemedText>
-              <View className="flex-row flex-wrap gap-2 mt-2">
-                {nextWorkout.exercises.slice(0, 3).map((ex, i) => (
-                  <View
-                    key={i}
-                    className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
-                  >
-                    <ThemedText className="text-xs">{ex.name}</ThemedText>
-                  </View>
-                ))}
-                {nextWorkout.exercises.length > 3 && (
-                  <View className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                    <ThemedText className="text-xs">
-                      +{nextWorkout.exercises.length - 3} more
-                    </ThemedText>
-                  </View>
-                )}
+              
+              {/* Muscle Groups */}
+              <View className="mt-3">
+                <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                  Muscle Groups
+                </ThemedText>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {getMuscleGroups(nextWorkout).map((group) => (
+                    <View
+                      key={group}
+                      className="bg-blue-100 dark:bg-blue-900/50 px-2.5 py-1 rounded-full"
+                    >
+                      <ThemedText className="text-xs font-medium capitalize text-blue-700 dark:text-blue-300">
+                        {group}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+              
+              {/* Exercises */}
+              <View className="mt-3">
+                <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                  Exercises
+                </ThemedText>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {nextWorkout.exercises.map((ex, i) => (
+                    <View
+                      key={i}
+                      className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
+                    >
+                      <ThemedText className="text-xs">{ex.name}</ThemedText>
+                    </View>
+                  ))}
+                </View>
               </View>
             </ThemedView>
           </ThemedView>
@@ -267,7 +297,7 @@ export default function HomeScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className={`bg-blue-500 py-2 px-4 rounded-lg ${
+                    className={`bg-blue-500 py-2 px-4 rounded-full ${
                       pressed ? 'opacity-80' : ''
                     }`}
                   >

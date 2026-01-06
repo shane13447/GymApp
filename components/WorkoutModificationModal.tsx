@@ -188,7 +188,7 @@ export default function WorkoutModificationModal({
             >
               {({ pressed }) => (
                 <View
-                  className={`bg-gray-200 dark:bg-gray-700 py-3 px-5 rounded-lg items-center justify-center ${
+                  className={`bg-gray-200 dark:bg-gray-700 py-3 px-5 rounded-full items-center justify-center ${
                     pressed ? 'opacity-70' : ''
                   }`}
                 >
@@ -205,7 +205,7 @@ export default function WorkoutModificationModal({
             >
               {({ pressed }) => (
                 <View
-                  className={`bg-blue-500 py-3 px-5 rounded-lg items-center justify-center ${
+                  className={`bg-blue-500 py-3 px-5 rounded-full items-center justify-center ${
                     pressed ? 'opacity-70' : ''
                   }`}
                 >
