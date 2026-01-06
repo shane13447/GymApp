@@ -470,7 +470,9 @@ const preprocessLLMResponse = (response: string): string => {
 
 export const parseQueueFormatResponse = (
   response: string,
-  originalQueue: WorkoutQueueItem[]
+  originalQueue: WorkoutQueueItem[],
+  userRequest: string = '',
+  matchedExercises: string[] = []
 ): WorkoutQueueItem[] | null => {
   try {
     // Preprocess to fix common LLM errors
@@ -574,7 +576,18 @@ export const parseQueueFormatResponse = (
     }
     
     console.log('[QUEUE FORMAT] Parsed', newQueue.length, 'queue items');
-    return newQueue.length > 0 ? newQueue : null;
+    
+    if (newQueue.length === 0) {
+      return null;
+    }
+    
+    // Apply repair with intent if we have the request context
+    if (userRequest) {
+      const repairedQueue = repairQueueWithIntent(originalQueue, newQueue, userRequest, matchedExercises);
+      return repairedQueue;
+    }
+    
+    return newQueue;
   } catch (error) {
     console.error('[QUEUE FORMAT] Error parsing response:', error);
     return null;
@@ -584,6 +597,193 @@ export const parseQueueFormatResponse = (
 // =============================================================================
 // QUEUE REPAIR SYSTEM
 // =============================================================================
+
+/**
+ * Simple string similarity using Levenshtein-based approach
+ * Returns a value between 0 (no match) and 1 (exact match)
+ */
+export const getSimilarity = (str1: string, str2: string): number => {
+  const s1 = str1.toLowerCase().trim();
+  const s2 = str2.toLowerCase().trim();
+  
+  if (s1 === s2) return 1;
+  if (s1.length === 0 || s2.length === 0) return 0;
+  
+  // Check if one contains the other
+  if (s1.includes(s2) || s2.includes(s1)) {
+    return 0.85;
+  }
+  
+  // Word-based comparison
+  const words1 = s1.split(/\s+/);
+  const words2 = s2.split(/\s+/);
+  const matchingWords = words1.filter(w1 => 
+    words2.some(w2 => w1 === w2 || w1.includes(w2) || w2.includes(w1))
+  );
+  
+  return matchingWords.length / Math.max(words1.length, words2.length);
+};
+
+/**
+ * Unified Queue Repair Function
+ * Combines all repair strategies with proper intent handling
+ */
+export const repairQueueWithIntent = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  userPrompt: string,
+  targetedExerciseNames: string[] = []
+): WorkoutQueueItem[] => {
+  console.log('[REPAIR] Starting queue repair...');
+  console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
+  
+  const requestLower = userPrompt.toLowerCase();
+  const isRemoveRequest = requestLower.includes('remove') || requestLower.includes('delete');
+  console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
+  
+  // Extract target values from request
+  const repsMatch = userPrompt.match(/(\d+)\s*reps?/i) || userPrompt.match(/reps?\s*(?:to\s*)?(\d+)/i);
+  const targetReps = repsMatch ? repsMatch[1] : null;
+  
+  const weightMatch = userPrompt.match(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/i) || userPrompt.match(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/i);
+  const targetWeight = weightMatch ? weightMatch[1] : null;
+  
+  const setsMatch = userPrompt.match(/(\d+)\s*sets?/i) || userPrompt.match(/sets?\s*(?:to\s*)?(\d+)/i);
+  const targetSets = setsMatch ? setsMatch[1] : null;
+  
+  // Also check "to X" pattern
+  const toValueMatch = userPrompt.match(/to\s+(\d+(?:\.\d+)?)/i);
+  const toValue = toValueMatch ? toValueMatch[1] : null;
+  
+  const healedQueue = parsedQueue.map((qItem, qIndex) => {
+    const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
+    if (!originalItem) return qItem;
+    
+    const healedExercises = qItem.exercises.map(ex => {
+      const finalEx = { ...ex };
+      const originalEx = originalItem.exercises.find(oe => 
+        oe.name === ex.name || 
+        getSimilarity(oe.name, ex.name) > 0.8 ||
+        toSemiAbbreviated(oe.name).toLowerCase() === toSemiAbbreviated(ex.name).toLowerCase()
+      );
+      
+      if (!originalEx) return finalEx;
+      
+      // Check if this exercise was targeted
+      const isTargeted = targetedExerciseNames.some(targetName => 
+        targetName === originalEx.name ||
+        getSimilarity(targetName, originalEx.name) > 0.8 ||
+        toSemiAbbreviated(targetName).toLowerCase() === toSemiAbbreviated(originalEx.name).toLowerCase()
+      ) || requestLower.includes(ex.name.toLowerCase());
+      
+      // --- LOGIC GAP FIX (Test 12) ---
+      // Force the correct value on targeted exercises if LLM ignored it
+      if (isTargeted) {
+        // Handle reps changes
+        if (targetReps || (toValue && requestLower.includes('rep'))) {
+          const expectedReps = targetReps || toValue;
+          if (expectedReps && finalEx.reps !== expectedReps) {
+            console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
+            finalEx.reps = expectedReps;
+          }
+          // Fix Column Confusion (Weight became Reps value)
+          if (finalEx.weight === expectedReps && originalEx.weight !== expectedReps) {
+            console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Weight, Apply Reps`);
+            finalEx.weight = originalEx.weight;
+            finalEx.reps = expectedReps!;
+          }
+          // Restore sets if they were accidentally changed during a reps-only request
+          if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
+            finalEx.sets = originalEx.sets;
+          }
+        }
+        
+        // Handle weight changes
+        if (targetWeight || (toValue && requestLower.includes('weight'))) {
+          const expectedWeight = targetWeight || toValue;
+          if (expectedWeight && finalEx.weight !== expectedWeight) {
+            console.log(`[REPAIR] Applying weight change for ${ex.name}: ${finalEx.weight} -> ${expectedWeight}`);
+            finalEx.weight = expectedWeight;
+          }
+          // Restore reps/sets if they were accidentally changed during a weight-only request
+          if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
+            finalEx.reps = originalEx.reps;
+          }
+          if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
+            finalEx.sets = originalEx.sets;
+          }
+        }
+        
+        // Handle sets changes
+        if (targetSets || (toValue && requestLower.includes('set'))) {
+          const expectedSets = targetSets || toValue;
+          if (expectedSets && finalEx.sets !== expectedSets) {
+            console.log(`[REPAIR] Applying sets change for ${ex.name}: ${finalEx.sets} -> ${expectedSets}`);
+            finalEx.sets = expectedSets;
+          }
+          // Restore weight/reps if they were accidentally changed during a sets-only request
+          if (finalEx.weight !== originalEx.weight && !requestLower.includes('weight')) {
+            finalEx.weight = originalEx.weight;
+          }
+          if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
+            finalEx.reps = originalEx.reps;
+          }
+        }
+      } else {
+        // Not targeted - restore any accidental changes
+        if (finalEx.weight !== originalEx.weight && !requestLower.includes('weight')) {
+          console.log(`[REPAIR] Restoring weight for ${originalEx.name}: ${finalEx.weight} -> ${originalEx.weight}`);
+          finalEx.weight = originalEx.weight;
+        }
+        if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
+          console.log(`[REPAIR] Restoring reps for ${originalEx.name}: ${finalEx.reps} -> ${originalEx.reps}`);
+          finalEx.reps = originalEx.reps;
+        }
+        if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
+          console.log(`[REPAIR] Restoring sets for ${originalEx.name}: ${finalEx.sets} -> ${originalEx.sets}`);
+          finalEx.sets = originalEx.sets;
+        }
+      }
+      
+      return finalEx;
+    });
+    
+    // --- OVER-PROTECTIVE FIX (Test 10 & 14) ---
+    // Check for dropped exercises
+    for (const origEx of originalItem.exercises) {
+      // Check if this exercise exists in the healed queue (fuzzy match)
+      const existsInNew = healedExercises.some(he =>
+        he.name === origEx.name || getSimilarity(he.name, origEx.name) > 0.8
+      );
+      
+      if (!existsInNew) {
+        // Was this exercise targeted by the user?
+        const isTargeted = targetedExerciseNames.some(targetName =>
+          targetName === origEx.name ||
+          getSimilarity(targetName, origEx.name) > 0.8 ||
+          toSemiAbbreviated(targetName).toLowerCase() === toSemiAbbreviated(origEx.name).toLowerCase()
+        );
+        
+        console.log(`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`);
+        
+        // If user said REMOVE and this exercise was TARGETED, let it die.
+        if (isRemoveRequest && isTargeted) {
+          console.log(`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`);
+          continue;
+        }
+        
+        // Otherwise, it was accidental data loss. Restore it.
+        console.log(`[REPAIR] Restoring dropped exercise: ${origEx.name}`);
+        healedExercises.push({ ...origEx });
+      }
+    }
+    
+    return { ...qItem, exercises: healedExercises };
+  });
+  
+  console.log('[REPAIR] Queue repair complete');
+  return healedQueue;
+};
 
 /**
  * Detect what type of change was requested from user input
@@ -709,14 +909,17 @@ export const fuzzyMatchExerciseName = (
 export const restoreDroppedExercises = (
   originalQueue: WorkoutQueueItem[],
   parsedQueue: WorkoutQueueItem[],
-  request: string
+  request: string,
+  targetedExercises?: string[]
 ): WorkoutQueueItem[] => {
   const changeTypes = detectRequestedChangeType(request);
   const isRemovalRequest = changeTypes.includes('remove');
   
-  // If not a removal request, or if it is but we need to be careful
+  // Use provided targetedExercises if available, otherwise extract from request
   const targetExercises = isRemovalRequest 
-    ? extractTargetExercises(request, originalQueue)
+    ? (targetedExercises && targetedExercises.length > 0 
+        ? targetedExercises 
+        : extractTargetExercises(request, originalQueue))
     : [];
   
   const repairedQueue: WorkoutQueueItem[] = [];
@@ -795,10 +998,14 @@ export const restoreDroppedExercises = (
 export const enforceColumnChanges = (
   originalQueue: WorkoutQueueItem[],
   parsedQueue: WorkoutQueueItem[],
-  request: string
+  request: string,
+  targetedExercises?: string[]
 ): WorkoutQueueItem[] => {
   const changeTypes = detectRequestedChangeType(request);
-  const targetExercises = extractTargetExercises(request, originalQueue);
+  // Use provided targetedExercises if available, otherwise extract from request
+  const targetExercises = targetedExercises && targetedExercises.length > 0
+    ? targetedExercises
+    : extractTargetExercises(request, originalQueue);
   
   // Extract the new value from the request
   const valueMatch = request.match(/to\s+(\d+(?:\.\d+)?)/i);
@@ -937,15 +1144,16 @@ export const enforceColumnChanges = (
 export const repairQueue = (
   originalQueue: WorkoutQueueItem[],
   parsedQueue: WorkoutQueueItem[],
-  request: string
+  request: string,
+  targetedExercises?: string[]
 ): WorkoutQueueItem[] => {
   console.log('[REPAIR] Starting queue repair...');
   
   // Step 1: Restore dropped exercises (Safety Net)
-  let repairedQueue = restoreDroppedExercises(originalQueue, parsedQueue, request);
+  let repairedQueue = restoreDroppedExercises(originalQueue, parsedQueue, request, targetedExercises);
   
   // Step 2: Enforce correct column changes
-  repairedQueue = enforceColumnChanges(originalQueue, repairedQueue, request);
+  repairedQueue = enforceColumnChanges(originalQueue, repairedQueue, request, targetedExercises);
   
   console.log('[REPAIR] Queue repair complete');
   return repairedQueue;
