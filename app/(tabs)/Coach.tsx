@@ -20,9 +20,9 @@ import {
   compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
   differencesToProposedChanges,
+  extractTargetExercises,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
-  repairQueue,
   validateChanges,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
@@ -62,6 +62,8 @@ export default function CoachScreen() {
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const [availableExercises, setAvailableExercises] = useState<Exercise[]>([]);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
+  const [targetedExercises, setTargetedExercises] = useState<string[]>([]);
+  const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
   
   // Test mode state
@@ -147,14 +149,12 @@ export default function CoachScreen() {
       console.log('[QUEUE FORMAT] Processing LLM response');
       lastProcessedResponseRef.current = llm.response;
 
-      let parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue);
+      // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
+      // Use ref to avoid race condition with async state updates
+      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue, inputText, targetedExercisesRef.current);
 
       if (parsedQueue && parsedQueue.length > 0) {
-        console.log('[QUEUE FORMAT] Parsed queue with', parsedQueue.length, 'items');
-        
-        // Apply queue repair to fix LLM issues
-        parsedQueue = repairQueue(workoutQueue, parsedQueue, inputText);
-        console.log('[QUEUE FORMAT] Repaired queue');
+        console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
         
         setGeneratedQueue(parsedQueue);
 
@@ -247,7 +247,7 @@ export default function CoachScreen() {
         }
       }
     }
-  }, [llm.response, llm.isGenerating, mode, workoutQueue, isTestMode, testIndex]);
+  }, [llm.response, llm.isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText]);
 
   const sendToLlama = async () => {
     if (!inputText.trim()) {
@@ -264,6 +264,8 @@ export default function CoachScreen() {
     setError('');
     setResponse('');
     setGeneratedQueue(null);
+    setTargetedExercises([]); // Reset targeted exercises
+    targetedExercisesRef.current = []; // Reset ref too
     lastProcessedResponseRef.current = '';
 
     try {
@@ -278,6 +280,16 @@ export default function CoachScreen() {
           inputText,
           workoutQueue
         );
+
+        // Store matched exercises for use in repair system
+        // For muscle group requests, use matchedExercises from preprocessor
+        // For other requests, extract from the original request
+        const exercisesToStore = wasProcessed && matchedExercises.length > 0
+          ? matchedExercises
+          : extractTargetExercises(inputText, workoutQueue);
+        console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
+        targetedExercisesRef.current = exercisesToStore; // Sync update for immediate use
+        setTargetedExercises(exercisesToStore);
 
         // Check if user mentioned a muscle group but no matching exercises exist in queue
         if (noMatchesFound && muscleGroupDetected) {
@@ -375,6 +387,14 @@ export default function CoachScreen() {
       if (wasProcessed) {
         console.log(`[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`);
       }
+
+      // Store matched exercises for use in repair system (same as sendToLlama)
+      const exercisesToStore = wasProcessed && matchedExercises.length > 0
+        ? matchedExercises
+        : extractTargetExercises(test.prompt, workoutQueue);
+      console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
+      targetedExercisesRef.current = exercisesToStore;
+      setTargetedExercises(exercisesToStore);
 
       const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
       console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
