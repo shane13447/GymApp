@@ -65,6 +65,8 @@ export default function CoachScreen() {
   const [targetedExercises, setTargetedExercises] = useState<string[]>([]);
   const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
+  const modeRef = useRef<CoachMode>(CoachMode.ModifyWorkout); // Track current mode
+  const generationModeRef = useRef<CoachMode | null>(null); // Track mode at generation start
   
   // Test mode state
   const [isTestMode, setIsTestMode] = useState(false);
@@ -74,6 +76,11 @@ export default function CoachScreen() {
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
+
+  // Keep modeRef in sync with mode state
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   // Initialize Executorch LLM
   const llm = useLLM({
@@ -138,15 +145,21 @@ export default function CoachScreen() {
     }
   }, [llm.error]);
 
-  // Handle response in modify_workout mode
+  // Handle response in modify_workout mode ONLY
   useEffect(() => {
+    // Only process if this generation was started in ModifyWorkout mode
+    // This prevents Chat responses from being parsed even if user switches modes mid-generation
+    if (generationModeRef.current !== CoachMode.ModifyWorkout) {
+      return; // Skip - generation was not started in ModifyWorkout mode
+    }
+    
+    // Only process when generation is complete and response is new
     if (
-      mode === CoachMode.ModifyWorkout &&
       llm.response &&
       !llm.isGenerating &&
       llm.response !== lastProcessedResponseRef.current
     ) {
-      console.log('[QUEUE FORMAT] Processing LLM response');
+      console.log('[QUEUE FORMAT] Processing LLM response (generated in ModifyWorkout mode)');
       lastProcessedResponseRef.current = llm.response;
 
       // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
@@ -260,6 +273,10 @@ export default function CoachScreen() {
       return;
     }
 
+    // Capture the mode at generation start - this is what determines if we parse or not
+    const generationMode = mode;
+    generationModeRef.current = generationMode; // Lock in the generation mode
+    
     setLoading(true);
     setError('');
     setResponse('');
@@ -269,7 +286,7 @@ export default function CoachScreen() {
     lastProcessedResponseRef.current = '';
 
     try {
-      if (mode === CoachMode.ModifyWorkout) {
+      if (generationMode === CoachMode.ModifyWorkout) {
         if (workoutQueue.length === 0) {
           setError('No workout queue found. Please create a program and start a workout first.');
           setLoading(false);
@@ -315,6 +332,7 @@ export default function CoachScreen() {
 
         await llm.generate(chat);
       } else {
+        // Chat mode - generationModeRef is already set to Chat above
         const chat: Message[] = [
           {
             role: 'system',
@@ -484,14 +502,20 @@ export default function CoachScreen() {
 
   const switchMode = useCallback(async (newMode: CoachMode) => {
     setMode(newMode);
+    modeRef.current = newMode; // Update current mode ref
     setInputText('');
     setResponse('');
     setError('');
+    // Mark current response as processed and clear generation mode
+    if (llm.response) {
+      lastProcessedResponseRef.current = llm.response;
+    }
+    generationModeRef.current = null; // Clear generation mode on mode switch
     if (newMode === CoachMode.ModifyWorkout) {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
     }
-  }, []);
+  }, [llm.response]);
 
   const renderQueueItem = useCallback(
     ({ item: queueItem }: { item: WorkoutQueueItem }) => (
@@ -545,7 +569,7 @@ export default function CoachScreen() {
           >
             {({ pressed }) => (
               <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                className={`py-2.5 px-4 rounded-full items-center justify-center ${
                   mode === CoachMode.ModifyWorkout
                     ? 'bg-blue-500'
                     : 'bg-gray-200 dark:bg-gray-700'
@@ -569,7 +593,7 @@ export default function CoachScreen() {
           >
             {({ pressed }) => (
               <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                className={`py-2.5 px-4 rounded-full items-center justify-center ${
                   mode === CoachMode.Chat ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
                 } ${pressed ? 'opacity-70' : ''}`}
               >
@@ -613,12 +637,12 @@ export default function CoachScreen() {
         >
           {({ pressed }) => (
             <View
-              className={`bg-blue-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
+              className={`bg-blue-500 px-6 py-3 rounded-full items-center justify-center min-h-[44px] ${
                 loading || llm.isGenerating || !llm.isReady ? 'opacity-50' : ''
               } ${pressed ? 'opacity-70' : ''}`}
             >
               {loading || llm.isGenerating ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <ThemedText className="text-white font-semibold">Send</ThemedText>
               )}
@@ -635,24 +659,36 @@ export default function CoachScreen() {
             accessibilityLabel="Run automated tests"
           >
             {({ pressed }) => (
-              <View
-                className={`bg-purple-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
-                  loading || llm.isGenerating || !llm.isReady || isTestMode ? 'opacity-50' : ''
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                {isTestMode ? (
-                  <View className="flex-row items-center gap-2">
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                    <ThemedText className="text-white font-semibold">
-                      Test {testIndex + 1}/{TEST_PROMPTS.length}
-                    </ThemedText>
-                  </View>
-                ) : (
-                  <ThemedText className="text-white font-semibold">🧪 Run All Tests ({TEST_PROMPTS.length})</ThemedText>
-                )}
-              </View>
+            <View
+              className={`bg-purple-500 px-6 py-3 rounded-full items-center justify-center min-h-[44px] ${
+                loading || llm.isGenerating || !llm.isReady || isTestMode ? 'opacity-50' : ''
+              } ${pressed ? 'opacity-70' : ''}`}
+            >
+              {isTestMode ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ThemedText className="text-white font-semibold">
+                    Test {testIndex + 1}/{TEST_PROMPTS.length}
+                  </ThemedText>
+                </View>
+              ) : (
+                <ThemedText className="text-white font-semibold">🧪 Run All Tests ({TEST_PROMPTS.length})</ThemedText>
+              )}
+            </View>
             )}
           </Pressable>
+        )}
+
+        {/* LLM Processing Indicator */}
+        {(loading || llm.isGenerating) && (
+          <ThemedView className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-300 dark:border-blue-700">
+            <View className="flex-row items-center justify-center gap-3">
+              <ThemedText className="text-blue-800 dark:text-blue-200 font-semibold">
+                Generating
+              </ThemedText>
+              <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#60A5FA' : '#2563EB'} />
+            </View>
+          </ThemedView>
         )}
 
         {/* Error Display - Dismissable */}
@@ -719,7 +755,7 @@ export default function CoachScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className={`bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-lg ${
+                    className={`bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full ${
                       pressed ? 'opacity-70' : ''
                     }`}
                   >
@@ -748,13 +784,19 @@ export default function CoachScreen() {
           </>
         )}
 
-        {/* Response Display */}
-        {response ? (
+        {/* Response Display - Only show for Chat mode (ModifyWorkout uses modal) */}
+        {response && mode === CoachMode.Chat ? (
           <ThemedView className="gap-2 mt-4">
             <ThemedText type="subtitle">Response:</ThemedText>
-            <ThemedView className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg max-h-[300px]">
-              <ThemedText className="text-sm leading-5">{response}</ThemedText>
-            </ThemedView>
+            <ScrollView 
+              style={{ maxHeight: 400 }} 
+              nestedScrollEnabled 
+              showsVerticalScrollIndicator
+            >
+              <ThemedView className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <ThemedText className="text-sm leading-6">{response}</ThemedText>
+              </ThemedView>
+            </ScrollView>
           </ThemedView>
         ) : null}
       </ThemedView>

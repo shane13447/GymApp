@@ -42,7 +42,7 @@ export const DaySelector = memo(function DaySelector({
             >
               {({ pressed }) => (
                 <View
-                  className={`px-4 py-2 rounded-lg border-2 ${
+                  className={`px-4 py-2 rounded-full border-2 ${
                     selectedIndex === index
                       ? 'bg-blue-500 border-blue-600'
                       : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
