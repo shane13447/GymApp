@@ -32,23 +32,41 @@ import { CoachMode } from '@/types';
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
 const TEST_PROMPTS = [
-  // Single changes
-  { type: 'Single - Weight', prompt: 'change decline crunches weight to 25' },
-  { type: 'Single - Reps', prompt: 'change leg extensions reps to 15' },
-  { type: 'Single - Sets', prompt: 'change lat pulldowns sets to 5' },
-  { type: 'Single - Add', prompt: 'add barbell curl to day 2' },
-  { type: 'Single - Remove', prompt: 'remove fingertip curls' },
-  // Multiple changes
-  { type: 'Multi - Weight', prompt: 'change decline crunches weight to 30 and seated bicep curl weight to 10' },
-  { type: 'Multi - Reps', prompt: 'change calf press reps to 20 and leg extensions reps to 6' },
-  { type: 'Multi - Sets', prompt: 'change lat pulldowns sets to 4 and triangle rows sets to 5' },
-  { type: 'Multi - Add', prompt: 'add hammer curl to day 2 and add dumbbell fly to day 3' },
-  { type: 'Multi - Remove', prompt: 'remove fingertip curls and remove reverse forearm curls' },
-  // Muscle group changes
-  { type: 'Muscle - Weight', prompt: 'change all back exercises weight to 30' },
-  { type: 'Muscle - Reps', prompt: 'change all leg exercises reps to 20' },
-  { type: 'Muscle - Sets', prompt: 'change all chest exercises sets to 5' },
-  { type: 'Muscle - Remove', prompt: 'remove all forearm exercises' },
+  // --- TIER 1: CONVERSATIONAL BASICS ---
+  { type: 'Single - Weight', prompt: 'I want to do 25kg for decline crunches today' },
+  { type: 'Single - Reps', prompt: 'can we bump leg extensions up to 15 reps?' },
+  { type: 'Single - Sets', prompt: 'sets of 5 for lat pulldowns please' },
+  { type: 'Single - Add', prompt: 'put barbell curls into my day 2 workout' },
+  { type: 'Single - Remove', prompt: 'get rid of fingertip curls' },
+
+  // --- TIER 2: MULTI-TASKING ---
+  { type: 'Multi - Weight', prompt: 'up the crunches to 30 and bicep curls to 10' },
+  { type: 'Multi - Reps', prompt: 'make calf press 20 reps but drop leg extensions to 6' },
+  { type: 'Multi - Sets', prompt: 'I want 4 sets of pulldowns and 5 sets of triangle rows' },
+  { type: 'Multi - Add', prompt: 'can you add hammer curls to day 2 and also dumbbell flyes to day 3?' },
+  { type: 'Multi - Remove', prompt: 'delete fingertip curls and reverse forearm curls' },
+
+  // --- TIER 3: INFORMAL BATCHING ---
+  { type: 'Muscle - Weight', prompt: 'put all my back exercises at 30kg' },
+  { type: 'Muscle - Reps', prompt: 'I want to do high volume legs today so set everything to 20 reps' },
+  { type: 'Muscle - Sets', prompt: 'can we do 5 sets for every chest exercise?' },
+  { type: 'Muscle - Remove', prompt: 'I hurt my wrists, take out all the forearm stuff' },
+
+  // --- TIER 4: SAFETY & SLANG ---
+  // Slang/Fuzzy matching
+  { type: 'Safety - Fuzzy Name', prompt: 'set deadlifts to a hundred' }, 
+  
+  // Implicit context (Asking for a change without saying "weight" or "reps")
+  { type: 'Safety - Day Boundary', prompt: 'switch lat pulldowns to 50' }, 
+
+  // Testing if the LLM/Repair system handles "by" vs "to"
+  { type: 'Logic - Relative Math', prompt: 'add 5kg to my decline crunches' },
+
+  // Very blunt/short phrasing
+  { type: 'Logic - Ambiguity', prompt: 'leg extensions 12 reps' }, 
+
+  // Natural language duplication
+  { type: 'Safety - Duplicate Add', prompt: 'hey add decline crunches to day 2 again' },
 ];
 
 export default function CoachScreen() {
@@ -65,8 +83,6 @@ export default function CoachScreen() {
   const [targetedExercises, setTargetedExercises] = useState<string[]>([]);
   const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
-  const modeRef = useRef<CoachMode>(CoachMode.ModifyWorkout); // Track current mode
-  const generationModeRef = useRef<CoachMode | null>(null); // Track mode at generation start
   
   // Test mode state
   const [isTestMode, setIsTestMode] = useState(false);
@@ -76,11 +92,6 @@ export default function CoachScreen() {
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
-
-  // Keep modeRef in sync with mode state
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
 
   // Initialize Executorch LLM
   const llm = useLLM({
@@ -145,21 +156,15 @@ export default function CoachScreen() {
     }
   }, [llm.error]);
 
-  // Handle response in modify_workout mode ONLY
+  // Handle response in modify_workout mode
   useEffect(() => {
-    // Only process if this generation was started in ModifyWorkout mode
-    // This prevents Chat responses from being parsed even if user switches modes mid-generation
-    if (generationModeRef.current !== CoachMode.ModifyWorkout) {
-      return; // Skip - generation was not started in ModifyWorkout mode
-    }
-    
-    // Only process when generation is complete and response is new
     if (
+      mode === CoachMode.ModifyWorkout &&
       llm.response &&
       !llm.isGenerating &&
       llm.response !== lastProcessedResponseRef.current
     ) {
-      console.log('[QUEUE FORMAT] Processing LLM response (generated in ModifyWorkout mode)');
+      console.log('[QUEUE FORMAT] Processing LLM response');
       lastProcessedResponseRef.current = llm.response;
 
       // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
@@ -273,10 +278,6 @@ export default function CoachScreen() {
       return;
     }
 
-    // Capture the mode at generation start - this is what determines if we parse or not
-    const generationMode = mode;
-    generationModeRef.current = generationMode; // Lock in the generation mode
-    
     setLoading(true);
     setError('');
     setResponse('');
@@ -286,7 +287,7 @@ export default function CoachScreen() {
     lastProcessedResponseRef.current = '';
 
     try {
-      if (generationMode === CoachMode.ModifyWorkout) {
+      if (mode === CoachMode.ModifyWorkout) {
         if (workoutQueue.length === 0) {
           setError('No workout queue found. Please create a program and start a workout first.');
           setLoading(false);
@@ -332,7 +333,6 @@ export default function CoachScreen() {
 
         await llm.generate(chat);
       } else {
-        // Chat mode - generationModeRef is already set to Chat above
         const chat: Message[] = [
           {
             role: 'system',
@@ -502,20 +502,14 @@ export default function CoachScreen() {
 
   const switchMode = useCallback(async (newMode: CoachMode) => {
     setMode(newMode);
-    modeRef.current = newMode; // Update current mode ref
     setInputText('');
     setResponse('');
     setError('');
-    // Mark current response as processed and clear generation mode
-    if (llm.response) {
-      lastProcessedResponseRef.current = llm.response;
-    }
-    generationModeRef.current = null; // Clear generation mode on mode switch
     if (newMode === CoachMode.ModifyWorkout) {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
     }
-  }, [llm.response]);
+  }, []);
 
   const renderQueueItem = useCallback(
     ({ item: queueItem }: { item: WorkoutQueueItem }) => (
@@ -569,7 +563,7 @@ export default function CoachScreen() {
           >
             {({ pressed }) => (
               <View
-                className={`py-2.5 px-4 rounded-full items-center justify-center ${
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
                   mode === CoachMode.ModifyWorkout
                     ? 'bg-blue-500'
                     : 'bg-gray-200 dark:bg-gray-700'
@@ -593,7 +587,7 @@ export default function CoachScreen() {
           >
             {({ pressed }) => (
               <View
-                className={`py-2.5 px-4 rounded-full items-center justify-center ${
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
                   mode === CoachMode.Chat ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
                 } ${pressed ? 'opacity-70' : ''}`}
               >
@@ -637,12 +631,12 @@ export default function CoachScreen() {
         >
           {({ pressed }) => (
             <View
-              className={`bg-blue-500 px-6 py-3 rounded-full items-center justify-center min-h-[44px] ${
+              className={`bg-blue-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
                 loading || llm.isGenerating || !llm.isReady ? 'opacity-50' : ''
               } ${pressed ? 'opacity-70' : ''}`}
             >
               {loading || llm.isGenerating ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <ThemedText className="text-white font-semibold">Send</ThemedText>
               )}
@@ -659,36 +653,24 @@ export default function CoachScreen() {
             accessibilityLabel="Run automated tests"
           >
             {({ pressed }) => (
-            <View
-              className={`bg-purple-500 px-6 py-3 rounded-full items-center justify-center min-h-[44px] ${
-                loading || llm.isGenerating || !llm.isReady || isTestMode ? 'opacity-50' : ''
-              } ${pressed ? 'opacity-70' : ''}`}
-            >
-              {isTestMode ? (
-                <View className="flex-row items-center gap-2">
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                  <ThemedText className="text-white font-semibold">
-                    Test {testIndex + 1}/{TEST_PROMPTS.length}
-                  </ThemedText>
-                </View>
-              ) : (
-                <ThemedText className="text-white font-semibold">🧪 Run All Tests ({TEST_PROMPTS.length})</ThemedText>
-              )}
-            </View>
+              <View
+                className={`bg-purple-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
+                  loading || llm.isGenerating || !llm.isReady || isTestMode ? 'opacity-50' : ''
+                } ${pressed ? 'opacity-70' : ''}`}
+              >
+                {isTestMode ? (
+                  <View className="flex-row items-center gap-2">
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ThemedText className="text-white font-semibold">
+                      Test {testIndex + 1}/{TEST_PROMPTS.length}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText className="text-white font-semibold">🧪 Run All Tests ({TEST_PROMPTS.length})</ThemedText>
+                )}
+              </View>
             )}
           </Pressable>
-        )}
-
-        {/* LLM Processing Indicator */}
-        {(loading || llm.isGenerating) && (
-          <ThemedView className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-300 dark:border-blue-700">
-            <View className="flex-row items-center justify-center gap-3">
-              <ThemedText className="text-blue-800 dark:text-blue-200 font-semibold">
-                Generating
-              </ThemedText>
-              <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#60A5FA' : '#2563EB'} />
-            </View>
-          </ThemedView>
         )}
 
         {/* Error Display - Dismissable */}
@@ -755,7 +737,7 @@ export default function CoachScreen() {
               >
                 {({ pressed }) => (
                   <View
-                    className={`bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full ${
+                    className={`bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-lg ${
                       pressed ? 'opacity-70' : ''
                     }`}
                   >
@@ -784,19 +766,13 @@ export default function CoachScreen() {
           </>
         )}
 
-        {/* Response Display - Only show for Chat mode (ModifyWorkout uses modal) */}
-        {response && mode === CoachMode.Chat ? (
+        {/* Response Display */}
+        {response ? (
           <ThemedView className="gap-2 mt-4">
             <ThemedText type="subtitle">Response:</ThemedText>
-            <ScrollView 
-              style={{ maxHeight: 400 }} 
-              nestedScrollEnabled 
-              showsVerticalScrollIndicator
-            >
-              <ThemedView className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                <ThemedText className="text-sm leading-6">{response}</ThemedText>
-              </ThemedView>
-            </ScrollView>
+            <ThemedView className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg max-h-[300px]">
+              <ThemedText className="text-sm leading-5">{response}</ThemedText>
+            </ThemedView>
           </ThemedView>
         ) : null}
       </ThemedView>
