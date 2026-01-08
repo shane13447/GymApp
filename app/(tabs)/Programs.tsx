@@ -8,19 +8,19 @@ import { Alert, Pressable, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ProgramCard } from '@/components/programs/ProgramCard';
-import { ExerciseSelector, createProgramExercise } from '@/components/programs/ExerciseSelector';
 import { ExerciseConfigCard } from '@/components/programs/ExerciseConfigCard';
+import { ExerciseSelector, createProgramExercise } from '@/components/programs/ExerciseSelector';
+import { ProgramCard } from '@/components/programs/ProgramCard';
 import { SelectedExercisesList } from '@/components/programs/SelectedExercisesList';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
+import { showDeleteConfirmation } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { showDeleteConfirmation } from '@/components/ui/ConfirmDialog';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { validateProgramName, validateNumberOfDays } from '@/lib/validation';
 import exercisesData from '@/data/exerciseSelection.json';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { validateNumberOfDays, validateProgramName } from '@/lib/validation';
 import * as db from '@/services/database';
 import type {
   Exercise,
@@ -28,7 +28,7 @@ import type {
   ProgramExercise,
   WorkoutDay,
 } from '@/types';
-import { ProgramViewMode, CreateProgramStep } from '@/types';
+import { CreateProgramStep, ProgramViewMode } from '@/types';
 
 export default function ProgramsScreen() {
   // View state
@@ -96,10 +96,8 @@ export default function ProgramsScreen() {
   const handleSetCurrentProgram = async (programId: string) => {
     try {
       await db.setCurrentProgramId(programId);
-      // Clear the workout queue so it gets reinitialized with the new program
-      await db.clearWorkoutQueue();
       setCurrentProgramId(programId);
-      Alert.alert('Success', 'Program set as current! Your workout queue has been reset.');
+      Alert.alert('Success', 'Program set as current! Your workout queue has been generated.');
     } catch (error) {
       console.error('Error setting current program:', error);
       Alert.alert('Error', 'Failed to set current program');
@@ -233,10 +231,23 @@ export default function ProgramsScreen() {
       };
 
       await db.createProgram(newProgram);
+      
+      // Auto-set as current program if no current program exists
+      const existingCurrentId = await db.getCurrentProgramId();
+      if (!existingCurrentId) {
+        await db.setCurrentProgramId(newProgram.id);
+        setCurrentProgramId(newProgram.id);
+      }
+      
       await loadPrograms();
       clearForm();
       setViewMode(ProgramViewMode.List);
-      Alert.alert('Success', 'Program created successfully!');
+      
+      if (!existingCurrentId) {
+        Alert.alert('Success', 'Program created and set as current! Your workout queue is ready.');
+      } else {
+        Alert.alert('Success', 'Program created successfully!');
+      }
     } catch (error) {
       console.error('Error creating program:', error);
       Alert.alert('Error', 'Failed to create program');
@@ -858,4 +869,4 @@ export default function ProgramsScreen() {
 }
 
 // Re-export types for backward compatibility
-export type { Exercise, ProgramExercise, WorkoutDay, Program };
+export type { Exercise, Program, ProgramExercise, WorkoutDay };
