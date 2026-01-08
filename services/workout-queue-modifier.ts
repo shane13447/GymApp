@@ -67,84 +67,178 @@ export const getExerciseFromAbbreviation = (
   return EXERCISE_ABBREVIATIONS[abbrev] || null;
 };
 
-// =============================================================================
-// SEMI-ABBREVIATED EXERCISE NAMES (for LLM prompts)
-// =============================================================================
-
-// Abbreviate common words in exercise names for shorter prompts
-// Dumbbell → DB, Barbell → BB, Curls → C, Row/Rows → R, Press → P
-const WORD_ABBREVIATIONS: [RegExp, string][] = [
-  [/\bDumbbell\b/gi, 'DB'],
-  [/\bBarbell\b/gi, 'BB'],
-  [/\bCurls?\b/gi, 'C'],
-  [/\bRows?\b/gi, 'R'],
-  [/\bPress\b/gi, 'P'],
-];
-
-const WORD_EXPANSIONS: [RegExp, string][] = [
-  [/\bDB\b/g, 'Dumbbell'],
-  [/\bBB\b/g, 'Barbell'],
-  [/\bC\b/g, 'Curls'],
-  [/\bR\b/g, 'Rows'],
-  [/\bP\b/g, 'Press'],
-];
-
 /**
- * Convert full exercise name to semi-abbreviated format
- * e.g., "Seated Dumbbell Bicep Curl" → "Seated DB Bicep C"
+ * Find exercise by name with fuzzy matching
  */
-export const toSemiAbbreviated = (exerciseName: string): string => {
-  let result = exerciseName;
-  for (const [pattern, replacement] of WORD_ABBREVIATIONS) {
-    result = result.replace(pattern, replacement);
-  }
-  return result;
-};
-
-/**
- * Convert semi-abbreviated name back to full name
- * e.g., "Seated DB Bicep C" → "Seated Dumbbell Bicep Curls"
- */
-export const fromSemiAbbreviated = (semiAbbrev: string): string => {
-  let result = semiAbbrev;
-  for (const [pattern, replacement] of WORD_EXPANSIONS) {
-    result = result.replace(pattern, replacement);
-  }
-  return result;
-};
-
-/**
- * Find exercise by semi-abbreviated name
- */
-export const findExerciseBySemiAbbrev = (
-  semiAbbrev: string
+export const findExerciseByName = (
+  name: string
 ): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
-  const expanded = fromSemiAbbreviated(semiAbbrev);
+  const lowerName = name.toLowerCase().trim();
   
   // Try exact match first
   for (const [, data] of Object.entries(EXERCISE_ABBREVIATIONS)) {
-    if (data.name.toLowerCase() === expanded.toLowerCase()) {
+    if (data.name.toLowerCase() === lowerName) {
       return data;
     }
   }
   
   // Try fuzzy match (contains)
   for (const [, data] of Object.entries(EXERCISE_ABBREVIATIONS)) {
-    if (data.name.toLowerCase().includes(expanded.toLowerCase()) ||
-        expanded.toLowerCase().includes(data.name.toLowerCase())) {
-      return data;
-    }
-  }
-  
-  // Try matching semi-abbreviated versions
-  for (const [, data] of Object.entries(EXERCISE_ABBREVIATIONS)) {
-    const semiAbbrevName = toSemiAbbreviated(data.name);
-    if (semiAbbrevName.toLowerCase() === semiAbbrev.toLowerCase()) {
+    if (data.name.toLowerCase().includes(lowerName) ||
+        lowerName.includes(data.name.toLowerCase())) {
       return data;
     }
   }
   
   return null;
+};
+
+// =============================================================================
+// EXERCISE ALIASES - Maps common gym slang to actual exercise names
+// =============================================================================
+
+/**
+ * Maps user-friendly names/slang to actual exercise names in the database.
+ * Each key is a lowercase alias, value is array of possible matching exercises.
+ * The first match found in the queue will be used.
+ */
+export const EXERCISE_ALIASES: Record<string, string[]> = {
+  // Crunches variations
+  'crunches': ['Decline Crunches'],
+  'crunch': ['Decline Crunches'],
+  'decline crunches': ['Decline Crunches'],
+  'ab crunches': ['Decline Crunches'],
+  
+  // Curls variations
+  'curls': ['Seated Dumbbell Bicep Curl', 'Preacher Curl', 'Hammer Curls', 'Fingertip Curls', 'Reverse Grip Forearm Curls'],
+  'curl': ['Seated Dumbbell Bicep Curl', 'Preacher Curl', 'Hammer Curls', 'Fingertip Curls', 'Reverse Grip Forearm Curls'],
+  'bicep curls': ['Seated Dumbbell Bicep Curl', 'Preacher Curl'],
+  'bicep curl': ['Seated Dumbbell Bicep Curl', 'Preacher Curl'],
+  'barbell curls': ['Preacher Curl'],
+  'barbell curl': ['Preacher Curl'],
+  'hammer curls': ['Hammer Curls'],
+  'hammer curl': ['Hammer Curls'],
+  'preacher curls': ['Preacher Curl'],
+  'preacher curl': ['Preacher Curl'],
+  'fingertip curls': ['Fingertip Curls'],
+  'fingertip curl': ['Fingertip Curls'],
+  'forearm curls': ['Fingertip Curls', 'Reverse Grip Forearm Curls'],
+  'forearm curl': ['Fingertip Curls', 'Reverse Grip Forearm Curls'],
+  'reverse curls': ['Reverse Grip Forearm Curls'],
+  'reverse curl': ['Reverse Grip Forearm Curls'],
+  'reverse forearm curls': ['Reverse Grip Forearm Curls'],
+  
+  // Bench variations
+  'bench': ['Barbell Bench Press', 'Incline Dumbbell Press', 'Chest Press'],
+  'bench press': ['Barbell Bench Press'],
+  'barbell bench': ['Barbell Bench Press'],
+  'flat bench': ['Barbell Bench Press'],
+  'incline bench': ['Incline Dumbbell Press'],
+  'incline press': ['Incline Dumbbell Press'],
+  
+  // Squat variations
+  'squat': ['Barbell Back Squat', 'Dumbbell Goblet Squat', 'Bulgarian Split Squat'],
+  'squats': ['Barbell Back Squat', 'Dumbbell Goblet Squat', 'Bulgarian Split Squat'],
+  'back squat': ['Barbell Back Squat'],
+  'barbell squat': ['Barbell Back Squat'],
+  'goblet squat': ['Dumbbell Goblet Squat'],
+  'split squat': ['Bulgarian Split Squat'],
+  'bulgarian': ['Bulgarian Split Squat'],
+  
+  // Deadlift variations
+  'deadlift': ['Barbell Deadlift', 'Romanian Deadlift'],
+  'deadlifts': ['Barbell Deadlift', 'Romanian Deadlift'],
+  'conventional deadlift': ['Barbell Deadlift'],
+  'rdl': ['Romanian Deadlift'],
+  'romanian': ['Romanian Deadlift'],
+  'stiff leg': ['Romanian Deadlift'],
+  
+  // Row variations
+  'rows': ['Bent Over Barbell Row', 'One-Arm Dumbbell Row', 'Triangle Rows'],
+  'row': ['Bent Over Barbell Row', 'One-Arm Dumbbell Row', 'Triangle Rows'],
+  'barbell row': ['Bent Over Barbell Row'],
+  'barbell rows': ['Bent Over Barbell Row'],
+  'bent over row': ['Bent Over Barbell Row'],
+  'dumbbell row': ['One-Arm Dumbbell Row'],
+  'dumbbell rows': ['One-Arm Dumbbell Row'],
+  'triangle rows': ['Triangle Rows'],
+  'triangle row': ['Triangle Rows'],
+  'cable rows': ['Triangle Rows'],
+  'cable row': ['Triangle Rows'],
+  
+  // Pulldown variations
+  'pulldowns': ['Lat Pulldowns'],
+  'pulldown': ['Lat Pulldowns'],
+  'lat pulldowns': ['Lat Pulldowns'],
+  'lat pulldown': ['Lat Pulldowns'],
+  'lats': ['Lat Pulldowns'],
+  
+  // Press variations
+  'shoulder press': ['Dumbbell Shoulder Press', 'Overhead Barbell Press (Military Press)'],
+  'overhead press': ['Overhead Barbell Press (Military Press)'],
+  'military press': ['Overhead Barbell Press (Military Press)'],
+  'ohp': ['Overhead Barbell Press (Military Press)'],
+  'arnold press': ['Dumbbell Arnold Press'],
+  'arnold': ['Dumbbell Arnold Press'],
+  
+  // Leg exercises
+  'leg press': ['Leg Press'],
+  'leg extensions': ['Leg Extensions'],
+  'leg extension': ['Leg Extensions'],
+  'extensions': ['Leg Extensions'],
+  'hamstring curls': ['Hamstring Curls'],
+  'ham curls': ['Hamstring Curls'],
+  'leg curls': ['Hamstring Curls'],
+  'calf press': ['Calf Press'],
+  'calf raises': ['Dumbbell Calf Raises', 'Calf Press'],
+  'calves': ['Calf Press', 'Dumbbell Calf Raises'],
+  'hip thrust': ['Barbell Hip Thrust'],
+  'hip thrusts': ['Barbell Hip Thrust'],
+  'lunges': ['Barbell Lunge'],
+  'lunge': ['Barbell Lunge'],
+  
+  // Other exercises
+  'flyes': ['Dumbbell Flyes'],
+  'flies': ['Dumbbell Flyes'],
+  'chest fly': ['Dumbbell Flyes'],
+  'lateral raise': ['Dumbbell Lateral Raise'],
+  'lateral raises': ['Dumbbell Lateral Raise'],
+  'side raises': ['Dumbbell Lateral Raise'],
+  'shrugs': ['Barbell Shrugs'],
+  'shrug': ['Barbell Shrugs'],
+  'skullcrushers': ['Dumbbell Skullcrushers'],
+  'skull crushers': ['Dumbbell Skullcrushers'],
+  'tricep pushdown': ['Triceps Pushdown'],
+  'triceps pushdown': ['Triceps Pushdown'],
+  'pushdowns': ['Triceps Pushdown'],
+  'pushdown': ['Triceps Pushdown'],
+  'pull ups': ['Pull-Ups'],
+  'pullups': ['Pull-Ups'],
+  'chin ups': ['Pull-Ups'],
+  'chinups': ['Pull-Ups'],
+  'rear delt': ['Rear Delt Fly'],
+  'rear delts': ['Rear Delt Fly'],
+  'hug machine': ['The Hug Machine'],
+  'pec deck': ['The Hug Machine'],
+  'chest press': ['Chest Press'],
+};
+
+/**
+ * Resolve user input to actual exercise names using aliases
+ */
+export const resolveExerciseAlias = (userInput: string, queueExercises: string[]): string[] => {
+  const lowerInput = userInput.toLowerCase().trim();
+  
+  // Check if input matches an alias
+  const aliasMatches = EXERCISE_ALIASES[lowerInput];
+  if (aliasMatches) {
+    // Return only exercises that exist in the queue
+    return aliasMatches.filter(name => 
+      queueExercises.some(qe => qe.toLowerCase() === name.toLowerCase())
+    );
+  }
+  
+  return [];
 };
 
 // =============================================================================
@@ -172,6 +266,11 @@ const MUSCLE_GROUP_KEYWORDS: Record<string, string[]> = {
   'lower body': ['quads', 'glutes', 'hamstrings', 'calves'],
   push: ['chest', 'shoulders', 'triceps'],
   pull: ['lats', 'traps', 'biceps'],
+  // Slang aliases
+  'guns': ['biceps', 'triceps'],
+  //'wheels': ['quads', 'glutes', 'hamstrings', 'calves'],
+  'upper': ['chest', 'lats', 'traps', 'shoulders', 'biceps', 'triceps'],
+  'lower': ['quads', 'glutes', 'hamstrings', 'calves'],
 };
 
 const findExercisesInQueueByMuscleGroup = (
@@ -237,22 +336,27 @@ const detectMuscleGroupInRequest = (
   const sortedKeywords = Object.keys(MUSCLE_GROUP_KEYWORDS).sort(
     (a, b) => b.length - a.length
   );
-  
+
   for (const keyword of sortedKeywords) {
     const patterns = [
       `all ${keyword}`,
       `${keyword} exercises`,
       `${keyword} exercise`,
       `every ${keyword}`,
+      // Natural language patterns
+      `${keyword} stuff`,
+      `${keyword} work`,
+      `all the ${keyword}`,
+      `my ${keyword}`,
     ];
-    
+
     for (const pattern of patterns) {
       if (lowerRequest.includes(pattern)) {
         return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
       }
     }
   }
-  
+
   return null;
 };
 
@@ -303,9 +407,8 @@ export const preprocessMuscleGroupRequest = (
       : 1 - percentChange.percentage / 100;
 
     const weightChanges = matchingExercises.map((exercise) => {
-      const semiAbbrev = toSemiAbbreviated(exercise.name);
       const newWeight = Math.round(exercise.weight * multiplier * 10) / 10;
-      return `${semiAbbrev} weight to ${newWeight}`;
+      return `${exercise.name} weight to ${newWeight}`;
     });
 
     const processedRequest = `change ${weightChanges.join(', ')}`;
@@ -318,8 +421,7 @@ export const preprocessMuscleGroupRequest = (
     };
   }
 
-  const semiAbbrevNames = matchingExercises.map((e) => toSemiAbbreviated(e.name));
-  const nameList = semiAbbrevNames.join(', ');
+  const nameList = matchingExercises.map((e) => e.name).join(', ');
   const lowerRequest = request.toLowerCase();
   let processedRequest = request;
   
@@ -424,9 +526,8 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
     .map((item, queueIndex) => {
       const exercises = item.exercises
         .map((ex) => {
-          // Use semi-abbreviated exercise names (full names with DB, BB, C, R, P abbreviations)
-          const semiAbbrev = toSemiAbbreviated(ex.name);
-          return `${semiAbbrev}|${ex.weight || '0'}|${ex.reps || '8-12'}|${ex.sets || '3'}`;
+          // Use full exercise names
+          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8-12'}|${ex.sets || '3'}`;
         })
         .join(',');
     return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
@@ -516,10 +617,9 @@ export const parseQueueFormatResponse = (
         const sets = parts[3]?.trim() || '3';
         
         // Try to find the exercise by:
-        // 1. Semi-abbreviated name (e.g., "Seated DB Bicep C")
-        // 2. Full name
-        // 3. Old abbreviation (for backwards compatibility)
-        let exerciseData = findExerciseBySemiAbbrev(exerciseName);
+        // 1. Full name or fuzzy match
+        // 2. Old abbreviation (for backwards compatibility)
+        let exerciseData = findExerciseByName(exerciseName);
         
         if (!exerciseData) {
           exerciseData = getExerciseFromAbbreviation(exerciseName);
@@ -537,11 +637,9 @@ export const parseQueueFormatResponse = (
             progression: '',
           });
         } else {
-          // Try to find in original exercises by comparing semi-abbreviated names
+          // Try to find in original exercises by comparing names
           const originalEx = originalItem.exercises.find((ex) => {
-            const semiAbbrev = toSemiAbbreviated(ex.name);
-            return semiAbbrev.toLowerCase() === exerciseName.toLowerCase() ||
-                   ex.name.toLowerCase() === exerciseName.toLowerCase() ||
+            return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
                    ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
                    exerciseName.toLowerCase().includes(ex.name.toLowerCase());
           });
@@ -638,7 +736,17 @@ export const repairQueueWithIntent = (
   console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
   
   const requestLower = userPrompt.toLowerCase();
-  const isRemoveRequest = requestLower.includes('remove') || requestLower.includes('delete');
+  // Expanded removal detection to catch natural language synonyms
+  const isRemoveRequest = 
+    requestLower.includes('remove') || 
+    requestLower.includes('delete') ||
+    requestLower.includes('drop') ||
+    requestLower.includes('get rid of') ||
+    requestLower.includes('take out') ||
+    requestLower.includes('cut') ||
+    requestLower.includes('skip') ||
+    requestLower.includes('eliminate') ||
+    requestLower.includes('ditch');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
   // Extract target values from request
@@ -654,6 +762,16 @@ export const repairQueueWithIntent = (
   // Also check "to X" pattern
   const toValueMatch = userPrompt.match(/to\s+(\d+(?:\.\d+)?)/i);
   const toValue = toValueMatch ? toValueMatch[1] : null;
+
+  // Normalize "expected" values for each column (supports concurrent attribute prompts)
+  const mentionsReps = requestLower.includes('rep');
+  const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
+  const mentionsSets = requestLower.includes('set');
+  const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets;
+
+  const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
+  const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
+  const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
     const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
@@ -662,9 +780,8 @@ export const repairQueueWithIntent = (
     const healedExercises = qItem.exercises.map(ex => {
       const finalEx = { ...ex };
       const originalEx = originalItem.exercises.find(oe => 
-        oe.name === ex.name || 
-        getSimilarity(oe.name, ex.name) > 0.8 ||
-        toSemiAbbreviated(oe.name).toLowerCase() === toSemiAbbreviated(ex.name).toLowerCase()
+        oe.name === ex.name ||
+        getSimilarity(oe.name, ex.name) > 0.8
       );
       
       if (!originalEx) return finalEx;
@@ -672,74 +789,67 @@ export const repairQueueWithIntent = (
       // Check if this exercise was targeted
       const isTargeted = targetedExerciseNames.some(targetName => 
         targetName === originalEx.name ||
-        getSimilarity(targetName, originalEx.name) > 0.8 ||
-        toSemiAbbreviated(targetName).toLowerCase() === toSemiAbbreviated(originalEx.name).toLowerCase()
+        getSimilarity(targetName, originalEx.name) > 0.8
       ) || requestLower.includes(ex.name.toLowerCase());
       
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
       if (isTargeted) {
-        // Handle reps changes
-        if (targetReps || (toValue && requestLower.includes('rep'))) {
-          const expectedReps = targetReps || toValue;
-          if (expectedReps && finalEx.reps !== expectedReps) {
+        // Apply intended changes (supports multiple columns at once).
+        // If a column is NOT intended to change, restore it to the original value.
+
+        if (expectedReps) {
+          if (finalEx.reps !== expectedReps) {
             console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
             finalEx.reps = expectedReps;
           }
+
           // Fix Column Confusion (Weight became Reps value)
           if (finalEx.weight === expectedReps && originalEx.weight !== expectedReps) {
             console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Weight, Apply Reps`);
             finalEx.weight = originalEx.weight;
-            finalEx.reps = expectedReps!;
+            finalEx.reps = expectedReps;
           }
-          // Restore sets if they were accidentally changed during a reps-only request
-          if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
-            finalEx.sets = originalEx.sets;
-          }
+        } else if (hasExplicitColumnIntent && !mentionsReps && finalEx.reps !== originalEx.reps) {
+          finalEx.reps = originalEx.reps;
         }
-        
-        // Handle weight changes
-        if (targetWeight || (toValue && requestLower.includes('weight'))) {
-          const expectedWeight = targetWeight || toValue;
-          if (expectedWeight && finalEx.weight !== expectedWeight) {
+
+        if (expectedWeight) {
+          if (finalEx.weight !== expectedWeight) {
             console.log(`[REPAIR] Applying weight change for ${ex.name}: ${finalEx.weight} -> ${expectedWeight}`);
             finalEx.weight = expectedWeight;
           }
-          // Restore reps/sets if they were accidentally changed during a weight-only request
-          if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
+
+          // Fix Column Confusion (Reps became Weight value)
+          if (finalEx.reps === expectedWeight && originalEx.reps !== expectedWeight) {
+            console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Reps, Apply Weight`);
             finalEx.reps = originalEx.reps;
+            finalEx.weight = expectedWeight;
           }
-          if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
-            finalEx.sets = originalEx.sets;
-          }
+        } else if (hasExplicitColumnIntent && !mentionsWeight && finalEx.weight !== originalEx.weight) {
+          finalEx.weight = originalEx.weight;
         }
-        
-        // Handle sets changes
-        if (targetSets || (toValue && requestLower.includes('set'))) {
-          const expectedSets = targetSets || toValue;
-          if (expectedSets && finalEx.sets !== expectedSets) {
+
+        if (expectedSets) {
+          if (finalEx.sets !== expectedSets) {
             console.log(`[REPAIR] Applying sets change for ${ex.name}: ${finalEx.sets} -> ${expectedSets}`);
             finalEx.sets = expectedSets;
           }
-          // Restore weight/reps if they were accidentally changed during a sets-only request
-          if (finalEx.weight !== originalEx.weight && !requestLower.includes('weight')) {
-            finalEx.weight = originalEx.weight;
-          }
-          if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
-            finalEx.reps = originalEx.reps;
-          }
+        } else if (hasExplicitColumnIntent && !mentionsSets && finalEx.sets !== originalEx.sets) {
+          finalEx.sets = originalEx.sets;
         }
       } else {
         // Not targeted - restore any accidental changes
-        if (finalEx.weight !== originalEx.weight && !requestLower.includes('weight')) {
+        // Always restore non-targeted exercises (prevents accidental global edits).
+        if (finalEx.weight !== originalEx.weight) {
           console.log(`[REPAIR] Restoring weight for ${originalEx.name}: ${finalEx.weight} -> ${originalEx.weight}`);
           finalEx.weight = originalEx.weight;
         }
-        if (finalEx.reps !== originalEx.reps && !requestLower.includes('rep')) {
+        if (finalEx.reps !== originalEx.reps) {
           console.log(`[REPAIR] Restoring reps for ${originalEx.name}: ${finalEx.reps} -> ${originalEx.reps}`);
           finalEx.reps = originalEx.reps;
         }
-        if (finalEx.sets !== originalEx.sets && !requestLower.includes('set')) {
+        if (finalEx.sets !== originalEx.sets) {
           console.log(`[REPAIR] Restoring sets for ${originalEx.name}: ${finalEx.sets} -> ${originalEx.sets}`);
           finalEx.sets = originalEx.sets;
         }
@@ -760,8 +870,7 @@ export const repairQueueWithIntent = (
         // Was this exercise targeted by the user?
         const isTargeted = targetedExerciseNames.some(targetName =>
           targetName === origEx.name ||
-          getSimilarity(targetName, origEx.name) > 0.8 ||
-          toSemiAbbreviated(targetName).toLowerCase() === toSemiAbbreviated(origEx.name).toLowerCase()
+          getSimilarity(targetName, origEx.name) > 0.8
         );
         
         console.log(`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`);
@@ -793,7 +902,7 @@ type ChangeType = 'weight' | 'reps' | 'sets' | 'remove' | 'add' | 'unknown';
 export const detectRequestedChangeType = (request: string): ChangeType[] => {
   const lowerRequest = request.toLowerCase();
   const types: ChangeType[] = [];
-  
+
   if (lowerRequest.includes('weight') || lowerRequest.includes('kg')) {
     types.push('weight');
   }
@@ -803,13 +912,30 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if (lowerRequest.includes('set')) {
     types.push('sets');
   }
-  if (lowerRequest.includes('remove') || lowerRequest.includes('delete')) {
+  // Expanded removal detection to catch natural language synonyms
+  if (
+    lowerRequest.includes('remove') || 
+    lowerRequest.includes('delete') ||
+    lowerRequest.includes('drop') ||
+    lowerRequest.includes('get rid of') ||
+    lowerRequest.includes('take out') ||
+    lowerRequest.includes('cut') ||
+    lowerRequest.includes('skip') ||
+    lowerRequest.includes('eliminate') ||
+    lowerRequest.includes('ditch')
+  ) {
     types.push('remove');
   }
-  if (lowerRequest.includes('add') || lowerRequest.includes('insert')) {
+  // Expanded add detection
+  if (
+    lowerRequest.includes('add') || 
+    lowerRequest.includes('insert') ||
+    lowerRequest.includes('put') ||
+    lowerRequest.includes('include')
+  ) {
     types.push('add');
   }
-  
+
   return types.length > 0 ? types : ['unknown'];
 };
 
@@ -817,13 +943,19 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
  * Extract target exercise names from user request
  * Returns normalized exercise names that were mentioned
  */
+/**
+ * Extract target exercise names from user request
+ * Uses fuzzy matching, alias resolution, and partial word matching
+ * Returns normalized exercise names that were mentioned
+ */
 export const extractTargetExercises = (
   request: string,
   queue: WorkoutQueueItem[]
 ): string[] => {
-  const lowerRequest = request.toLowerCase();
+  const lowerRequest = request.toLowerCase().trim();
   const targetNames: string[] = [];
-  
+  const addedNames = new Set<string>();
+
   // Get all exercise names from the queue
   const allExercises: string[] = [];
   for (const item of queue) {
@@ -833,26 +965,97 @@ export const extractTargetExercises = (
       }
     }
   }
-  
-  // Check which exercises are mentioned in the request
-  for (const name of allExercises) {
-    const lowerName = name.toLowerCase();
-    const semiAbbrev = toSemiAbbreviated(name).toLowerCase();
-    
-    // Check various forms of the name
-    if (
-      lowerRequest.includes(lowerName) ||
-      lowerRequest.includes(semiAbbrev) ||
-      lowerRequest.includes(lowerName.replace(/\s+/g, '')) ||
-      // Check key words from the name
-      lowerName.split(' ').every(word => 
-        word.length < 3 || lowerRequest.includes(word)
-      )
-    ) {
+
+  // Helper to add exercise if not already added
+  const addExercise = (name: string) => {
+    if (!addedNames.has(name.toLowerCase())) {
+      addedNames.add(name.toLowerCase());
       targetNames.push(name);
     }
+  };
+
+  // --- PASS 1: Check alias dictionary first ---
+  // This catches common slang like "crunches" -> "Decline Crunches"
+  for (const [alias, possibleMatches] of Object.entries(EXERCISE_ALIASES)) {
+    // Check if alias appears in the request (as whole word or phrase)
+    const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (aliasRegex.test(lowerRequest)) {
+      // Find which of the possible matches exist in the queue
+      for (const possibleMatch of possibleMatches) {
+        const matchInQueue = allExercises.find(
+          qe => qe.toLowerCase() === possibleMatch.toLowerCase()
+        );
+        if (matchInQueue) {
+          addExercise(matchInQueue);
+        }
+      }
+    }
   }
-  
+
+  // --- PASS 2: Direct matching against queue exercises ---
+  for (const name of allExercises) {
+    const lowerName = name.toLowerCase();
+    const noSpaceName = lowerName.replace(/\s+/g, '');
+
+    // Exact match
+    if (lowerRequest.includes(lowerName)) {
+      addExercise(name);
+      continue;
+    }
+
+    // No-space match (e.g., "legextensions" -> "Leg Extensions")
+    if (lowerRequest.includes(noSpaceName)) {
+      addExercise(name);
+      continue;
+    }
+  }
+
+  // --- PASS 3: Partial word matching (for exercises with multiple words) ---
+  for (const name of allExercises) {
+    if (addedNames.has(name.toLowerCase())) continue;
+
+    const lowerName = name.toLowerCase();
+    const words = lowerName.split(/\s+/).filter(w => w.length > 2);
+    
+    // Skip if too few significant words
+    if (words.length < 1) continue;
+
+    // Check if the distinctive words appear in the request
+    // "Decline Crunches" -> matches if "decline" AND "crunches" appear
+    // "Lat Pulldowns" -> matches if "lat" AND "pulldowns" appear
+    const matchingWords = words.filter(word => {
+      // Skip common filler words
+      if (['the', 'and', 'for', 'with'].includes(word)) return false;
+      return lowerRequest.includes(word);
+    });
+
+    // Require at least 50% of significant words to match (minimum 1)
+    const threshold = Math.max(1, Math.ceil(words.length * 0.5));
+    if (matchingWords.length >= threshold) {
+      addExercise(name);
+    }
+  }
+
+  // --- PASS 4: Fuzzy similarity matching for remaining exercises ---
+  for (const name of allExercises) {
+    if (addedNames.has(name.toLowerCase())) continue;
+
+    // Extract potential exercise references from request
+    // Split by common delimiters and check each chunk
+    const chunks = lowerRequest.split(/[,;]|\band\b|\bto\b|\bfor\b/).map(s => s.trim());
+    
+    for (const chunk of chunks) {
+      if (chunk.length < 3) continue;
+      
+      const similarity = getSimilarity(chunk, name.toLowerCase());
+      if (similarity > 0.6) {
+        addExercise(name);
+        break;
+      }
+    }
+  }
+
+  console.log(`[EXTRACT] Found ${targetNames.length} target exercises:`, targetNames);
   return targetNames;
 };
 
@@ -864,22 +1067,14 @@ export const fuzzyMatchExerciseName = (
   knownExercises: { name: string; equipment: string; muscle_groups_worked: string[] }[]
 ): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
   const lowerName = name.toLowerCase().trim();
-  
+
   // Try exact match first
   for (const ex of knownExercises) {
     if (ex.name.toLowerCase() === lowerName) {
       return ex;
     }
   }
-  
-  // Try semi-abbreviated match
-  const expanded = fromSemiAbbreviated(name);
-  for (const ex of knownExercises) {
-    if (ex.name.toLowerCase() === expanded.toLowerCase()) {
-      return ex;
-    }
-  }
-  
+
   // Try contains match
   for (const ex of knownExercises) {
     const exLower = ex.name.toLowerCase();
@@ -939,34 +1134,27 @@ export const restoreDroppedExercises = (
     const parsedExerciseMap = new Map<string, ProgramExercise>();
     for (const ex of parsedItem.exercises) {
       parsedExerciseMap.set(ex.name.toLowerCase(), ex);
-      // Also map semi-abbreviated name
-      const semiAbbrev = toSemiAbbreviated(ex.name).toLowerCase();
-      if (semiAbbrev !== ex.name.toLowerCase()) {
-        parsedExerciseMap.set(semiAbbrev, ex);
-      }
     }
-    
+
     // Check which original exercises are missing
     const restoredExercises: ProgramExercise[] = [...parsedItem.exercises];
-    
+
     for (const originalEx of originalItem.exercises) {
       const lowerName = originalEx.name.toLowerCase();
-      const semiAbbrev = toSemiAbbreviated(originalEx.name).toLowerCase();
-      
+
       // Check if exercise exists in parsed output
-      const existsInParsed = 
+      const existsInParsed =
         parsedExerciseMap.has(lowerName) ||
-        parsedExerciseMap.has(semiAbbrev) ||
-        parsedItem.exercises.some(pe => 
+        parsedItem.exercises.some(pe =>
           pe.name.toLowerCase() === lowerName ||
-          toSemiAbbreviated(pe.name).toLowerCase() === semiAbbrev
+          getSimilarity(pe.name, originalEx.name) > 0.8
         );
-      
+
       if (!existsInParsed) {
         // Exercise was dropped - check if it was targeted for removal
-        const wasTargeted = targetExercises.some(target => 
+        const wasTargeted = targetExercises.some(target =>
           target.toLowerCase() === lowerName ||
-          toSemiAbbreviated(target).toLowerCase() === semiAbbrev ||
+          getSimilarity(target, originalEx.name) > 0.8 ||
           lowerName.includes(target.toLowerCase()) ||
           target.toLowerCase().includes(lowerName)
         );
@@ -1031,18 +1219,18 @@ export const enforceColumnChanges = (
     for (const parsedEx of parsedItem.exercises) {
       const originalEx = originalItem.exercises.find(
         oe => oe.name.toLowerCase() === parsedEx.name.toLowerCase() ||
-              toSemiAbbreviated(oe.name).toLowerCase() === toSemiAbbreviated(parsedEx.name).toLowerCase()
+              getSimilarity(oe.name, parsedEx.name) > 0.8
       );
-      
+
       if (!originalEx) {
         repairedExercises.push(parsedEx);
         continue;
       }
-      
+
       // Check if this exercise was targeted
-      const isTargeted = targetExercises.some(target => 
+      const isTargeted = targetExercises.some(target =>
         target.toLowerCase() === originalEx.name.toLowerCase() ||
-        toSemiAbbreviated(target).toLowerCase() === toSemiAbbreviated(originalEx.name).toLowerCase()
+        getSimilarity(target, originalEx.name) > 0.8
       );
       
       if (!isTargeted) {
