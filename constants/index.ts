@@ -17,7 +17,7 @@ export const DEFAULT_WEIGHT_UNIT = 'kg' as const;
 export const DEFAULT_QUEUE_SIZE = 3;
 export const DEFAULT_REST_TIME = '180';
 export const DEFAULT_SETS = '3';
-export const DEFAULT_REPS = '8-12';
+export const DEFAULT_REPS = '8';
 export const DEFAULT_PROGRESSION = '';
 
 // Exercise defaults for new exercises
