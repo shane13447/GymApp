@@ -3,90 +3,44 @@
  * Handles AI-powered workout queue modifications using compressed encoding
  */
 
+import exercisesData from '@/data/exerciseSelection.json';
 import * as db from '@/services/database';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
 // =============================================================================
-// COMPRESSED ENCODING SYSTEM - Exercise Abbreviations
+// EXERCISE DATABASE - Uses exerciseSelection.json
 // =============================================================================
 
-export const EXERCISE_ABBREVIATIONS: Record<
-  string,
-  { name: string; equipment: string; muscle_groups_worked: string[] }
-> = {
-  BBS: { name: 'Barbell Back Squat', equipment: 'Barbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings', 'abs'] },
-  BBP: { name: 'Barbell Bench Press', equipment: 'Barbell', muscle_groups_worked: ['chest', 'triceps', 'shoulders'] },
-  BDL: { name: 'Barbell Deadlift', equipment: 'Barbell', muscle_groups_worked: ['hamstrings', 'glutes', 'lats', 'traps', 'forearms'] },
-  BHT: { name: 'Barbell Hip Thrust', equipment: 'Barbell', muscle_groups_worked: ['glutes', 'hamstrings'] },
-  BLU: { name: 'Barbell Lunge', equipment: 'Barbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
-  BSH: { name: 'Barbell Shrugs', equipment: 'Barbell', muscle_groups_worked: ['traps', 'forearms'] },
-  BOR: { name: 'Bent Over Barbell Row', equipment: 'Barbell', muscle_groups_worked: ['lats', 'traps', 'biceps', 'forearms'] },
-  BSS: { name: 'Bulgarian Split Squat', equipment: 'Dumbbell', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
-  CP: { name: 'Calf Press', equipment: '', muscle_groups_worked: ['calves'] },
-  CRD: { name: 'Dumbbell Calf Raises', equipment: 'Dumbbell', muscle_groups_worked: ['calves'] },
-  CHP: { name: 'Chest Press', equipment: '', muscle_groups_worked: ['chest', 'shoulders', 'triceps'] },
-  DC: { name: 'Decline Crunches', equipment: '', muscle_groups_worked: ['abs'] },
-  DAP: { name: 'Dumbbell Arnold Press', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders', 'triceps'] },
-  DF: { name: 'Dumbbell Flyes', equipment: 'Dumbbell', muscle_groups_worked: ['chest', 'shoulders'] },
-  DGS: { name: 'Dumbbell Goblet Squat', equipment: 'Dumbbell', muscle_groups_worked: ['quads', 'glutes', 'abs'] },
-  DLR: { name: 'Dumbbell Lateral Raise', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
-  DSP: { name: 'Dumbbell Shoulder Press', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
-  DSK: { name: 'Dumbbell Skullcrushers', equipment: 'Dumbbell', muscle_groups_worked: ['triceps'] },
-  FC: { name: 'Fingertip Curls', equipment: 'Cable', muscle_groups_worked: ['forearms'] },
-  HC: { name: 'Hammer Curls', equipment: 'Dumbbell', muscle_groups_worked: ['biceps', 'forearms'] },
-  HSC: { name: 'Hamstring Curls', equipment: '', muscle_groups_worked: ['hamstrings'] },
-  IDP: { name: 'Incline Dumbbell Press', equipment: 'Dumbbell', muscle_groups_worked: ['chest', 'shoulders', 'triceps'] },
-  LPD: { name: 'Lat Pulldowns', equipment: '', muscle_groups_worked: ['lats'] },
-  LE: { name: 'Leg Extensions', equipment: '', muscle_groups_worked: ['quads'] },
-  LGP: { name: 'Leg Press', equipment: '', muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] },
-  ODR: { name: 'One-Arm Dumbbell Row', equipment: 'Dumbbell', muscle_groups_worked: ['lats', 'biceps', 'shoulders'] },
-  OHP: { name: 'Overhead Barbell Press (Military Press)', equipment: 'Barbell', muscle_groups_worked: ['shoulders', 'triceps', 'chest'] },
-  PC: { name: 'Preacher Curl', equipment: 'Barbell', muscle_groups_worked: ['biceps'] },
-  PU: { name: 'Pull-Ups', equipment: '', muscle_groups_worked: ['lats'] },
-  RDF: { name: 'Rear Delt Fly', equipment: 'Dumbbell', muscle_groups_worked: ['shoulders'] },
-  RFC: { name: 'Reverse Grip Forearm Curls', equipment: 'Cable', muscle_groups_worked: ['forearms'] },
-  RDL: { name: 'Romanian Deadlift', equipment: 'Barbell', muscle_groups_worked: ['hamstrings', 'glutes', 'forearms'] },
-  SBC: { name: 'Seated Dumbbell Bicep Curl', equipment: 'Dumbbell', muscle_groups_worked: ['biceps', 'forearms'] },
-  THM: { name: 'The Hug Machine', equipment: '', muscle_groups_worked: ['chest'] },
-  TR: { name: 'Triangle Rows', equipment: 'Cable', muscle_groups_worked: ['lats', 'traps'] },
-  TPD: { name: 'Triceps Pushdown', equipment: 'Cable', muscle_groups_worked: ['triceps'] },
-};
+interface ExerciseData {
+  name: string;
+  equipment: string;
+  muscle_groups_worked: string[];
+}
 
-// Reverse mapping: full exercise name -> abbreviation
-export const EXERCISE_NAME_TO_ABBREV: Record<string, string> = Object.fromEntries(
-  Object.entries(EXERCISE_ABBREVIATIONS).map(([abbrev, data]) => [data.name, abbrev])
-);
-
-export const getExerciseAbbreviation = (exerciseName: string): string => {
-  return EXERCISE_NAME_TO_ABBREV[exerciseName] || exerciseName;
-};
-
-export const getExerciseFromAbbreviation = (
-  abbrev: string
-): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
-  return EXERCISE_ABBREVIATIONS[abbrev] || null;
-};
+const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
 
 /**
  * Find exercise by name with fuzzy matching
  */
 export const findExerciseByName = (
   name: string
-): { name: string; equipment: string; muscle_groups_worked: string[] } | null => {
+): ExerciseData | null => {
+  if (!name || !name.trim()) return null;
+  
   const lowerName = name.toLowerCase().trim();
   
   // Try exact match first
-  for (const [, data] of Object.entries(EXERCISE_ABBREVIATIONS)) {
-    if (data.name.toLowerCase() === lowerName) {
-      return data;
+  for (const ex of EXERCISES) {
+    if (ex.name.toLowerCase() === lowerName) {
+      return ex;
     }
   }
   
   // Try fuzzy match (contains)
-  for (const [, data] of Object.entries(EXERCISE_ABBREVIATIONS)) {
-    if (data.name.toLowerCase().includes(lowerName) ||
-        lowerName.includes(data.name.toLowerCase())) {
-      return data;
+  for (const ex of EXERCISES) {
+    if (ex.name.toLowerCase().includes(lowerName) ||
+        lowerName.includes(ex.name.toLowerCase())) {
+      return ex;
     }
   }
   
@@ -463,12 +417,6 @@ export const preprocessMuscleGroupRequest = (
 // COMPRESSED ENCODING SYSTEM
 // =============================================================================
 
-const generateAbbreviationList = (): string => {
-  return Object.entries(EXERCISE_ABBREVIATIONS)
-    .map(([abbrev, data]) => `${abbrev}=${data.name}`)
-    .join(',');
-};
-
 /**
  * IronLogic System Prompt - TOON (Token Optimized Object Notation) Format
  * 
@@ -526,8 +474,8 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
     .map((item, queueIndex) => {
       const exercises = item.exercises
         .map((ex) => {
-          // Use full exercise names
-          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8-12'}|${ex.sets || '3'}`;
+          // Use full exercise names, convert numbers to strings for LLM
+          return `${ex.name}|${ex.weight ?? 0}|${ex.reps ?? 8}|${ex.sets ?? 3}`;
         })
         .join(',');
     return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
@@ -612,18 +560,12 @@ export const parseQueueFormatResponse = (
         if (parts.length < 4) continue;
 
         const exerciseName = parts[0].trim();
-        const weight = parts[1]?.trim() || '0';
-        const reps = parts[2]?.trim() || '8-12';
-        const sets = parts[3]?.trim() || '3';
+        const weight = parseFloat(parts[1]?.trim() || '0') || 0;
+        const reps = parseInt(parts[2]?.trim() || '8', 10) || 8;
+        const sets = parseInt(parts[3]?.trim() || '3', 10) || 3;
         
-        // Try to find the exercise by:
-        // 1. Full name or fuzzy match
-        // 2. Old abbreviation (for backwards compatibility)
-        let exerciseData = findExerciseByName(exerciseName);
-        
-        if (!exerciseData) {
-          exerciseData = getExerciseFromAbbreviation(exerciseName);
-        }
+        // Try to find the exercise by full name or fuzzy match
+        const exerciseData = findExerciseByName(exerciseName);
         
         if (exerciseData) {
           exercises.push({
@@ -633,8 +575,8 @@ export const parseQueueFormatResponse = (
             weight,
             reps,
             sets,
-            restTime: '180',
-            progression: '',
+            restTime: 180,
+            progression: 0,
           });
         } else {
           // Try to find in original exercises by comparing names
@@ -656,8 +598,8 @@ export const parseQueueFormatResponse = (
               weight,
               reps,
               sets,
-              restTime: '180',
-              progression: '',
+              restTime: 180,
+              progression: 0,
             });
           }
         }
@@ -751,17 +693,17 @@ export const repairQueueWithIntent = (
   
   // Extract target values from request
   const repsMatch = userPrompt.match(/(\d+)\s*reps?/i) || userPrompt.match(/reps?\s*(?:to\s*)?(\d+)/i);
-  const targetReps = repsMatch ? repsMatch[1] : null;
+  const targetReps = repsMatch ? parseInt(repsMatch[1], 10) : null;
   
   const weightMatch = userPrompt.match(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/i) || userPrompt.match(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/i);
-  const targetWeight = weightMatch ? weightMatch[1] : null;
+  const targetWeight = weightMatch ? parseFloat(weightMatch[1]) : null;
   
   const setsMatch = userPrompt.match(/(\d+)\s*sets?/i) || userPrompt.match(/sets?\s*(?:to\s*)?(\d+)/i);
-  const targetSets = setsMatch ? setsMatch[1] : null;
+  const targetSets = setsMatch ? parseInt(setsMatch[1], 10) : null;
   
   // Also check "to X" pattern
   const toValueMatch = userPrompt.match(/to\s+(\d+(?:\.\d+)?)/i);
-  const toValue = toValueMatch ? toValueMatch[1] : null;
+  const toValue = toValueMatch ? parseFloat(toValueMatch[1]) : null;
 
   // Normalize "expected" values for each column (supports concurrent attribute prompts)
   const mentionsReps = requestLower.includes('rep');
@@ -769,9 +711,9 @@ export const repairQueueWithIntent = (
   const mentionsSets = requestLower.includes('set');
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets;
 
-  const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
-  const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
-  const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
+  const expectedReps = targetReps ?? (toValue !== null && mentionsReps ? Math.round(toValue) : null);
+  const expectedWeight = targetWeight ?? (toValue !== null && mentionsWeight ? toValue : null);
+  const expectedSets = targetSets ?? (toValue !== null && mentionsSets ? Math.round(toValue) : null);
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
     const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
@@ -1197,9 +1139,10 @@ export const enforceColumnChanges = (
   
   // Extract the new value from the request
   const valueMatch = request.match(/to\s+(\d+(?:\.\d+)?)/i);
-  const newValue = valueMatch ? valueMatch[1] : null;
+  const newValueStr = valueMatch ? valueMatch[1] : null;
+  const newValue = newValueStr ? parseFloat(newValueStr) : null;
   
-  if (!newValue || changeTypes.includes('unknown') || changeTypes.includes('remove') || changeTypes.includes('add')) {
+  if (newValue === null || changeTypes.includes('unknown') || changeTypes.includes('remove') || changeTypes.includes('add')) {
     return parsedQueue; // Can't enforce without knowing the intended value
   }
   
@@ -1272,7 +1215,7 @@ export const enforceColumnChanges = (
             repairedEx.sets = originalEx.sets;
           }
           // Ensure weight actually changed
-          if (parsedEx.weight === originalEx.weight && newValue) {
+          if (parsedEx.weight === originalEx.weight && newValue !== null) {
             console.log(`[REPAIR] Applying weight change for ${originalEx.name}: ${originalEx.weight} -> ${newValue}`);
             repairedEx.weight = newValue;
           }
@@ -1289,9 +1232,9 @@ export const enforceColumnChanges = (
             repairedEx.sets = originalEx.sets;
           }
           // Ensure reps actually changed
-          if (parsedEx.reps === originalEx.reps && newValue) {
+          if (parsedEx.reps === originalEx.reps && newValue !== null) {
             console.log(`[REPAIR] Applying reps change for ${originalEx.name}: ${originalEx.reps} -> ${newValue}`);
-            repairedEx.reps = newValue;
+            repairedEx.reps = Math.round(newValue);
           }
         }
         
@@ -1306,9 +1249,9 @@ export const enforceColumnChanges = (
             repairedEx.reps = originalEx.reps;
           }
           // Ensure sets actually changed
-          if (parsedEx.sets === originalEx.sets && newValue) {
+          if (parsedEx.sets === originalEx.sets && newValue !== null) {
             console.log(`[REPAIR] Applying sets change for ${originalEx.name}: ${originalEx.sets} -> ${newValue}`);
-            repairedEx.sets = newValue;
+            repairedEx.sets = Math.round(newValue);
           }
         }
         
@@ -1353,28 +1296,28 @@ export const repairQueue = (
 
 export interface ProposedChanges {
   weightChanges: Array<{
-  queueItemId: string;
+    queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-  exerciseName: string;
-    oldWeight: string;
-  newWeight: string;
+    exerciseName: string;
+    oldWeight: number;
+    newWeight: number;
   }>;
   repsChanges: Array<{
-  queueItemId: string;
+    queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-  exerciseName: string;
-    oldReps: string;
-    newReps: string;
+    exerciseName: string;
+    oldReps: number;
+    newReps: number;
   }>;
   setsChanges: Array<{
     queueItemId: string;
     queueItemName: string;
     dayNumber: number;
     exerciseName: string;
-    oldSets: string;
-    newSets: string;
+    oldSets: number;
+    newSets: number;
   }>;
   removals: Array<{
     queueItemId: string;
@@ -1388,9 +1331,9 @@ export interface ProposedChanges {
     queueItemName: string;
     dayNumber: number;
     exerciseName: string;
-    weight: string;
-    reps: string;
-    sets: string;
+    weight: number;
+    reps: number;
+    sets: number;
     equipment: string;
     muscle_groups_worked: string[];
   }>;
@@ -1415,12 +1358,12 @@ export interface QueueDifference {
   exerciseName?: string;
   oldExercise?: ProgramExercise;
   newExercise?: ProgramExercise;
-  oldWeight?: string;
-  newWeight?: string;
-  oldReps?: string;
-  newReps?: string;
-  oldSets?: string;
-  newSets?: string;
+  oldWeight?: number;
+  newWeight?: number;
+  oldReps?: number;
+  newReps?: number;
+  oldSets?: number;
+  newSets?: number;
   newExerciseName?: string;
   details?: string;
 }
@@ -1567,8 +1510,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldWeight: diff.oldWeight || '',
-          newWeight: diff.newWeight || '',
+          oldWeight: diff.oldWeight ?? 0,
+          newWeight: diff.newWeight ?? 0,
         });
         break;
       
@@ -1578,8 +1521,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldReps: diff.oldReps || '',
-          newReps: diff.newReps || '',
+          oldReps: diff.oldReps ?? 0,
+          newReps: diff.newReps ?? 0,
         });
         break;
 
@@ -1589,8 +1532,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldSets: diff.oldSets || '',
-          newSets: diff.newSets || '',
+          oldSets: diff.oldSets ?? 0,
+          newSets: diff.newSets ?? 0,
         });
         break;
 

@@ -15,14 +15,14 @@ export const DATABASE_VERSION = 1;
 
 export const DEFAULT_WEIGHT_UNIT = 'kg' as const;
 export const DEFAULT_QUEUE_SIZE = 3;
-export const DEFAULT_REST_TIME = '180';
-export const DEFAULT_SETS = '3';
-export const DEFAULT_REPS = '8';
-export const DEFAULT_PROGRESSION = '';
+export const DEFAULT_REST_TIME = 180;
+export const DEFAULT_SETS = 3;
+export const DEFAULT_REPS = 8;
+export const DEFAULT_PROGRESSION = 0;
 
 // Exercise defaults for new exercises
 export const EXERCISE_DEFAULTS = {
-  weight: '0',
+  weight: 0,
   reps: DEFAULT_REPS,
   sets: DEFAULT_SETS,
   restTime: DEFAULT_REST_TIME,

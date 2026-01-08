@@ -79,38 +79,40 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     errors.push(`Exercise name must be ${MAX_EXERCISE_NAME_LENGTH} characters or less`);
   }
 
-  // Validate weight (should be a number or empty)
-  if (exercise.weight && exercise.weight.trim()) {
-    const weightNum = parseFloat(exercise.weight.replace(/[^0-9.]/g, ''));
-    if (isNaN(weightNum) && exercise.weight.trim() !== '') {
-      errors.push('Weight must be a valid number');
-    } else if (weightNum < 0) {
-      errors.push('Weight cannot be negative');
-    }
+  // Validate weight (should be a non-negative number)
+  if (typeof exercise.weight !== 'number' || isNaN(exercise.weight)) {
+    errors.push('Weight must be a valid number');
+  } else if (exercise.weight < 0) {
+    errors.push('Weight cannot be negative');
+  }
+
+  // Validate reps (should be a positive integer)
+  if (typeof exercise.reps !== 'number' || isNaN(exercise.reps)) {
+    errors.push('Reps must be a valid number');
+  } else if (exercise.reps < 1) {
+    errors.push('Must have at least 1 rep');
+  } else if (!Number.isInteger(exercise.reps)) {
+    errors.push('Reps must be a whole number');
   }
 
   // Validate sets (should be a positive integer)
-  if (exercise.sets && exercise.sets.trim()) {
-    const setsNum = parseInt(exercise.sets, 10);
-    if (isNaN(setsNum)) {
-      errors.push('Sets must be a valid number');
-    } else if (setsNum < 1) {
-      errors.push('Must have at least 1 set');
-    } else if (setsNum > 20) {
-      errors.push('Cannot have more than 20 sets');
-    }
+  if (typeof exercise.sets !== 'number' || isNaN(exercise.sets)) {
+    errors.push('Sets must be a valid number');
+  } else if (exercise.sets < 1) {
+    errors.push('Must have at least 1 set');
+  } else if (exercise.sets > 20) {
+    errors.push('Cannot have more than 20 sets');
+  } else if (!Number.isInteger(exercise.sets)) {
+    errors.push('Sets must be a whole number');
   }
 
-  // Validate rest time (should be a positive number in seconds)
-  if (exercise.restTime && exercise.restTime.trim()) {
-    const restNum = parseInt(exercise.restTime, 10);
-    if (isNaN(restNum)) {
-      errors.push('Rest time must be a valid number');
-    } else if (restNum < 0) {
-      errors.push('Rest time cannot be negative');
-    } else if (restNum > 600) {
-      errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
-    }
+  // Validate rest time (should be a non-negative integer in seconds)
+  if (typeof exercise.restTime !== 'number' || isNaN(exercise.restTime)) {
+    errors.push('Rest time must be a valid number');
+  } else if (exercise.restTime < 0) {
+    errors.push('Rest time cannot be negative');
+  } else if (exercise.restTime > 600) {
+    errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
   }
 
   return {
@@ -190,40 +192,27 @@ export const formatWeight = (value: number, unit: string = 'kg'): string => {
 };
 
 /**
- * Parse reps input (can be a range like "8-12" or a single number)
+ * Parse reps input (must be a whole number)
  */
-export const parseReps = (reps: string): { min: number; max: number; isValid: boolean } => {
+export const parseReps = (reps: string): { value: number; isValid: boolean } => {
   if (!reps || !reps.trim()) {
-    return { min: 0, max: 0, isValid: true };
+    return { value: 0, isValid: true };
   }
 
   const trimmed = reps.trim();
 
-  // Check for range (e.g., "8-12")
-  const rangeMatch = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
-  if (rangeMatch) {
-    const min = parseInt(rangeMatch[1], 10);
-    const max = parseInt(rangeMatch[2], 10);
-    return {
-      min,
-      max,
-      isValid: !isNaN(min) && !isNaN(max) && min > 0 && max >= min,
-    };
-  }
-
-  // Check for single number
+  // Check for single whole number only
   const num = parseInt(trimmed, 10);
-  if (!isNaN(num) && num > 0) {
-    return { min: num, max: num, isValid: true };
+  if (!isNaN(num) && num > 0 && String(num) === trimmed) {
+    return { value: num, isValid: true };
   }
 
-  return { min: 0, max: 0, isValid: false };
+  return { value: 0, isValid: false };
 };
 
 /**
  * Format reps for display
  */
-export const formatReps = (min: number, max: number): string => {
-  if (min === max) return min.toString();
-  return `${min}-${max}`;
+export const formatReps = (value: number): string => {
+  return value.toString();
 };

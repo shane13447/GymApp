@@ -7,18 +7,16 @@
  * - Data validation and error handling
  */
 
-import * as SQLite from 'expo-sqlite';
-import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_QUEUE_SIZE } from '@/constants';
+import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
-  Exercise,
   Program,
   ProgramExercise,
   UserPreferences,
   Workout,
   WorkoutDay,
-  WorkoutExercise,
-  WorkoutQueueItem,
+  WorkoutQueueItem
 } from '@/types';
+import * as SQLite from 'expo-sqlite';
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -82,11 +80,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8-12',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
     );
@@ -111,13 +109,13 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8-12',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
-      logged_weight TEXT DEFAULT '',
-      logged_reps TEXT DEFAULT '',
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
+      logged_weight REAL DEFAULT 0,
+      logged_reps INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
     );
@@ -140,11 +138,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8-12',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
     );
@@ -260,10 +258,17 @@ export const getCurrentProgramId = async (): Promise<string | null> => {
 };
 
 /**
- * Set current program ID
+ * Set current program ID and generate workout queue
  */
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
   await updateUserPreferences({ currentProgramId: programId });
+  
+  // Generate workout queue if a program is set
+  if (programId) {
+    await generateWorkoutQueue(programId);
+  } else {
+    await clearWorkoutQueue();
+  }
 };
 
 // =============================================================================
@@ -302,7 +307,7 @@ export const getAllPrograms = async (): Promise<Program[]> => {
 /**
  * Get a single program by ID
  */
-export const getProgramById = async (programId: string): Promise<Program | null> => {
+export const getProgramById = async (programId: string): Promise<Program | null> => { 
   const database = await getDatabase();
   
   const program = await database.getFirstAsync<{
@@ -345,11 +350,11 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
       position: number;
     }>(
       'SELECT * FROM program_exercises WHERE workout_day_id = ? ORDER BY position',
@@ -517,13 +522,13 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
-      logged_weight: string;
-      logged_reps: string;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
+      logged_weight: number;
+      logged_reps: number;
       position: number;
     }>(
       'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
@@ -633,14 +638,14 @@ export const deleteWorkout = async (workoutId: string): Promise<void> => {
 export const getLastLoggedWeight = async (
   exerciseName: string,
   programId: string
-): Promise<string | null> => {
+): Promise<number | null> => {
   const database = await getDatabase();
   
-  const result = await database.getFirstAsync<{ logged_weight: string }>(
+  const result = await database.getFirstAsync<{ logged_weight: number }>(
     `SELECT we.logged_weight 
      FROM workout_exercises we
      JOIN workouts w ON we.workout_id = w.id
-     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight != ''
+     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight > 0
      ORDER BY w.date DESC
      LIMIT 1`,
     [exerciseName, programId]
@@ -676,11 +681,11 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
       position: number;
     }>(
       'SELECT * FROM queue_exercises WHERE queue_item_id = ? ORDER BY position',
@@ -871,6 +876,67 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
       ]
     );
   }
+};
+
+// =============================================================================
+// QUEUE GENERATION
+// =============================================================================
+
+/**
+ * Generate a workout queue from a program
+ * Creates DEFAULT_QUEUE_SIZE queue items cycling through the program's workout days
+ * Applies auto-progression based on last logged weights
+ */
+export const generateWorkoutQueue = async (programId: string): Promise<void> => {
+  const program = await getProgramById(programId);
+  if (!program || program.workoutDays.length === 0) {
+    console.warn('Cannot generate queue: Program not found or has no workout days');
+    return;
+  }
+
+  // Clear existing queue
+  await clearWorkoutQueue();
+
+  const queueItems: WorkoutQueueItem[] = [];
+  const numDays = program.workoutDays.length;
+
+  for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
+    const dayIndex = i % numDays;
+    const workoutDay = program.workoutDays[dayIndex];
+
+    // Apply auto-progression to exercises
+    const exercisesWithProgression: ProgramExercise[] = [];
+    for (const exercise of workoutDay.exercises) {
+      // Get last logged weight for this exercise
+      const lastWeight = await getLastLoggedWeight(exercise.name, programId);
+      
+      let newWeight = exercise.weight;
+      if (lastWeight !== null && exercise.progression > 0) {
+        newWeight = lastWeight + exercise.progression;
+      } else if (lastWeight !== null) {
+        // Use last logged weight if no progression defined
+        newWeight = lastWeight;
+      }
+
+      exercisesWithProgression.push({
+        ...exercise,
+        weight: newWeight,
+      });
+    }
+
+    queueItems.push({
+      id: `queue-${Date.now()}-${i}`,
+      programId: program.id,
+      programName: program.name,
+      dayNumber: workoutDay.dayNumber,
+      exercises: exercisesWithProgression,
+      position: i,
+    });
+  }
+
+  // Save the generated queue
+  await saveWorkoutQueue(queueItems);
+  console.log(`Generated workout queue with ${queueItems.length} items for program: ${program.name}`);
 };
 
 // =============================================================================
