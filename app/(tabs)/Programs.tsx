@@ -96,8 +96,10 @@ export default function ProgramsScreen() {
   const handleSetCurrentProgram = async (programId: string) => {
     try {
       await db.setCurrentProgramId(programId);
+      // Clear the workout queue so it gets reinitialized with the new program
+      await db.clearWorkoutQueue();
       setCurrentProgramId(programId);
-      Alert.alert('Success', 'Program set as current!');
+      Alert.alert('Success', 'Program set as current! Your workout queue has been reset.');
     } catch (error) {
       console.error('Error setting current program:', error);
       Alert.alert('Error', 'Failed to set current program');

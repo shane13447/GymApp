@@ -46,6 +46,12 @@ const TEST_PROMPTS = [
   { type: 'Multi - Add', prompt: 'can you add hammer curls to day 2 and also dumbbell flyes to day 3?' },
   { type: 'Multi - Remove', prompt: 'delete fingertip curls and reverse forearm curls' },
 
+  // --- TIER 2.5: CONCURRENT ATTRIBUTES ---
+  { type: 'Single - Weight + Reps', prompt: 'change decline crunches weight to 15 and reps to 5' },
+  { type: 'Single - Reps + Weight', prompt: 'set leg extensions to 12 reps and 40kg' },
+  { type: 'Single - Weight + Sets', prompt: 'crunches at 20kg for 5 sets' },
+  { type: 'Single - Full Mod', prompt: 'make lat pulldowns 50kg, 10 reps, and 4 sets' },
+
   // --- TIER 3: INFORMAL BATCHING ---
   { type: 'Muscle - Weight', prompt: 'put all my back exercises at 30kg' },
   { type: 'Muscle - Reps', prompt: 'I want to do high volume legs today so set everything to 20 reps' },
@@ -89,6 +95,7 @@ export default function CoachScreen() {
   const [testIndex, setTestIndex] = useState(0);
   const [testResults, setTestResults] = useState<{ type: string; success: boolean; error?: string }[]>([]);
   const pendingNextTestRef = useRef<number | null>(null);
+  const totalTests = TEST_PROMPTS.length;
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
@@ -464,7 +471,7 @@ export default function CoachScreen() {
 
     console.log('\n========================================');
     console.log('[TEST] Starting automated test suite');
-    console.log(`[TEST] ${TEST_PROMPTS.length} tests to run`);
+    console.log(`[TEST] ${totalTests} tests to run`);
     console.log('========================================\n');
     
     setIsTestMode(true);
@@ -650,7 +657,7 @@ export default function CoachScreen() {
             onPress={startTests}
             disabled={loading || llm.isGenerating || !llm.isReady || isTestMode}
             accessibilityRole="button"
-            accessibilityLabel="Run automated tests"
+            accessibilityLabel={`Run all tests (${totalTests})`}
           >
             {({ pressed }) => (
               <View
@@ -662,11 +669,11 @@ export default function CoachScreen() {
                   <View className="flex-row items-center gap-2">
                     <ActivityIndicator color="#FFFFFF" size="small" />
                     <ThemedText className="text-white font-semibold">
-                      Test {testIndex + 1}/{TEST_PROMPTS.length}
+                      Test {testIndex + 1}/{totalTests}
                     </ThemedText>
                   </View>
                 ) : (
-                  <ThemedText className="text-white font-semibold">🧪 Run All Tests ({TEST_PROMPTS.length})</ThemedText>
+                  <ThemedText className="text-white font-semibold">Run All Tests ({totalTests})</ThemedText>
                 )}
               </View>
             )}

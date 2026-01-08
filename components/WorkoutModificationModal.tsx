@@ -20,6 +20,8 @@ export default function WorkoutModificationModal({
 
   const hasChanges =
     proposedChanges.weightChanges.length > 0 ||
+    proposedChanges.repsChanges.length > 0 ||
+    proposedChanges.setsChanges.length > 0 ||
     proposedChanges.removals.length > 0 ||
     proposedChanges.additions.length > 0 ||
     proposedChanges.swaps.length > 0;
@@ -74,6 +76,68 @@ export default function WorkoutModificationModal({
                         <ThemedText style={styles.arrow}>→</ThemedText>
                         <ThemedText style={styles.weightLabel}>New:</ThemedText>
                         <ThemedText style={styles.newWeight}>{change.newWeight}</ThemedText>
+                      </View>
+                    </ThemedView>
+                  ))}
+                </ThemedView>
+              )}
+
+              {/* Reps Changes */}
+              {proposedChanges.repsChanges.length > 0 && (
+                <ThemedView style={styles.section}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    Reps Changes ({proposedChanges.repsChanges.length})
+                  </ThemedText>
+                  {proposedChanges.repsChanges.map((change, index) => (
+                    <ThemedView
+                      key={index}
+                      style={styles.changeItem}
+                      lightColor="#f5f5f5"
+                      darkColor="#2a2a2a"
+                    >
+                      <ThemedText style={styles.exerciseName}>
+                        {change.exerciseName}
+                      </ThemedText>
+                      <ThemedText style={styles.queueInfo}>
+                        {change.queueItemName} - Day {change.dayNumber}
+                      </ThemedText>
+                      <View style={styles.weightChangeRow}>
+                        <ThemedText style={styles.weightLabel}>Old:</ThemedText>
+                        <ThemedText style={styles.oldWeight}>{change.oldReps}</ThemedText>
+                        <ThemedText style={styles.arrow}>→</ThemedText>
+                        <ThemedText style={styles.weightLabel}>New:</ThemedText>
+                        <ThemedText style={styles.newWeight}>{change.newReps}</ThemedText>
+                      </View>
+                    </ThemedView>
+                  ))}
+                </ThemedView>
+              )}
+
+              {/* Sets Changes */}
+              {proposedChanges.setsChanges.length > 0 && (
+                <ThemedView style={styles.section}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    Sets Changes ({proposedChanges.setsChanges.length})
+                  </ThemedText>
+                  {proposedChanges.setsChanges.map((change, index) => (
+                    <ThemedView
+                      key={index}
+                      style={styles.changeItem}
+                      lightColor="#f5f5f5"
+                      darkColor="#2a2a2a"
+                    >
+                      <ThemedText style={styles.exerciseName}>
+                        {change.exerciseName}
+                      </ThemedText>
+                      <ThemedText style={styles.queueInfo}>
+                        {change.queueItemName} - Day {change.dayNumber}
+                      </ThemedText>
+                      <View style={styles.weightChangeRow}>
+                        <ThemedText style={styles.weightLabel}>Old:</ThemedText>
+                        <ThemedText style={styles.oldWeight}>{change.oldSets}</ThemedText>
+                        <ThemedText style={styles.arrow}>→</ThemedText>
+                        <ThemedText style={styles.weightLabel}>New:</ThemedText>
+                        <ThemedText style={styles.newWeight}>{change.newSets}</ThemedText>
                       </View>
                     </ThemedView>
                   ))}
