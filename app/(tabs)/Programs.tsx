@@ -121,6 +121,12 @@ export default function ProgramsScreen() {
 
   const updateExerciseField = useCallback(
     (exerciseName: string, field: keyof ProgramExercise, value: string, dayNumber?: number) => {
+      // Determine if field is numeric and parse accordingly
+      const numericFields: (keyof ProgramExercise)[] = ['weight', 'reps', 'sets', 'restTime', 'progression'];
+      const finalValue = numericFields.includes(field)
+        ? (field === 'weight' || field === 'progression' ? parseFloat(value) || 0 : parseInt(value, 10) || 0)
+        : value;
+
       if (createStep === CreateProgramStep.Configuration && dayNumber !== undefined) {
         setWorkoutDays((prev) =>
           prev.map((day) =>
@@ -128,7 +134,7 @@ export default function ProgramsScreen() {
               ? {
                   ...day,
                   exercises: day.exercises.map((ex) =>
-                    ex.name === exerciseName ? { ...ex, [field]: value } : ex
+                    ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
                   ),
                 }
               : day
@@ -137,7 +143,7 @@ export default function ProgramsScreen() {
       } else {
         setSelectedExercises((prev) =>
           prev.map((ex) =>
-            ex.name === exerciseName ? { ...ex, [field]: value } : ex
+            ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
           )
         );
       }
@@ -837,7 +843,7 @@ export default function ProgramsScreen() {
                           <ThemedText className="font-semibold">{exercise.reps}</ThemedText>
                         </View>
                       )}
-                      {exercise.weight && exercise.weight !== '0' && (
+                      {exercise.weight !== undefined && exercise.weight !== 0 && (
                         <View>
                           <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                             Weight

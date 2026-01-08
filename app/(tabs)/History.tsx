@@ -128,7 +128,7 @@ export default function HistoryScreen() {
               {/* Logged Values */}
               <View className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
                 <View className="flex-row flex-wrap gap-4">
-                  {exercise.loggedWeight && (
+                  {exercise.loggedWeight !== undefined && exercise.loggedWeight !== 0 && (
                     <View>
                       <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                         Weight
@@ -138,7 +138,7 @@ export default function HistoryScreen() {
                       </ThemedText>
                     </View>
                   )}
-                  {exercise.loggedReps && (
+                  {exercise.loggedReps !== undefined && exercise.loggedReps !== 0 && (
                     <View>
                       <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                         Reps
@@ -148,7 +148,7 @@ export default function HistoryScreen() {
                       </ThemedText>
                     </View>
                   )}
-                  {exercise.sets && (
+                  {exercise.sets !== undefined && exercise.sets !== 0 && (
                     <View>
                       <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                         Sets

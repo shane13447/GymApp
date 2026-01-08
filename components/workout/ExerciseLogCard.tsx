@@ -35,10 +35,10 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get rest time in seconds from exercise (defaults to 180)
-  const restTimeSeconds = parseInt(exercise.restTime || '180', 10) || 180;
+  const restTimeSeconds = exercise.restTime || 180;
   
   // Get target sets for display
-  const targetSets = parseInt(exercise.sets || '0', 10) || 0;
+  const targetSets = exercise.sets || 0;
 
   // Start the rest timer and increment sets completed
   const startTimer = useCallback(() => {
@@ -140,7 +140,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
               <ThemedText className="text-base font-semibold">{exercise.reps}</ThemedText>
             </View>
           )}
-          {exercise.weight && exercise.weight !== '0' && (
+          {exercise.weight !== undefined && exercise.weight !== 0 && (
             <View>
               <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                 Target Weight
@@ -165,7 +165,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="Enter weight used..."
             placeholderTextColor="#999"
-            value={exercise.loggedWeight}
+            value={exercise.loggedWeight === 0 ? '' : exercise.loggedWeight.toString()}
             onChangeText={onUpdateLoggedWeight}
             keyboardType="decimal-pad"
             style={{ color: textColor }}
@@ -179,7 +179,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="Enter reps completed..."
             placeholderTextColor="#999"
-            value={exercise.loggedReps}
+            value={exercise.loggedReps === 0 ? '' : exercise.loggedReps.toString()}
             onChangeText={onUpdateLoggedReps}
             keyboardType="numeric"
             style={{ color: textColor }}
