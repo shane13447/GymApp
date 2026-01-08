@@ -153,11 +153,3 @@ export interface ValidationResult {
   errors: string[];
 }
 
-/**
- * Form field validation
- */
-export interface FieldValidation {
-  field: string;
-  isValid: boolean;
-  message?: string;
-}
