@@ -63,8 +63,8 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 1,
     position: 0,
     exercises: [
-      createExercise({ name: 'Barbell Bench Press', weight: 80, reps: 8, sets: 3 }),
-      createExercise({ name: 'Dumbbell Flyes', weight: 15, reps: 10, sets: 3 }),
+      createExercise({ name: 'Barbell Bench Press', weight: 80, reps: 8, sets: 3, muscle_groups_worked: ['chest', 'triceps', 'shoulders'] }),
+      createExercise({ name: 'Dumbbell Flyes', weight: 15, reps: 10, sets: 3, muscle_groups_worked: ['chest', 'shoulders'] }),
     ],
   }),
   createQueueItem({
@@ -72,8 +72,8 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 2,
     position: 1,
     exercises: [
-      createExercise({ name: 'Barbell Back Squat', weight: 100, reps: 5, sets: 5 }),
-      createExercise({ name: 'Leg Extensions', weight: 50, reps: 12, sets: 3 }),
+      createExercise({ name: 'Barbell Back Squat', weight: 100, reps: 5, sets: 5, muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] }),
+      createExercise({ name: 'Leg Extensions', weight: 50, reps: 12, sets: 3, muscle_groups_worked: ['quads'] }),
     ],
   }),
   createQueueItem({
@@ -81,7 +81,7 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 3,
     position: 2,
     exercises: [
-      createExercise({ name: 'Barbell Deadlift', weight: 120, reps: 5, sets: 3 }),
+      createExercise({ name: 'Barbell Deadlift', weight: 120, reps: 5, sets: 3, muscle_groups_worked: ['lats', 'glutes', 'hamstrings', 'traps'] }),
     ],
   }),
 ];

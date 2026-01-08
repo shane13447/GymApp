@@ -20,7 +20,7 @@ interface ExerciseData {
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
 
 /**
- * Find exercise by name with fuzzy matching
+ * Find exercise by name with strict matching
  */
 export const findExerciseByName = (
   name: string
@@ -36,10 +36,19 @@ export const findExerciseByName = (
     }
   }
   
-  // Try fuzzy match (contains)
+  // Try matching via aliases
+  const aliasMatch = EXERCISE_ALIASES[lowerName];
+  if (aliasMatch && aliasMatch.length > 0) {
+    for (const ex of EXERCISES) {
+      if (ex.name.toLowerCase() === aliasMatch[0].toLowerCase()) {
+        return ex;
+      }
+    }
+  }
+  
+  // Try high-similarity fuzzy match (>0.8)
   for (const ex of EXERCISES) {
-    if (ex.name.toLowerCase().includes(lowerName) ||
-        lowerName.includes(ex.name.toLowerCase())) {
+    if (getSimilarity(ex.name.toLowerCase(), lowerName) > 0.8) {
       return ex;
     }
   }
@@ -564,8 +573,17 @@ export const parseQueueFormatResponse = (
         const reps = parseInt(parts[2]?.trim() || '8', 10) || 8;
         const sets = parseInt(parts[3]?.trim() || '3', 10) || 3;
         
-        // Try to find the exercise by full name or fuzzy match
-        const exerciseData = findExerciseByName(exerciseName);
+        // Try to find the exercise by full name first
+        let exerciseData = findExerciseByName(exerciseName);
+        
+        // If not found, try resolving via aliases (for ADD requests where LLM uses common names)
+        if (!exerciseData) {
+          const lowerExName = exerciseName.toLowerCase().trim();
+          const aliasMatch = EXERCISE_ALIASES[lowerExName];
+          if (aliasMatch && aliasMatch.length > 0) {
+            exerciseData = findExerciseByName(aliasMatch[0]);
+          }
+        }
         
         if (exerciseData) {
           exercises.push({
@@ -579,11 +597,12 @@ export const parseQueueFormatResponse = (
             progression: 0,
           });
         } else {
-          // Try to find in original exercises by comparing names
+          // Try to find in original exercises by comparing names (stricter matching)
           const originalEx = originalItem.exercises.find((ex) => {
-            return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
-                   ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
-                   exerciseName.toLowerCase().includes(ex.name.toLowerCase());
+            const exLower = ex.name.toLowerCase();
+            const nameLower = exerciseName.toLowerCase();
+            // Require exact match or very high similarity (>0.85)
+            return exLower === nameLower || getSimilarity(exLower, nameLower) > 0.85;
           });
           
           if (originalEx) {
@@ -691,9 +710,38 @@ export const repairQueueWithIntent = (
     requestLower.includes('ditch');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
-  // Extract target values from request
+  // Detect ADD requests - these should NOT have repair logic applied
+  const isAddRequest = 
+    requestLower.includes('add ') ||
+    requestLower.includes('put ') ||
+    requestLower.includes('include ') ||
+    requestLower.includes('insert ');
+  console.log('[REPAIR] isAddRequest:', isAddRequest);
+  
+  // For ADD requests, return the parsed queue as-is (LLM output is authoritative for adds)
+  if (isAddRequest) {
+    console.log('[REPAIR] Skipping repair for ADD request - LLM output is authoritative');
+    return parsedQueue;
+  }
+  
+  // Extract ALL target values from request (supports multiple exercises with different values)
+  // e.g., "make calf press 20 reps but drop leg extensions to 6"
+  const allRepsMatches = [...userPrompt.matchAll(/(\w+(?:\s+\w+)*)\s+(?:to\s+)?(\d+)\s*reps?/gi)];
+  const allRepsToMatches = [...userPrompt.matchAll(/(\w+(?:\s+\w+)*)\s+reps?\s+(?:to\s+)?(\d+)/gi)];
+  
+  // Build a map of exercise -> reps for multi-exercise requests
+  const exerciseRepsMap = new Map<string, number>();
+  for (const match of [...allRepsMatches, ...allRepsToMatches]) {
+    const exercisePart = match[1].toLowerCase().trim();
+    const repsValue = parseInt(match[2], 10);
+    if (!isNaN(repsValue)) {
+      exerciseRepsMap.set(exercisePart, repsValue);
+    }
+  }
+  
+  // Fallback: single global value extraction (for simple requests)
   const repsMatch = userPrompt.match(/(\d+)\s*reps?/i) || userPrompt.match(/reps?\s*(?:to\s*)?(\d+)/i);
-  const targetReps = repsMatch ? parseInt(repsMatch[1], 10) : null;
+  const globalTargetReps = repsMatch ? parseInt(repsMatch[1], 10) : null;
   
   const weightMatch = userPrompt.match(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/i) || userPrompt.match(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/i);
   const targetWeight = weightMatch ? parseFloat(weightMatch[1]) : null;
@@ -711,7 +759,9 @@ export const repairQueueWithIntent = (
   const mentionsSets = requestLower.includes('set');
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets;
 
-  const expectedReps = targetReps ?? (toValue !== null && mentionsReps ? Math.round(toValue) : null);
+  // Only use global expected values if there's a single target (not multi-exercise requests)
+  const hasMultipleRepsTargets = exerciseRepsMap.size > 1;
+  const expectedReps = hasMultipleRepsTargets ? null : (globalTargetReps ?? (toValue !== null && mentionsReps ? Math.round(toValue) : null));
   const expectedWeight = targetWeight ?? (toValue !== null && mentionsWeight ? toValue : null);
   const expectedSets = targetSets ?? (toValue !== null && mentionsSets ? Math.round(toValue) : null);
   
@@ -734,23 +784,39 @@ export const repairQueueWithIntent = (
         getSimilarity(targetName, originalEx.name) > 0.8
       ) || requestLower.includes(ex.name.toLowerCase());
       
+      // --- MULTI-EXERCISE REPS FIX ---
+      // Check if this specific exercise has a reps value in the exerciseRepsMap
+      let exerciseSpecificReps: number | null = null;
+      for (const [exercisePart, repsValue] of exerciseRepsMap) {
+        if (ex.name.toLowerCase().includes(exercisePart) || 
+            exercisePart.includes(ex.name.toLowerCase().split(' ')[0])) {
+          exerciseSpecificReps = repsValue;
+          break;
+        }
+      }
+      
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
       if (isTargeted) {
         // Apply intended changes (supports multiple columns at once).
         // If a column is NOT intended to change, restore it to the original value.
+        
+        // Use exercise-specific reps if available, otherwise fall back to global
+        const targetRepsForExercise = exerciseSpecificReps ?? expectedReps;
 
-        if (expectedReps) {
-          if (finalEx.reps !== expectedReps) {
-            console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
-            finalEx.reps = expectedReps;
+        if (targetRepsForExercise) {
+          // Only apply if LLM output doesn't already match AND isn't another valid value from the prompt
+          const llmRepsIsValidPromptValue = [...exerciseRepsMap.values()].includes(finalEx.reps);
+          if (finalEx.reps !== targetRepsForExercise && !llmRepsIsValidPromptValue) {
+            console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${targetRepsForExercise}`);
+            finalEx.reps = targetRepsForExercise;
           }
 
           // Fix Column Confusion (Weight became Reps value)
-          if (finalEx.weight === expectedReps && originalEx.weight !== expectedReps) {
+          if (finalEx.weight === targetRepsForExercise && originalEx.weight !== targetRepsForExercise) {
             console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Weight, Apply Reps`);
             finalEx.weight = originalEx.weight;
-            finalEx.reps = expectedReps;
+            finalEx.reps = targetRepsForExercise;
           }
         } else if (hasExplicitColumnIntent && !mentionsReps && finalEx.reps !== originalEx.reps) {
           finalEx.reps = originalEx.reps;
