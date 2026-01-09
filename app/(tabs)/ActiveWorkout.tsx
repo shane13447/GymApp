@@ -135,7 +135,7 @@ export default function ActiveWorkout() {
           return {
             ...ex,
             loggedWeight: autoWeight,
-            loggedReps: 0,
+            loggedReps: '',
           };
         })
       );
@@ -145,20 +145,35 @@ export default function ActiveWorkout() {
       console.error('Error initializing workout exercises:', error);
       const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
         ...ex,
-        loggedWeight: 0,
-        loggedReps: 0,
+        loggedWeight: '',
+        loggedReps: '',
       }));
       setWorkoutExercises(initialExercises);
     }
   };
 
-  const calculateAutoWeight = (lastWeight: number | null, progression: number): number => {
-    if (lastWeight === null) return 0;
-    if (!progression) return lastWeight;
+  const calculateAutoWeight = (lastWeight: string | null, progression: string): string => {
+    if (!lastWeight) return '';
+    if (!progression || !progression.trim()) return lastWeight;
 
     try {
-      const newWeight = lastWeight + progression;
-      return isNaN(newWeight) ? lastWeight : newWeight;
+      const progressionAmount = parseFloat(progression.trim());
+      if (isNaN(progressionAmount)) return lastWeight;
+
+      const lastWeightMatch = lastWeight.match(/([\d.]+)\s*(kg)?/i);
+      if (!lastWeightMatch) {
+        const lastWeightNum = parseFloat(lastWeight);
+        if (!isNaN(lastWeightNum)) {
+          return (lastWeightNum + progressionAmount).toString();
+        }
+        return lastWeight;
+      }
+
+      const lastWeightAmount = parseFloat(lastWeightMatch[1]);
+      const lastWeightUnit = lastWeightMatch[2]?.toLowerCase() || '';
+      const newWeight = lastWeightAmount + progressionAmount;
+
+      return lastWeightUnit ? `${newWeight} ${lastWeightUnit}` : newWeight.toString();
     } catch (error) {
       console.error('Error calculating auto weight:', error);
       return lastWeight;
@@ -177,7 +192,7 @@ export default function ActiveWorkout() {
 
           return {
             ...ex,
-            weight: progressedWeight || ex.weight || 0,
+            weight: progressedWeight || ex.weight || '',
           };
         })
       );
@@ -244,17 +259,17 @@ export default function ActiveWorkout() {
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         queueItem.exercises.map(async (ex) => {
-          let finalWeight = ex.weight || 0;
+          let finalWeight = ex.weight || '';
 
           if (!finalWeight) {
             const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId);
-            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || 0;
+            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || '';
           }
 
           return {
             ...ex,
             loggedWeight: finalWeight,
-            loggedReps: 0,
+            loggedReps: '',
           };
         })
       );
@@ -264,8 +279,8 @@ export default function ActiveWorkout() {
       console.error('Error initializing workout exercises from queue:', error);
       const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
         ...ex,
-        loggedWeight: ex.weight || 0,
-        loggedReps: 0,
+        loggedWeight: ex.weight || '',
+        loggedReps: '',
       }));
       setWorkoutExercises(initialExercises);
     }
@@ -310,9 +325,8 @@ export default function ActiveWorkout() {
 
   const updateLoggedValue = useCallback(
     (exerciseName: string, field: 'loggedWeight' | 'loggedReps', value: string) => {
-      const numValue = field === 'loggedWeight' ? parseFloat(value) || 0 : parseInt(value, 10) || 0;
       setWorkoutExercises((prev) =>
-        prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: numValue } : ex))
+        prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: value } : ex))
       );
     },
     []

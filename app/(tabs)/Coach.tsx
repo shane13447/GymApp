@@ -88,7 +88,6 @@ export default function CoachScreen() {
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const [targetedExercises, setTargetedExercises] = useState<string[]>([]);
   const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
-  const currentRequestRef = useRef<string>(''); // Sync ref for current request text
   const lastProcessedResponseRef = useRef<string>('');
   
   // Test mode state
@@ -176,8 +175,8 @@ export default function CoachScreen() {
       lastProcessedResponseRef.current = llm.response;
 
       // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
-      // Use refs to avoid race condition with async state updates
-      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue, currentRequestRef.current, targetedExercisesRef.current);
+      // Use ref to avoid race condition with async state updates
+      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue, inputText, targetedExercisesRef.current);
 
       if (parsedQueue && parsedQueue.length > 0) {
         console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
@@ -190,7 +189,7 @@ export default function CoachScreen() {
           const formatted = differencesToProposedChanges(differences);
           
           // Validate for unexpected changes
-          const validation = validateChanges(currentRequestRef.current, differences);
+          const validation = validateChanges(inputText, differences);
           if (!validation.valid) {
             console.warn('[VALIDATION] Warnings:', validation.warnings);
           }
@@ -273,7 +272,7 @@ export default function CoachScreen() {
         }
       }
     }
-  }, [llm.response, llm.isGenerating, mode, workoutQueue, isTestMode, testIndex]);
+  }, [llm.response, llm.isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText]);
 
   const sendToLlama = async () => {
     if (!inputText.trim()) {
@@ -292,7 +291,6 @@ export default function CoachScreen() {
     setGeneratedQueue(null);
     setTargetedExercises([]); // Reset targeted exercises
     targetedExercisesRef.current = []; // Reset ref too
-    currentRequestRef.current = inputText.trim(); // Store current request for response handling
     lastProcessedResponseRef.current = '';
 
     try {
@@ -382,7 +380,6 @@ export default function CoachScreen() {
     
     setTestIndex(index);
     setInputText(test.prompt);
-    currentRequestRef.current = test.prompt; // Store for response handling
     setError('');
     setResponse('');
     setGeneratedQueue(null);
@@ -421,26 +418,6 @@ export default function CoachScreen() {
         ? matchedExercises
         : extractTargetExercises(test.prompt, workoutQueue);
       console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
-      
-      // Check if this is an ADD test (these don't need the exercise in queue)
-      const isAddTest = test.type.includes('Add');
-      
-      // Skip test if no target exercises found AND it's not an add test
-      if (exercisesToStore.length === 0 && !isAddTest) {
-        console.log(`[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: SKIPPED - Target exercise not in queue`);
-        setTestResults(prev => [...prev, { type: test.type, success: false, error: 'Target exercise not in queue' }]);
-        setLoading(false);
-        lastProcessedResponseRef.current = llm.response || '';
-        
-        if (index < TEST_PROMPTS.length - 1) {
-          pendingNextTestRef.current = index + 1;
-        } else {
-          setIsTestMode(false);
-          Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
-        }
-        return;
-      }
-      
       targetedExercisesRef.current = exercisesToStore;
       setTargetedExercises(exercisesToStore);
 

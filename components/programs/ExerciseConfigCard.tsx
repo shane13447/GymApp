@@ -3,13 +3,13 @@
  * Displays and allows editing of exercise details (sets, reps, weight, etc.)
  */
 
-import React, { memo, useCallback } from 'react';
-import { TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import type { ProgramExercise } from '@/types';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import type { ProgramExercise } from '@/types';
+import React, { memo, useCallback } from 'react';
+import { TextInput, View } from 'react-native';
 
 interface ExerciseConfigCardProps {
   exercise: ProgramExercise;
@@ -82,7 +82,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 3"
             placeholderTextColor="#999"
-            value={exercise.sets?.toString() || ''}
+            value={exercise.sets}
             onChangeText={handleFieldChange('sets')}
             keyboardType="numeric"
             style={{ color: textColor }}
@@ -94,11 +94,10 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           <ThemedText className="text-sm font-semibold">Reps</ThemedText>
           <TextInput
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="e.g., 8"
+            placeholder="e.g., 8-10"
             placeholderTextColor="#999"
-            value={exercise.reps?.toString() || ''}
+            value={exercise.reps}
             onChangeText={handleFieldChange('reps')}
-            keyboardType="numeric"
             style={{ color: textColor }}
             accessibilityLabel="Number of reps"
           />
@@ -108,9 +107,9 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           <ThemedText className="text-sm font-semibold">Weight</ThemedText>
           <TextInput
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="e.g., 60"
+            placeholder="e.g., 60 kg"
             placeholderTextColor="#999"
-            value={exercise.weight?.toString() || ''}
+            value={exercise.weight}
             onChangeText={handleFieldChange('weight')}
             keyboardType="decimal-pad"
             style={{ color: textColor }}
@@ -124,7 +123,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 90"
             placeholderTextColor="#999"
-            value={exercise.restTime?.toString() || ''}
+            value={exercise.restTime}
             onChangeText={handleFieldChange('restTime')}
             keyboardType="numeric"
             style={{ color: textColor }}
@@ -138,7 +137,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 2.5"
             placeholderTextColor="#999"
-            value={exercise.progression?.toString() || ''}
+            value={exercise.progression}
             onChangeText={handleFieldChange('progression')}
             keyboardType="decimal-pad"
             style={{ color: textColor }}

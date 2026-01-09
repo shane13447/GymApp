@@ -39,11 +39,11 @@ const createExercise = (overrides: Partial<ProgramExercise> = {}): ProgramExerci
   name: 'Barbell Bench Press',
   equipment: 'Barbell',
   muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
-  weight: 80,
-  reps: 8,
-  sets: 3,
-  restTime: 180,
-  progression: 2.5,
+  weight: '80',
+  reps: '8',
+  sets: '3',
+  restTime: '180',
+  progression: '2.5',
   ...overrides,
 });
 
@@ -63,8 +63,8 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 1,
     position: 0,
     exercises: [
-      createExercise({ name: 'Barbell Bench Press', weight: 80, reps: 8, sets: 3, muscle_groups_worked: ['chest', 'triceps', 'shoulders'] }),
-      createExercise({ name: 'Dumbbell Flyes', weight: 15, reps: 10, sets: 3, muscle_groups_worked: ['chest', 'shoulders'] }),
+      createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' }),
+      createExercise({ name: 'Dumbbell Flyes', weight: '15', reps: '10', sets: '3' }),
     ],
   }),
   createQueueItem({
@@ -72,8 +72,8 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 2,
     position: 1,
     exercises: [
-      createExercise({ name: 'Barbell Back Squat', weight: 100, reps: 5, sets: 5, muscle_groups_worked: ['quads', 'glutes', 'hamstrings'] }),
-      createExercise({ name: 'Leg Extensions', weight: 50, reps: 12, sets: 3, muscle_groups_worked: ['quads'] }),
+      createExercise({ name: 'Barbell Back Squat', weight: '100', reps: '5', sets: '5' }),
+      createExercise({ name: 'Leg Extensions', weight: '50', reps: '12', sets: '3' }),
     ],
   }),
   createQueueItem({
@@ -81,7 +81,7 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     dayNumber: 3,
     position: 2,
     exercises: [
-      createExercise({ name: 'Barbell Deadlift', weight: 120, reps: 5, sets: 3, muscle_groups_worked: ['lats', 'glutes', 'hamstrings', 'traps'] }),
+      createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' }),
     ],
   }),
 ];
@@ -257,7 +257,7 @@ describe('encodeQueueForLLM', () => {
     it('should encode single queue item', () => {
       const queue = [createQueueItem({
         dayNumber: 1,
-        exercises: [createExercise({ name: 'Test', weight: 50, reps: 10, sets: 3 })],
+        exercises: [createExercise({ name: 'Test', weight: '50', reps: '10', sets: '3' })],
       })];
       const result = encodeQueueForLLM(queue);
       expect(result).toContain('Q0:D1:');
@@ -291,7 +291,7 @@ describe('encodeQueueForLLM', () => {
 
     it('should use pipe delimiter for exercise fields', () => {
       const queue = [createQueueItem({
-        exercises: [createExercise({ name: 'Test', weight: 80, reps: 10, sets: 3 })],
+        exercises: [createExercise({ name: 'Test', weight: '80', reps: '10', sets: '3' })],
       })];
       const result = encodeQueueForLLM(queue);
       expect(result).toMatch(/Test\|80\|10\|3/);
@@ -304,20 +304,20 @@ describe('encodeQueueForLLM', () => {
       expect(result).toBe('');
     });
 
-    it('should handle exercise with zero weight', () => {
+    it('should handle exercise with missing weight', () => {
       const queue = [createQueueItem({
-        exercises: [createExercise({ weight: 0 })],
+        exercises: [createExercise({ weight: '' })],
       })];
       const result = encodeQueueForLLM(queue);
       expect(result).toContain('|0|');
     });
 
-    it('should handle exercise with default values', () => {
+    it('should handle exercise with default reps', () => {
       const queue = [createQueueItem({
-        exercises: [createExercise()],
+        exercises: [createExercise({ reps: '' })],
       })];
       const result = encodeQueueForLLM(queue);
-      expect(result).toContain('|80|8|3');
+      expect(result).toContain('|8|');
     });
   });
 });
@@ -378,7 +378,7 @@ describe('parseQueueFormatResponse', () => {
       const response = 'Q0:D1:Barbell Bench Press|100|8|3';
       const result = parseQueueFormatResponse(response, [originalQueue[0]], 'change weight to 100', ['Barbell Bench Press']);
       expect(result).not.toBeNull();
-      expect(result![0].exercises[0].weight).toBe(100);
+      expect(result![0].exercises[0].weight).toBe('100');
     });
   });
 
@@ -683,9 +683,9 @@ describe('enforceColumnChanges', () => {
           exercises: [
             createExercise({
               name: 'Barbell Bench Press',
-              weight: 90,
-              reps: 15, // Accidentally changed
-              sets: 3,
+              weight: '90',
+              reps: '15', // Accidentally changed
+              sets: '3',
             }),
           ],
         }),
@@ -697,8 +697,8 @@ describe('enforceColumnChanges', () => {
         ['Barbell Bench Press']
       );
       // Reps should be restored to original
-      expect(result[0].exercises[0].weight).toBe(90);
-      expect(result[0].exercises[0].reps).toBe(8);
+      expect(result[0].exercises[0].weight).toBe('90');
+      expect(result[0].exercises[0].reps).toBe('8');
     });
 
     it('should enforce reps change only affects reps column', () => {
@@ -710,9 +710,9 @@ describe('enforceColumnChanges', () => {
           exercises: [
             createExercise({
               name: 'Barbell Bench Press',
-              weight: 100, // Accidentally changed
-              reps: 15,
-              sets: 3,
+              weight: '100', // Accidentally changed
+              reps: '15',
+              sets: '3',
             }),
           ],
         }),
@@ -724,8 +724,8 @@ describe('enforceColumnChanges', () => {
         ['Barbell Bench Press']
       );
       // Weight should be restored to original
-      expect(result[0].exercises[0].reps).toBe(15);
-      expect(result[0].exercises[0].weight).toBe(80);
+      expect(result[0].exercises[0].reps).toBe('15');
+      expect(result[0].exercises[0].weight).toBe('80');
     });
   });
 
@@ -754,9 +754,9 @@ describe('repairQueue', () => {
           exercises: [
             createExercise({
               name: 'Barbell Bench Press',
-              weight: 90,
-              reps: 8,
-              sets: 3,
+              weight: '90',
+              reps: '8',
+              sets: '3',
             }),
             // Dumbbell Flyes dropped
           ],
@@ -783,7 +783,7 @@ describe('compareWorkoutQueues', () => {
     it('should detect weight change', () => {
       const oldQueue = createTestQueue();
       const newQueue = createTestQueue();
-      newQueue[0].exercises[0].weight = 100;
+      newQueue[0].exercises[0].weight = '100';
       
       const differences = compareWorkoutQueues(oldQueue, newQueue);
       expect(differences.some(d => d.type === 'weight_change')).toBe(true);
@@ -792,7 +792,7 @@ describe('compareWorkoutQueues', () => {
     it('should detect reps change', () => {
       const oldQueue = createTestQueue();
       const newQueue = createTestQueue();
-      newQueue[0].exercises[0].reps = 15;
+      newQueue[0].exercises[0].reps = '15';
       
       const differences = compareWorkoutQueues(oldQueue, newQueue);
       expect(differences.some(d => d.type === 'reps_change')).toBe(true);
@@ -801,7 +801,7 @@ describe('compareWorkoutQueues', () => {
     it('should detect sets change', () => {
       const oldQueue = createTestQueue();
       const newQueue = createTestQueue();
-      newQueue[0].exercises[0].sets = 5;
+      newQueue[0].exercises[0].sets = '5';
       
       const differences = compareWorkoutQueues(oldQueue, newQueue);
       expect(differences.some(d => d.type === 'sets_change')).toBe(true);
@@ -861,13 +861,13 @@ describe('differencesToProposedChanges', () => {
         queueItemName: 'Test',
         dayNumber: 1,
         exerciseName: 'Bench Press',
-        oldWeight: 80,
-        newWeight: 90,
+        oldWeight: '80',
+        newWeight: '90',
       }];
       const result = differencesToProposedChanges(differences);
       expect(result.weightChanges.length).toBe(1);
-      expect(result.weightChanges[0].oldWeight).toBe(80);
-      expect(result.weightChanges[0].newWeight).toBe(90);
+      expect(result.weightChanges[0].oldWeight).toBe('80');
+      expect(result.weightChanges[0].newWeight).toBe('90');
     });
 
     it('should categorize removals', () => {
