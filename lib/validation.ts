@@ -79,40 +79,38 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     errors.push(`Exercise name must be ${MAX_EXERCISE_NAME_LENGTH} characters or less`);
   }
 
-  // Validate weight (should be a non-negative number)
-  if (typeof exercise.weight !== 'number' || isNaN(exercise.weight)) {
-    errors.push('Weight must be a valid number');
-  } else if (exercise.weight < 0) {
-    errors.push('Weight cannot be negative');
-  }
-
-  // Validate reps (should be a positive integer)
-  if (typeof exercise.reps !== 'number' || isNaN(exercise.reps)) {
-    errors.push('Reps must be a valid number');
-  } else if (exercise.reps < 1) {
-    errors.push('Must have at least 1 rep');
-  } else if (!Number.isInteger(exercise.reps)) {
-    errors.push('Reps must be a whole number');
+  // Validate weight (should be a number or empty)
+  if (exercise.weight && exercise.weight.trim()) {
+    const weightNum = parseFloat(exercise.weight.replace(/[^0-9.]/g, ''));
+    if (isNaN(weightNum) && exercise.weight.trim() !== '') {
+      errors.push('Weight must be a valid number');
+    } else if (weightNum < 0) {
+      errors.push('Weight cannot be negative');
+    }
   }
 
   // Validate sets (should be a positive integer)
-  if (typeof exercise.sets !== 'number' || isNaN(exercise.sets)) {
-    errors.push('Sets must be a valid number');
-  } else if (exercise.sets < 1) {
-    errors.push('Must have at least 1 set');
-  } else if (exercise.sets > 20) {
-    errors.push('Cannot have more than 20 sets');
-  } else if (!Number.isInteger(exercise.sets)) {
-    errors.push('Sets must be a whole number');
+  if (exercise.sets && exercise.sets.trim()) {
+    const setsNum = parseInt(exercise.sets, 10);
+    if (isNaN(setsNum)) {
+      errors.push('Sets must be a valid number');
+    } else if (setsNum < 1) {
+      errors.push('Must have at least 1 set');
+    } else if (setsNum > 20) {
+      errors.push('Cannot have more than 20 sets');
+    }
   }
 
-  // Validate rest time (should be a non-negative integer in seconds)
-  if (typeof exercise.restTime !== 'number' || isNaN(exercise.restTime)) {
-    errors.push('Rest time must be a valid number');
-  } else if (exercise.restTime < 0) {
-    errors.push('Rest time cannot be negative');
-  } else if (exercise.restTime > 600) {
-    errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
+  // Validate rest time (should be a positive number in seconds)
+  if (exercise.restTime && exercise.restTime.trim()) {
+    const restNum = parseInt(exercise.restTime, 10);
+    if (isNaN(restNum)) {
+      errors.push('Rest time must be a valid number');
+    } else if (restNum < 0) {
+      errors.push('Rest time cannot be negative');
+    } else if (restNum > 600) {
+      errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
+    }
   }
 
   return {

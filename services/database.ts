@@ -80,11 +80,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight REAL DEFAULT 0,
-      reps INTEGER DEFAULT 8,
-      sets INTEGER DEFAULT 3,
-      rest_time INTEGER DEFAULT 180,
-      progression REAL DEFAULT 0,
+      weight TEXT DEFAULT '0',
+      reps TEXT DEFAULT '8',
+      sets TEXT DEFAULT '3',
+      rest_time TEXT DEFAULT '180',
+      progression TEXT DEFAULT '',
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
     );
@@ -109,13 +109,13 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight REAL DEFAULT 0,
-      reps INTEGER DEFAULT 8,
-      sets INTEGER DEFAULT 3,
-      rest_time INTEGER DEFAULT 180,
-      progression REAL DEFAULT 0,
-      logged_weight REAL DEFAULT 0,
-      logged_reps INTEGER DEFAULT 0,
+      weight TEXT DEFAULT '0',
+      reps TEXT DEFAULT '8',
+      sets TEXT DEFAULT '3',
+      rest_time TEXT DEFAULT '180',
+      progression TEXT DEFAULT '',
+      logged_weight TEXT DEFAULT '',
+      logged_reps TEXT DEFAULT '',
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
     );
@@ -138,11 +138,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight REAL DEFAULT 0,
-      reps INTEGER DEFAULT 8,
-      sets INTEGER DEFAULT 3,
-      rest_time INTEGER DEFAULT 180,
-      progression REAL DEFAULT 0,
+      weight TEXT DEFAULT '0',
+      reps TEXT DEFAULT '8',
+      sets TEXT DEFAULT '3',
+      rest_time TEXT DEFAULT '180',
+      progression TEXT DEFAULT '',
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
     );
@@ -307,7 +307,7 @@ export const getAllPrograms = async (): Promise<Program[]> => {
 /**
  * Get a single program by ID
  */
-export const getProgramById = async (programId: string): Promise<Program | null> => { 
+export const getProgramById = async (programId: string): Promise<Program | null> => {
   const database = await getDatabase();
   
   const program = await database.getFirstAsync<{
@@ -350,11 +350,11 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
+      weight: string;
+      reps: string;
+      sets: string;
+      rest_time: string;
+      progression: string;
       position: number;
     }>(
       'SELECT * FROM program_exercises WHERE workout_day_id = ? ORDER BY position',
@@ -522,13 +522,13 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
-      logged_weight: number;
-      logged_reps: number;
+      weight: string;
+      reps: string;
+      sets: string;
+      rest_time: string;
+      progression: string;
+      logged_weight: string;
+      logged_reps: string;
       position: number;
     }>(
       'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
@@ -638,14 +638,14 @@ export const deleteWorkout = async (workoutId: string): Promise<void> => {
 export const getLastLoggedWeight = async (
   exerciseName: string,
   programId: string
-): Promise<number | null> => {
+): Promise<string | null> => {
   const database = await getDatabase();
   
-  const result = await database.getFirstAsync<{ logged_weight: number }>(
+  const result = await database.getFirstAsync<{ logged_weight: string }>(
     `SELECT we.logged_weight 
      FROM workout_exercises we
      JOIN workouts w ON we.workout_id = w.id
-     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight > 0
+     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight != ''
      ORDER BY w.date DESC
      LIMIT 1`,
     [exerciseName, programId]
@@ -681,11 +681,11 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
+      weight: string;
+      reps: string;
+      sets: string;
+      rest_time: string;
+      progression: string;
       position: number;
     }>(
       'SELECT * FROM queue_exercises WHERE queue_item_id = ? ORDER BY position',
@@ -911,9 +911,13 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
       const lastWeight = await getLastLoggedWeight(exercise.name, programId);
       
       let newWeight = exercise.weight;
-      if (lastWeight !== null && exercise.progression > 0) {
-        newWeight = lastWeight + exercise.progression;
-      } else if (lastWeight !== null) {
+      if (lastWeight && exercise.progression) {
+        const lastWeightNum = parseFloat(lastWeight.replace(/[^0-9.]/g, ''));
+        const progressionNum = parseFloat(exercise.progression);
+        if (!isNaN(lastWeightNum) && !isNaN(progressionNum) && progressionNum > 0) {
+          newWeight = String(lastWeightNum + progressionNum);
+        }
+      } else if (lastWeight) {
         // Use last logged weight if no progression defined
         newWeight = lastWeight;
       }

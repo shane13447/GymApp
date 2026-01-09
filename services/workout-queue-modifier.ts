@@ -20,7 +20,7 @@ interface ExerciseData {
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
 
 /**
- * Find exercise by name with strict matching
+ * Find exercise by name with fuzzy matching
  */
 export const findExerciseByName = (
   name: string
@@ -36,19 +36,10 @@ export const findExerciseByName = (
     }
   }
   
-  // Try matching via aliases
-  const aliasMatch = EXERCISE_ALIASES[lowerName];
-  if (aliasMatch && aliasMatch.length > 0) {
-    for (const ex of EXERCISES) {
-      if (ex.name.toLowerCase() === aliasMatch[0].toLowerCase()) {
-        return ex;
-      }
-    }
-  }
-  
-  // Try high-similarity fuzzy match (>0.8)
+  // Try fuzzy match (contains)
   for (const ex of EXERCISES) {
-    if (getSimilarity(ex.name.toLowerCase(), lowerName) > 0.8) {
+    if (ex.name.toLowerCase().includes(lowerName) ||
+        lowerName.includes(ex.name.toLowerCase())) {
       return ex;
     }
   }
@@ -483,8 +474,8 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
     .map((item, queueIndex) => {
       const exercises = item.exercises
         .map((ex) => {
-          // Use full exercise names, convert numbers to strings for LLM
-          return `${ex.name}|${ex.weight ?? 0}|${ex.reps ?? 8}|${ex.sets ?? 3}`;
+          // Use full exercise names
+          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}`;
         })
         .join(',');
     return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
@@ -569,21 +560,12 @@ export const parseQueueFormatResponse = (
         if (parts.length < 4) continue;
 
         const exerciseName = parts[0].trim();
-        const weight = parseFloat(parts[1]?.trim() || '0') || 0;
-        const reps = parseInt(parts[2]?.trim() || '8', 10) || 8;
-        const sets = parseInt(parts[3]?.trim() || '3', 10) || 3;
+        const weight = parts[1]?.trim() || '0';
+        const reps = parts[2]?.trim() || '8';
+        const sets = parts[3]?.trim() || '3';
         
-        // Try to find the exercise by full name first
-        let exerciseData = findExerciseByName(exerciseName);
-        
-        // If not found, try resolving via aliases (for ADD requests where LLM uses common names)
-        if (!exerciseData) {
-          const lowerExName = exerciseName.toLowerCase().trim();
-          const aliasMatch = EXERCISE_ALIASES[lowerExName];
-          if (aliasMatch && aliasMatch.length > 0) {
-            exerciseData = findExerciseByName(aliasMatch[0]);
-          }
-        }
+        // Try to find the exercise by full name or fuzzy match
+        const exerciseData = findExerciseByName(exerciseName);
         
         if (exerciseData) {
           exercises.push({
@@ -593,16 +575,15 @@ export const parseQueueFormatResponse = (
             weight,
             reps,
             sets,
-            restTime: 180,
-            progression: 0,
+            restTime: '180',
+            progression: '',
           });
         } else {
-          // Try to find in original exercises by comparing names (stricter matching)
+          // Try to find in original exercises by comparing names
           const originalEx = originalItem.exercises.find((ex) => {
-            const exLower = ex.name.toLowerCase();
-            const nameLower = exerciseName.toLowerCase();
-            // Require exact match or very high similarity (>0.85)
-            return exLower === nameLower || getSimilarity(exLower, nameLower) > 0.85;
+            return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
+                   ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
+                   exerciseName.toLowerCase().includes(ex.name.toLowerCase());
           });
           
           if (originalEx) {
@@ -617,8 +598,8 @@ export const parseQueueFormatResponse = (
               weight,
               reps,
               sets,
-              restTime: 180,
-              progression: 0,
+              restTime: '180',
+              progression: '',
             });
           }
         }
@@ -710,48 +691,19 @@ export const repairQueueWithIntent = (
     requestLower.includes('ditch');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
-  // Detect ADD requests - these should NOT have repair logic applied
-  const isAddRequest = 
-    requestLower.includes('add ') ||
-    requestLower.includes('put ') ||
-    requestLower.includes('include ') ||
-    requestLower.includes('insert ');
-  console.log('[REPAIR] isAddRequest:', isAddRequest);
-  
-  // For ADD requests, return the parsed queue as-is (LLM output is authoritative for adds)
-  if (isAddRequest) {
-    console.log('[REPAIR] Skipping repair for ADD request - LLM output is authoritative');
-    return parsedQueue;
-  }
-  
-  // Extract ALL target values from request (supports multiple exercises with different values)
-  // e.g., "make calf press 20 reps but drop leg extensions to 6"
-  const allRepsMatches = [...userPrompt.matchAll(/(\w+(?:\s+\w+)*)\s+(?:to\s+)?(\d+)\s*reps?/gi)];
-  const allRepsToMatches = [...userPrompt.matchAll(/(\w+(?:\s+\w+)*)\s+reps?\s+(?:to\s+)?(\d+)/gi)];
-  
-  // Build a map of exercise -> reps for multi-exercise requests
-  const exerciseRepsMap = new Map<string, number>();
-  for (const match of [...allRepsMatches, ...allRepsToMatches]) {
-    const exercisePart = match[1].toLowerCase().trim();
-    const repsValue = parseInt(match[2], 10);
-    if (!isNaN(repsValue)) {
-      exerciseRepsMap.set(exercisePart, repsValue);
-    }
-  }
-  
-  // Fallback: single global value extraction (for simple requests)
+  // Extract target values from request
   const repsMatch = userPrompt.match(/(\d+)\s*reps?/i) || userPrompt.match(/reps?\s*(?:to\s*)?(\d+)/i);
-  const globalTargetReps = repsMatch ? parseInt(repsMatch[1], 10) : null;
+  const targetReps = repsMatch ? repsMatch[1] : null;
   
   const weightMatch = userPrompt.match(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/i) || userPrompt.match(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/i);
-  const targetWeight = weightMatch ? parseFloat(weightMatch[1]) : null;
+  const targetWeight = weightMatch ? weightMatch[1] : null;
   
   const setsMatch = userPrompt.match(/(\d+)\s*sets?/i) || userPrompt.match(/sets?\s*(?:to\s*)?(\d+)/i);
-  const targetSets = setsMatch ? parseInt(setsMatch[1], 10) : null;
+  const targetSets = setsMatch ? setsMatch[1] : null;
   
   // Also check "to X" pattern
   const toValueMatch = userPrompt.match(/to\s+(\d+(?:\.\d+)?)/i);
-  const toValue = toValueMatch ? parseFloat(toValueMatch[1]) : null;
+  const toValue = toValueMatch ? toValueMatch[1] : null;
 
   // Normalize "expected" values for each column (supports concurrent attribute prompts)
   const mentionsReps = requestLower.includes('rep');
@@ -759,11 +711,9 @@ export const repairQueueWithIntent = (
   const mentionsSets = requestLower.includes('set');
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets;
 
-  // Only use global expected values if there's a single target (not multi-exercise requests)
-  const hasMultipleRepsTargets = exerciseRepsMap.size > 1;
-  const expectedReps = hasMultipleRepsTargets ? null : (globalTargetReps ?? (toValue !== null && mentionsReps ? Math.round(toValue) : null));
-  const expectedWeight = targetWeight ?? (toValue !== null && mentionsWeight ? toValue : null);
-  const expectedSets = targetSets ?? (toValue !== null && mentionsSets ? Math.round(toValue) : null);
+  const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
+  const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
+  const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
     const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
@@ -784,39 +734,23 @@ export const repairQueueWithIntent = (
         getSimilarity(targetName, originalEx.name) > 0.8
       ) || requestLower.includes(ex.name.toLowerCase());
       
-      // --- MULTI-EXERCISE REPS FIX ---
-      // Check if this specific exercise has a reps value in the exerciseRepsMap
-      let exerciseSpecificReps: number | null = null;
-      for (const [exercisePart, repsValue] of exerciseRepsMap) {
-        if (ex.name.toLowerCase().includes(exercisePart) || 
-            exercisePart.includes(ex.name.toLowerCase().split(' ')[0])) {
-          exerciseSpecificReps = repsValue;
-          break;
-        }
-      }
-      
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
       if (isTargeted) {
         // Apply intended changes (supports multiple columns at once).
         // If a column is NOT intended to change, restore it to the original value.
-        
-        // Use exercise-specific reps if available, otherwise fall back to global
-        const targetRepsForExercise = exerciseSpecificReps ?? expectedReps;
 
-        if (targetRepsForExercise) {
-          // Only apply if LLM output doesn't already match AND isn't another valid value from the prompt
-          const llmRepsIsValidPromptValue = [...exerciseRepsMap.values()].includes(finalEx.reps);
-          if (finalEx.reps !== targetRepsForExercise && !llmRepsIsValidPromptValue) {
-            console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${targetRepsForExercise}`);
-            finalEx.reps = targetRepsForExercise;
+        if (expectedReps) {
+          if (finalEx.reps !== expectedReps) {
+            console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
+            finalEx.reps = expectedReps;
           }
 
           // Fix Column Confusion (Weight became Reps value)
-          if (finalEx.weight === targetRepsForExercise && originalEx.weight !== targetRepsForExercise) {
+          if (finalEx.weight === expectedReps && originalEx.weight !== expectedReps) {
             console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Weight, Apply Reps`);
             finalEx.weight = originalEx.weight;
-            finalEx.reps = targetRepsForExercise;
+            finalEx.reps = expectedReps;
           }
         } else if (hasExplicitColumnIntent && !mentionsReps && finalEx.reps !== originalEx.reps) {
           finalEx.reps = originalEx.reps;
@@ -1205,10 +1139,9 @@ export const enforceColumnChanges = (
   
   // Extract the new value from the request
   const valueMatch = request.match(/to\s+(\d+(?:\.\d+)?)/i);
-  const newValueStr = valueMatch ? valueMatch[1] : null;
-  const newValue = newValueStr ? parseFloat(newValueStr) : null;
+  const newValue = valueMatch ? valueMatch[1] : null;
   
-  if (newValue === null || changeTypes.includes('unknown') || changeTypes.includes('remove') || changeTypes.includes('add')) {
+  if (!newValue || changeTypes.includes('unknown') || changeTypes.includes('remove') || changeTypes.includes('add')) {
     return parsedQueue; // Can't enforce without knowing the intended value
   }
   
@@ -1281,7 +1214,7 @@ export const enforceColumnChanges = (
             repairedEx.sets = originalEx.sets;
           }
           // Ensure weight actually changed
-          if (parsedEx.weight === originalEx.weight && newValue !== null) {
+          if (parsedEx.weight === originalEx.weight && newValue) {
             console.log(`[REPAIR] Applying weight change for ${originalEx.name}: ${originalEx.weight} -> ${newValue}`);
             repairedEx.weight = newValue;
           }
@@ -1298,9 +1231,9 @@ export const enforceColumnChanges = (
             repairedEx.sets = originalEx.sets;
           }
           // Ensure reps actually changed
-          if (parsedEx.reps === originalEx.reps && newValue !== null) {
+          if (parsedEx.reps === originalEx.reps && newValue) {
             console.log(`[REPAIR] Applying reps change for ${originalEx.name}: ${originalEx.reps} -> ${newValue}`);
-            repairedEx.reps = Math.round(newValue);
+            repairedEx.reps = newValue;
           }
         }
         
@@ -1315,9 +1248,9 @@ export const enforceColumnChanges = (
             repairedEx.reps = originalEx.reps;
           }
           // Ensure sets actually changed
-          if (parsedEx.sets === originalEx.sets && newValue !== null) {
+          if (parsedEx.sets === originalEx.sets && newValue) {
             console.log(`[REPAIR] Applying sets change for ${originalEx.name}: ${originalEx.sets} -> ${newValue}`);
-            repairedEx.sets = Math.round(newValue);
+            repairedEx.sets = newValue;
           }
         }
         
@@ -1362,28 +1295,28 @@ export const repairQueue = (
 
 export interface ProposedChanges {
   weightChanges: Array<{
-    queueItemId: string;
+  queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-    exerciseName: string;
-    oldWeight: number;
-    newWeight: number;
+  exerciseName: string;
+    oldWeight: string;
+  newWeight: string;
   }>;
   repsChanges: Array<{
-    queueItemId: string;
+  queueItemId: string;
     queueItemName: string;
     dayNumber: number;
-    exerciseName: string;
-    oldReps: number;
-    newReps: number;
+  exerciseName: string;
+    oldReps: string;
+    newReps: string;
   }>;
   setsChanges: Array<{
     queueItemId: string;
     queueItemName: string;
     dayNumber: number;
     exerciseName: string;
-    oldSets: number;
-    newSets: number;
+    oldSets: string;
+    newSets: string;
   }>;
   removals: Array<{
     queueItemId: string;
@@ -1397,9 +1330,9 @@ export interface ProposedChanges {
     queueItemName: string;
     dayNumber: number;
     exerciseName: string;
-    weight: number;
-    reps: number;
-    sets: number;
+    weight: string;
+    reps: string;
+    sets: string;
     equipment: string;
     muscle_groups_worked: string[];
   }>;
@@ -1424,12 +1357,12 @@ export interface QueueDifference {
   exerciseName?: string;
   oldExercise?: ProgramExercise;
   newExercise?: ProgramExercise;
-  oldWeight?: number;
-  newWeight?: number;
-  oldReps?: number;
-  newReps?: number;
-  oldSets?: number;
-  newSets?: number;
+  oldWeight?: string;
+  newWeight?: string;
+  oldReps?: string;
+  newReps?: string;
+  oldSets?: string;
+  newSets?: string;
   newExerciseName?: string;
   details?: string;
 }
@@ -1576,8 +1509,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldWeight: diff.oldWeight ?? 0,
-          newWeight: diff.newWeight ?? 0,
+          oldWeight: diff.oldWeight || '',
+          newWeight: diff.newWeight || '',
         });
         break;
       
@@ -1587,8 +1520,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldReps: diff.oldReps ?? 0,
-          newReps: diff.newReps ?? 0,
+          oldReps: diff.oldReps || '',
+          newReps: diff.newReps || '',
         });
         break;
 
@@ -1598,8 +1531,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
           queueItemName: diff.queueItemName,
           dayNumber: diff.dayNumber,
           exerciseName: diff.exerciseName || '',
-          oldSets: diff.oldSets ?? 0,
-          newSets: diff.newSets ?? 0,
+          oldSets: diff.oldSets || '',
+          newSets: diff.newSets || '',
         });
         break;
 

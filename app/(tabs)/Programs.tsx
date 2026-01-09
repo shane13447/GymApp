@@ -8,19 +8,19 @@ import { Alert, Pressable, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ExerciseConfigCard } from '@/components/programs/ExerciseConfigCard';
-import { ExerciseSelector, createProgramExercise } from '@/components/programs/ExerciseSelector';
 import { ProgramCard } from '@/components/programs/ProgramCard';
+import { ExerciseSelector, createProgramExercise } from '@/components/programs/ExerciseSelector';
+import { ExerciseConfigCard } from '@/components/programs/ExerciseConfigCard';
 import { SelectedExercisesList } from '@/components/programs/SelectedExercisesList';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import { showDeleteConfirmation } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import exercisesData from '@/data/exerciseSelection.json';
+import { showDeleteConfirmation } from '@/components/ui/ConfirmDialog';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import { validateProgramName, validateNumberOfDays } from '@/lib/validation';
+import exercisesData from '@/data/exerciseSelection.json';
 import * as db from '@/services/database';
 import type {
   Exercise,
@@ -28,7 +28,7 @@ import type {
   ProgramExercise,
   WorkoutDay,
 } from '@/types';
-import { CreateProgramStep, ProgramViewMode } from '@/types';
+import { ProgramViewMode, CreateProgramStep } from '@/types';
 
 export default function ProgramsScreen() {
   // View state
@@ -121,12 +121,6 @@ export default function ProgramsScreen() {
 
   const updateExerciseField = useCallback(
     (exerciseName: string, field: keyof ProgramExercise, value: string, dayNumber?: number) => {
-      // Determine if field is numeric and parse accordingly
-      const numericFields: (keyof ProgramExercise)[] = ['weight', 'reps', 'sets', 'restTime', 'progression'];
-      const finalValue = numericFields.includes(field)
-        ? (field === 'weight' || field === 'progression' ? parseFloat(value) || 0 : parseInt(value, 10) || 0)
-        : value;
-
       if (createStep === CreateProgramStep.Configuration && dayNumber !== undefined) {
         setWorkoutDays((prev) =>
           prev.map((day) =>
@@ -134,7 +128,7 @@ export default function ProgramsScreen() {
               ? {
                   ...day,
                   exercises: day.exercises.map((ex) =>
-                    ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
+                    ex.name === exerciseName ? { ...ex, [field]: value } : ex
                   ),
                 }
               : day
@@ -143,7 +137,7 @@ export default function ProgramsScreen() {
       } else {
         setSelectedExercises((prev) =>
           prev.map((ex) =>
-            ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
+            ex.name === exerciseName ? { ...ex, [field]: value } : ex
           )
         );
       }
@@ -843,7 +837,7 @@ export default function ProgramsScreen() {
                           <ThemedText className="font-semibold">{exercise.reps}</ThemedText>
                         </View>
                       )}
-                      {exercise.weight !== undefined && exercise.weight !== 0 && (
+                      {exercise.weight && exercise.weight !== '0' && (
                         <View>
                           <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                             Weight
@@ -875,4 +869,4 @@ export default function ProgramsScreen() {
 }
 
 // Re-export types for backward compatibility
-export type { Exercise, Program, ProgramExercise, WorkoutDay };
+export type { Exercise, ProgramExercise, WorkoutDay, Program };

@@ -19,19 +19,19 @@ export interface Exercise {
  * Exercise with program-specific data (sets, reps, weight, etc.)
  */
 export interface ProgramExercise extends Exercise {
-  weight: number;       // Weight in kg (can be decimal, e.g., 82.5)
-  reps: number;         // Rep count (whole number only, e.g., 8)
-  sets: number;         // Number of sets (whole number, e.g., 3)
-  restTime: number;     // Rest time in seconds (whole number, e.g., 180)
-  progression: number;  // Weight progression per session (can be decimal, e.g., 2.5)
+  weight: string;
+  reps: string;
+  sets: string;
+  restTime: string;
+  progression: string;
 }
 
 /**
  * Exercise with logged values from a completed workout
  */
 export interface WorkoutExercise extends ProgramExercise {
-  loggedWeight: number;  // Actual weight used during workout
-  loggedReps: number;    // Actual reps completed during workout
+  loggedWeight: string;
+  loggedReps: string;
 }
 
 // =============================================================================
