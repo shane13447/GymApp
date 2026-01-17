@@ -44,8 +44,9 @@ describe('sanitizeRestTime', () => {
       expect(sanitizeRestTime(null)).toBe(DEFAULT_REST_TIME_SECONDS);
     });
 
-    it('should return default for 0', () => {
-      expect(sanitizeRestTime(0)).toBe(DEFAULT_REST_TIME_SECONDS);
+    it('should return minimum for 0 (nullish coalescing preserves 0)', () => {
+      // Using ?? instead of || means 0 is treated as a valid number, then clamped to minimum
+      expect(sanitizeRestTime(0)).toBe(MIN_REST_TIME_SECONDS);
     });
 
     it('should return minimum for negative values', () => {
@@ -54,9 +55,28 @@ describe('sanitizeRestTime', () => {
     });
   });
 
+  describe('NaN and Infinity handling', () => {
+    it('should return default for NaN', () => {
+      expect(sanitizeRestTime(NaN)).toBe(DEFAULT_REST_TIME_SECONDS);
+    });
+
+    it('should return default for Infinity', () => {
+      expect(sanitizeRestTime(Infinity)).toBe(DEFAULT_REST_TIME_SECONDS);
+    });
+
+    it('should return default for negative Infinity', () => {
+      expect(sanitizeRestTime(-Infinity)).toBe(DEFAULT_REST_TIME_SECONDS);
+    });
+  });
+
   describe('edge cases', () => {
-    it('should handle very large values', () => {
-      expect(sanitizeRestTime(999999)).toBe(999999);
+    it('should cap very large values at MAX_REASONABLE_TIME_SECONDS', () => {
+      expect(sanitizeRestTime(999999)).toBe(MAX_REASONABLE_TIME_SECONDS);
+      expect(sanitizeRestTime(MAX_REASONABLE_TIME_SECONDS + 1)).toBe(MAX_REASONABLE_TIME_SECONDS);
+    });
+
+    it('should allow values at exactly MAX_REASONABLE_TIME_SECONDS', () => {
+      expect(sanitizeRestTime(MAX_REASONABLE_TIME_SECONDS)).toBe(MAX_REASONABLE_TIME_SECONDS);
     });
 
     it('should handle fractional values', () => {
@@ -117,7 +137,7 @@ describe('isValidRemainingTime', () => {
 
     it('should return true for positive times within limit', () => {
       expect(isValidRemainingTime(60)).toBe(true);
-      expect(isValidRemainingTime(3600)).toBe(true);
+      expect(isValidRemainingTime(600)).toBe(true); // 10 minutes, within 15 min max
       expect(isValidRemainingTime(MAX_REASONABLE_TIME_SECONDS)).toBe(true);
     });
   });
