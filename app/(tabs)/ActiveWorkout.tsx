@@ -318,21 +318,48 @@ export default function ActiveWorkout() {
     []
   );
 
+  // =============================================================================
   // Handle day change - allows user to switch days even when loaded from queue
+  // =============================================================================
+  // RACE CONDITION FIX: Coordinate unmount/cleanup sequence properly.
+  // Problem: Previously we called clearAllActiveTimers() while old ExerciseLogCard
+  // components were still mounted with active intervals. Those intervals could
+  // fire AFTER we cleared the DB, causing state/DB mismatch.
+  // 
+  // Solution: Orchestrate the sequence carefully:
+  // 1. Clear workoutExercises first → triggers React to unmount old cards
+  // 2. Small delay to let React flush unmount effects (cleanup intervals)
+  // 3. Now safe to clear all timers from DB (no racing intervals)
+  // 4. Load new exercises for the new day
   const handleDayChange = useCallback(async (newIndex: number) => {
     if (!currentProgram || newIndex === selectedDayIndex) return;
 
-    // Clear all active timers when switching days
+    // STEP 1: Clear exercises to unmount old ExerciseLogCards
+    // This triggers React to run their cleanup effects (clearing intervals,
+    // setting isMountedRef = false)
+    setWorkoutExercises([]);
+    
+    // STEP 2: Allow React to flush the unmount effects
+    // A small delay ensures cleanup effects have run before we touch the DB.
+    // 50ms is enough for React to process the unmount synchronously.
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // STEP 3: Now safe to clear all active timers from DB
+    // At this point, all old ExerciseLogCard instances have:
+    // - Set their isMountedRef to false
+    // - Cleared their intervals
+    // - Any in-flight DB operations will check isMountedRef and bail
     try {
       await db.clearAllActiveTimers();
     } catch (error) {
       console.error('Error clearing timers:', error);
     }
 
+    // STEP 4: Update state for the new day
     setSelectedDayIndex(newIndex);
     setIsLoadedFromQueue(false); // Allow normal day-based loading
 
-    // Load exercises for the new day
+    // STEP 5: Load exercises for the new day
     const selectedDay = currentProgram.workoutDays[newIndex];
     if (!selectedDay) return;
 
@@ -446,16 +473,21 @@ export default function ActiveWorkout() {
     }
   };
 
+  // COMPOSITE KEY FIX: Pass programId and dayNumber to ExerciseLogCard
+  // This allows each exercise's timer to be uniquely identified in the database
+  // by (exercise_name, program_id, day_number) instead of just exercise_name.
   const renderExercise = useCallback(
     ({ item, index }: { item: WorkoutExercise; index: number }) => (
       <ExerciseLogCard
         exercise={item}
         index={index}
+        programId={currentProgram?.id ?? ''}
+        dayNumber={selectedDayIndex + 1}
         onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
         onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
       />
     ),
-    [updateLoggedValue]
+    [updateLoggedValue, currentProgram?.id, selectedDayIndex]
   );
 
   if (isLoading) {

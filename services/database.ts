@@ -148,12 +148,18 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     );
 
     -- Active Rest Timers Table (for persisting timers across app lifecycle)
+    -- COMPOSITE KEY FIX: Uses (exercise_name, program_id, day_number) to prevent
+    -- collisions when the same exercise appears on multiple days or programs.
+    -- This allows timers to be properly isolated per workout context.
     CREATE TABLE IF NOT EXISTS active_rest_timers (
-      exercise_name TEXT PRIMARY KEY,
+      exercise_name TEXT NOT NULL,
+      program_id TEXT NOT NULL,
+      day_number INTEGER NOT NULL,
       end_timestamp INTEGER NOT NULL,
       sets_completed INTEGER DEFAULT 0,
       rest_duration INTEGER NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (exercise_name, program_id, day_number)
     );
 
     -- Create indexes for better query performance
@@ -953,10 +959,21 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
 // =============================================================================
 
 /**
- * Timer state stored in database
+ * Timer context - identifies which workout context a timer belongs to.
+ * COMPOSITE KEY FIX: This allows the same exercise name to have separate timers
+ * on different days or in different programs.
  */
-export interface ActiveTimerState {
+export interface TimerContext {
   exerciseName: string;
+  programId: string;
+  dayNumber: number;
+}
+
+/**
+ * Timer state stored in database
+ * Extends TimerContext with the actual timer data
+ */
+export interface ActiveTimerState extends TimerContext {
   endTimestamp: number;
   setsCompleted: number;
   restDuration: number;
@@ -964,28 +981,42 @@ export interface ActiveTimerState {
 
 /**
  * Save an active rest timer (timestamp-based for persistence across app lifecycle)
+ * COMPOSITE KEY FIX: Now requires programId and dayNumber to uniquely identify the timer
  */
 export const saveActiveTimer = async (timer: ActiveTimerState): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync(
     `INSERT OR REPLACE INTO active_rest_timers 
-     (exercise_name, end_timestamp, sets_completed, rest_duration) 
-     VALUES (?, ?, ?, ?)`,
-    [timer.exerciseName, timer.endTimestamp, timer.setsCompleted, timer.restDuration]
+     (exercise_name, program_id, day_number, end_timestamp, sets_completed, rest_duration) 
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      timer.exerciseName,
+      timer.programId,
+      timer.dayNumber,
+      timer.endTimestamp,
+      timer.setsCompleted,
+      timer.restDuration,
+    ]
   );
 };
 
 /**
- * Get an active timer for a specific exercise
+ * Get an active timer for a specific exercise in a specific workout context
+ * COMPOSITE KEY FIX: Now requires full context (exercise + program + day)
  */
-export const getActiveTimer = async (exerciseName: string): Promise<ActiveTimerState | null> => {
+export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimerState | null> => {
   const database = await getDatabase();
   const result = await database.getFirstAsync<{
     exercise_name: string;
+    program_id: string;
+    day_number: number;
     end_timestamp: number;
     sets_completed: number;
     rest_duration: number;
-  }>('SELECT * FROM active_rest_timers WHERE exercise_name = ?', [exerciseName]);
+  }>(
+    'SELECT * FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseName, context.programId, context.dayNumber]
+  );
 
   if (!result) {
     return null;
@@ -993,6 +1024,8 @@ export const getActiveTimer = async (exerciseName: string): Promise<ActiveTimerS
 
   return {
     exerciseName: result.exercise_name,
+    programId: result.program_id,
+    dayNumber: result.day_number,
     endTimestamp: result.end_timestamp,
     setsCompleted: result.sets_completed,
     restDuration: result.rest_duration,
@@ -1006,6 +1039,8 @@ export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
   const database = await getDatabase();
   const results = await database.getAllAsync<{
     exercise_name: string;
+    program_id: string;
+    day_number: number;
     end_timestamp: number;
     sets_completed: number;
     rest_duration: number;
@@ -1013,6 +1048,8 @@ export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
 
   return results.map((r) => ({
     exerciseName: r.exercise_name,
+    programId: r.program_id,
+    dayNumber: r.day_number,
     endTimestamp: r.end_timestamp,
     setsCompleted: r.sets_completed,
     restDuration: r.rest_duration,
@@ -1021,14 +1058,19 @@ export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
 
 /**
  * Clear a specific timer (when stopped or completed)
+ * COMPOSITE KEY FIX: Now requires full context to identify which timer to clear
  */
-export const clearActiveTimer = async (exerciseName: string): Promise<void> => {
+export const clearActiveTimer = async (context: TimerContext): Promise<void> => {
   const database = await getDatabase();
-  await database.runAsync('DELETE FROM active_rest_timers WHERE exercise_name = ?', [exerciseName]);
+  await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseName, context.programId, context.dayNumber]
+  );
 };
 
 /**
- * Clear all active timers (e.g., when workout is saved)
+ * Clear all active timers (e.g., when workout is saved or day is switched)
+ * This clears ALL timers regardless of context - used for full reset scenarios
  */
 export const clearAllActiveTimers = async (): Promise<void> => {
   const database = await getDatabase();
@@ -1036,16 +1078,32 @@ export const clearAllActiveTimers = async (): Promise<void> => {
 };
 
 /**
+ * Clear all timers for a specific program/day context
+ * Useful for clearing only timers from a specific workout session
+ */
+export const clearTimersForContext = async (
+  programId: string,
+  dayNumber: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE program_id = ? AND day_number = ?',
+    [programId, dayNumber]
+  );
+};
+
+/**
  * Update sets completed for a timer (without changing timer state)
+ * COMPOSITE KEY FIX: Now requires full context
  */
 export const updateTimerSetsCompleted = async (
-  exerciseName: string,
+  context: TimerContext,
   setsCompleted: number
 ): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync(
-    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_name = ?',
-    [setsCompleted, exerciseName]
+    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [setsCompleted, context.exerciseName, context.programId, context.dayNumber]
   );
 };
 
