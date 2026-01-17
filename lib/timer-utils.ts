@@ -25,12 +25,21 @@ export const TIMER_NOTIFICATION_THRESHOLD_MS = 60000;
 
 /**
  * Sanitize rest time to ensure it's a valid positive number
- * @param restTime - Raw rest time value (could be undefined, 0, negative)
- * @returns Sanitized rest time (minimum 1 second, default 180)
+ * @param restTime - Raw rest time value (could be undefined, null, 0, negative, NaN, Infinity)
+ * @returns Sanitized rest time clamped between MIN_REST_TIME_SECONDS (1) and MAX_REASONABLE_TIME_SECONDS (900).
+ *          Returns DEFAULT_REST_TIME_SECONDS (180) for null, undefined, NaN, or Infinity inputs.
  */
 export function sanitizeRestTime(restTime: number | undefined | null): number {
-  const rawRestTime = restTime || DEFAULT_REST_TIME_SECONDS;
-  return Math.max(MIN_REST_TIME_SECONDS, rawRestTime);
+  // Handle null/undefined with nullish coalescing (preserves 0 as valid input)
+  const rawRestTime = restTime ?? DEFAULT_REST_TIME_SECONDS;
+  
+  // Guard against NaN and Infinity
+  if (!Number.isFinite(rawRestTime)) {
+    return DEFAULT_REST_TIME_SECONDS;
+  }
+  
+  // Clamp between minimum and maximum bounds
+  return Math.max(MIN_REST_TIME_SECONDS, Math.min(rawRestTime, MAX_REASONABLE_TIME_SECONDS));
 }
 
 /**
