@@ -318,6 +318,50 @@ export default function ActiveWorkout() {
     []
   );
 
+  // Handle day change - allows user to switch days even when loaded from queue
+  const handleDayChange = useCallback(async (newIndex: number) => {
+    if (!currentProgram || newIndex === selectedDayIndex) return;
+
+    // Clear all active timers when switching days
+    try {
+      await db.clearAllActiveTimers();
+    } catch (error) {
+      console.error('Error clearing timers:', error);
+    }
+
+    setSelectedDayIndex(newIndex);
+    setIsLoadedFromQueue(false); // Allow normal day-based loading
+
+    // Load exercises for the new day
+    const selectedDay = currentProgram.workoutDays[newIndex];
+    if (!selectedDay) return;
+
+    try {
+      const initialExercises: WorkoutExercise[] = await Promise.all(
+        selectedDay.exercises.map(async (ex) => {
+          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
+          const autoWeight = calculateAutoWeight(lastWeight, ex.progression);
+
+          return {
+            ...ex,
+            loggedWeight: autoWeight,
+            loggedReps: 0,
+          };
+        })
+      );
+
+      setWorkoutExercises(initialExercises);
+    } catch (error) {
+      console.error('Error loading exercises for new day:', error);
+      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
+        ...ex,
+        loggedWeight: 0,
+        loggedReps: 0,
+      }));
+      setWorkoutExercises(initialExercises);
+    }
+  }, [currentProgram, selectedDayIndex]);
+
   const saveWorkout = async () => {
     if (!currentProgram) return;
 
@@ -336,6 +380,9 @@ export default function ActiveWorkout() {
 
       await db.saveWorkout(newWorkout);
       await updateWorkoutQueue();
+
+      // Clear all active rest timers when workout is saved
+      await db.clearAllActiveTimers();
 
       Alert.alert('Success', 'Workout saved!', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (error) {
@@ -469,15 +516,13 @@ export default function ActiveWorkout() {
             </ThemedText>
           </ThemedView>
 
-          {/* Day Selector */}
-          {!isLoadedFromQueue && (
-            <DaySelector
-              days={currentProgram.workoutDays}
-              selectedIndex={selectedDayIndex}
-              onSelectDay={setSelectedDayIndex}
-              disabled={loadingFromQueue}
-            />
-          )}
+          {/* Day Selector - Always shown to allow switching days */}
+          <DaySelector
+            days={currentProgram.workoutDays}
+            selectedIndex={selectedDayIndex}
+            onSelectDay={handleDayChange}
+            disabled={loadingFromQueue}
+          />
 
           {/* Exercises */}
           {workoutExercises.length > 0 && (
