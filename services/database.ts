@@ -9,12 +9,12 @@
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
-    Program,
-    ProgramExercise,
-    UserPreferences,
-    Workout,
-    WorkoutDay,
-    WorkoutQueueItem
+  Program,
+  ProgramExercise,
+  UserPreferences,
+  Workout,
+  WorkoutDay,
+  WorkoutQueueItem
 } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
@@ -1121,9 +1121,10 @@ export const cleanupOrphanedTimers = async (): Promise<number> => {
   const now = Date.now();
   
   // Remove timers that have expired (end_timestamp is in the past)
-  // Also remove any timers older than 24 hours as a safety net
-  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-  const cutoffTime = now - TWENTY_FOUR_HOURS_MS;
+  // Also remove any timers older than 15 minutes as a safety net
+  // (rest timers are typically 1-5 minutes, so 15 min is generous)
+  const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+  const cutoffTime = now - FIFTEEN_MINUTES_MS;
   
   const result = await database.runAsync(
     `DELETE FROM active_rest_timers 

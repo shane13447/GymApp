@@ -332,7 +332,7 @@ describe('Constants', () => {
   it('should have reasonable default values', () => {
     expect(MIN_REST_TIME_SECONDS).toBe(1);
     expect(DEFAULT_REST_TIME_SECONDS).toBe(180);
-    expect(MAX_REASONABLE_TIME_SECONDS).toBe(86400); // 24 hours
+    expect(MAX_REASONABLE_TIME_SECONDS).toBe(900); // 15 minutes
     expect(TIMER_NOTIFICATION_THRESHOLD_MS).toBe(60000); // 60 seconds
   });
 });

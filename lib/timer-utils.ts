@@ -13,8 +13,8 @@ export const MIN_REST_TIME_SECONDS = 1;
 /** Default rest time if not specified */
 export const DEFAULT_REST_TIME_SECONDS = 180;
 
-/** Maximum reasonable timer duration (24 hours) */
-export const MAX_REASONABLE_TIME_SECONDS = 24 * 60 * 60;
+/** Maximum reasonable timer duration (15 minutes) */
+export const MAX_REASONABLE_TIME_SECONDS = 15 * 60;
 
 /** Threshold for notifying about completed timers (60 seconds) */
 export const TIMER_NOTIFICATION_THRESHOLD_MS = 60000;
