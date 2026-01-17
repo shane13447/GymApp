@@ -409,7 +409,15 @@ export default function ActiveWorkout() {
       await updateWorkoutQueue();
 
       // Clear all active rest timers when workout is saved
-      await db.clearAllActiveTimers();
+      // CONSISTENT ERROR HANDLING: Wrap in its own try/catch so timer clear failure
+      // doesn't cause "Failed to save workout" error when workout was actually saved.
+      // Timer cleanup is non-critical - the timers will be orphaned but won't affect UX.
+      try {
+        await db.clearAllActiveTimers();
+      } catch (timerError) {
+        console.error('Error clearing timers after workout save:', timerError);
+        // Don't rethrow - workout was saved successfully, timer cleanup is non-critical
+      }
 
       Alert.alert('Success', 'Workout saved!', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (error) {

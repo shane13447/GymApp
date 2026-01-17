@@ -6,11 +6,13 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 import '../global.css';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import * as db from '@/services/database';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -18,6 +20,28 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  
+  // =============================================================================
+  // ORPHANED TIMER CLEANUP: Run on app startup
+  // =============================================================================
+  // Problem: If the app is force-killed mid-workout, timer records remain in the
+  // database. When the user reopens the app, these stale timers could cause issues.
+  // Solution: Clean up expired/orphaned timers on every app launch.
+  useEffect(() => {
+    const cleanupTimers = async () => {
+      try {
+        const deletedCount = await db.cleanupOrphanedTimers();
+        if (deletedCount > 0) {
+          console.log(`Cleaned up ${deletedCount} orphaned timer record(s)`);
+        }
+      } catch (error) {
+        // Non-critical - just log and continue
+        console.error('Error cleaning up orphaned timers:', error);
+      }
+    };
+    
+    cleanupTimers();
+  }, []);
 
   return (
     <ErrorBoundary>

@@ -1107,6 +1107,33 @@ export const updateTimerSetsCompleted = async (
   );
 };
 
+/**
+ * Clean up orphaned/expired timer records
+ * ORPHANED TIMER FIX: Called on app startup to remove timers that:
+ * 1. Have already expired (end_timestamp < now)
+ * 2. Are older than a threshold (e.g., 24 hours) regardless of state
+ * 
+ * This handles scenarios where the app was force-killed mid-workout
+ * and timer records were left in the database.
+ */
+export const cleanupOrphanedTimers = async (): Promise<number> => {
+  const database = await getDatabase();
+  const now = Date.now();
+  
+  // Remove timers that have expired (end_timestamp is in the past)
+  // Also remove any timers older than 24 hours as a safety net
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  const cutoffTime = now - TWENTY_FOUR_HOURS_MS;
+  
+  const result = await database.runAsync(
+    `DELETE FROM active_rest_timers 
+     WHERE end_timestamp < ? OR created_at < datetime(?, 'unixepoch', 'localtime')`,
+    [now, Math.floor(cutoffTime / 1000)]
+  );
+  
+  return result.changes;
+};
+
 // =============================================================================
 // MIGRATION / DATA IMPORT
 // =============================================================================

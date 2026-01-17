@@ -9,6 +9,14 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  calculateRemainingTime,
+  calculateTimerProgress,
+  formatTime,
+  isValidRemainingTime,
+  sanitizeRestTime,
+  shouldNotifyTimerComplete
+} from '@/lib/timer-utils';
 import * as db from '@/services/database';
 import type { WorkoutExercise } from '@/types';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -53,6 +61,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [setsCompleted, setSetsCompleted] = useState(0);
   const [timerCompleted, setTimerCompleted] = useState(false);
+  // LOADING STATE FIX: Track when async timer operations are in progress
+  // This prevents rapid clicks from causing race conditions
+  const [isOperationPending, setIsOperationPending] = useState(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasVibratedRef = useRef(false);
   
@@ -86,7 +97,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   }, [endTimestamp]);
 
   // Get rest time in seconds from exercise (defaults to 180)
-  const restTimeSeconds = exercise.restTime || 180;
+  // Uses sanitizeRestTime from timer-utils for consistent validation
+  const restTimeSeconds = sanitizeRestTime(exercise.restTime);
   
   // Get target sets for display
   const targetSets = exercise.sets || 0;
@@ -152,7 +164,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         
         if (savedTimer) {
           const now = Date.now();
-          const remaining = Math.max(0, Math.ceil((savedTimer.endTimestamp - now) / 1000));
+          const remaining = calculateRemainingTime(savedTimer.endTimestamp, now);
           
           setSetsCompleted(savedTimer.setsCompleted);
           
@@ -172,12 +184,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
             // RACE CONDITION FIX: Use safe clear instead of fire-and-forget
             await safeClearTimer();
             
-            // Vibrate to notify if timer completed recently (within last 60 seconds)
-            // MAGIC NUMBER FIX: This threshold determines how "stale" a completed timer
-            // can be before we skip the notification. 60s means if you were away for
-            // more than a minute, we assume you already know time passed.
-            const TIMER_NOTIFICATION_THRESHOLD_MS = 60000;
-            if (savedTimer.endTimestamp > now - TIMER_NOTIFICATION_THRESHOLD_MS) {
+            // Vibrate to notify if timer completed recently
+            // Uses shouldNotifyTimerComplete from timer-utils
+            if (shouldNotifyTimerComplete(savedTimer.endTimestamp, now)) {
               notifyTimerComplete();
             }
           }
@@ -210,7 +219,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
       if (nextAppState === 'active' && currentEndTimestamp) {
         // Recalculate remaining time when app becomes active
         const now = Date.now();
-        const remaining = Math.max(0, Math.ceil((currentEndTimestamp - now) / 1000));
+        const remaining = calculateRemainingTime(currentEndTimestamp, now);
         
         if (remaining > 0) {
           setTimerSeconds(remaining);
@@ -243,31 +252,34 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // Start the rest timer and increment sets completed
   // =============================================================================
   // STALE CLOSURE FIX: Use functional update for setsCompleted.
-  // Problem: If user spam-clicks the button fast enough, the closure might have
-  // a stale setsCompleted value, causing incorrect counts.
-  // Solution: Use setSetsCompleted(prev => prev + 1) pattern.
   // COMPOSITE KEY FIX: Now uses timerContext when saving to DB
+  // RAPID CLICK FIX: Uses isOperationPending to prevent concurrent operations
   const startTimer = useCallback(async () => {
     // RACE CONDITION FIX: Check mounted state
     if (!isMountedRef.current) return;
     
-    const newEndTimestamp = Date.now() + restTimeSeconds * 1000;
+    // RAPID CLICK FIX: Prevent starting if an operation is already in progress
+    if (isOperationPending) return;
     
-    // STALE CLOSURE FIX: Use functional update to get accurate count
-    let newSetsCompleted = 0;
-    setSetsCompleted(prev => {
-      newSetsCompleted = prev + 1;
-      return newSetsCompleted;
-    });
+    setIsOperationPending(true);
     
-    setEndTimestamp(newEndTimestamp);
-    setTimerSeconds(restTimeSeconds);
-    setIsTimerRunning(true);
-    setTimerCompleted(false);
-    hasVibratedRef.current = false;
-
-    // Persist to database with full context
     try {
+      const newEndTimestamp = Date.now() + restTimeSeconds * 1000;
+      
+      // STALE CLOSURE FIX: Use functional update to get accurate count
+      let newSetsCompleted = 0;
+      setSetsCompleted(prev => {
+        newSetsCompleted = prev + 1;
+        return newSetsCompleted;
+      });
+      
+      setEndTimestamp(newEndTimestamp);
+      setTimerSeconds(restTimeSeconds);
+      setIsTimerRunning(true);
+      setTimerCompleted(false);
+      hasVibratedRef.current = false;
+
+      // Persist to database with full context
       await db.saveActiveTimer({
         ...timerContext,
         endTimestamp: newEndTimestamp,
@@ -279,33 +291,49 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
       if (isMountedRef.current) {
         console.error('Error saving timer state:', error);
       }
+    } finally {
+      // Only update state if still mounted
+      if (isMountedRef.current) {
+        setIsOperationPending(false);
+      }
     }
-  // STALE CLOSURE FIX: Removed setsCompleted from deps since we use functional update
-  // COMPOSITE KEY FIX: Added timerContext to deps
-  }, [restTimeSeconds, timerContext]);
+  }, [restTimeSeconds, timerContext, isOperationPending]);
 
   // =============================================================================
   // Stop/reset the timer
   // =============================================================================
+  // RAPID CLICK FIX: Uses isOperationPending to prevent concurrent operations
   const stopTimer = useCallback(async () => {
     // RACE CONDITION FIX: Check mounted state
     if (!isMountedRef.current) return;
     
-    // Clear interval first to stop any pending ticks
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
+    // RAPID CLICK FIX: Prevent stopping if an operation is already in progress
+    if (isOperationPending) return;
     
-    // Update UI state
-    setIsTimerRunning(false);
-    setTimerSeconds(0);
-    setEndTimestamp(null);
-    setTimerCompleted(false);
+    setIsOperationPending(true);
+    
+    try {
+      // Clear interval first to stop any pending ticks
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      
+      // Update UI state
+      setIsTimerRunning(false);
+      setTimerSeconds(0);
+      setEndTimestamp(null);
+      setTimerCompleted(false);
 
-    // RACE CONDITION FIX: Use safe clear with proper error handling
-    await safeClearTimer();
-  }, [safeClearTimer]);
+      // RACE CONDITION FIX: Use safe clear with proper error handling
+      await safeClearTimer();
+    } finally {
+      // Only update state if still mounted
+      if (isMountedRef.current) {
+        setIsOperationPending(false);
+      }
+    }
+  }, [safeClearTimer, isOperationPending]);
 
   // =============================================================================
   // Timer countdown effect - recalculates from timestamp each tick
@@ -314,6 +342,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // 1. Fire-and-forget db.clearActiveTimer - now uses safeClearTimer
   // 2. State updates after unmount - now checks isMountedRef
   // 3. Battery drain from 100ms interval - changed to 1000ms
+  // CLOCK CHANGE FIX: Added sanity check for unreasonable remaining times
   useEffect(() => {
     if (isTimerRunning && endTimestamp) {
       timerIntervalRef.current = setInterval(() => {
@@ -327,11 +356,35 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         }
         
         const now = Date.now();
-        const remaining = Math.max(0, Math.ceil((endTimestamp - now) / 1000));
+        const remaining = calculateRemainingTime(endTimestamp, now);
         
-        setTimerSeconds(remaining);
+        // =============================================================================
+        // CLOCK CHANGE FIX: Sanity check for device clock manipulation
+        // =============================================================================
+        // Uses isValidRemainingTime from timer-utils to detect invalid states
+        if (!isValidRemainingTime(remaining)) {
+          // Timer is in an invalid state - treat as completed
+          console.warn(`Timer in invalid state: remaining=${remaining}s, treating as completed`);
+          
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          
+          setTimerSeconds(0);
+          setIsTimerRunning(false);
+          setTimerCompleted(true);
+          setEndTimestamp(null);
+          notifyTimerComplete();
+          safeClearTimer();
+          return;
+        }
         
-        if (remaining <= 0) {
+        // Cap remaining time at restTimeSeconds (handles minor clock drift backward)
+        const clampedRemaining = Math.min(remaining, restTimeSeconds);
+        setTimerSeconds(clampedRemaining);
+        
+        if (clampedRemaining <= 0) {
           // Clear interval immediately to prevent further ticks
           if (timerIntervalRef.current) {
             clearInterval(timerIntervalRef.current);
@@ -362,7 +415,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         timerIntervalRef.current = null;
       }
     };
-  }, [isTimerRunning, endTimestamp, safeClearTimer, notifyTimerComplete]);
+  }, [isTimerRunning, endTimestamp, safeClearTimer, notifyTimerComplete, restTimeSeconds]);
 
   // =============================================================================
   // Cleanup on unmount
@@ -388,15 +441,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     };
   }, []);
 
-  // Format seconds to MM:SS
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Calculate timer progress percentage
-  const timerProgress = timerSeconds > 0 ? (timerSeconds / restTimeSeconds) * 100 : 0;
+  // Calculate timer progress percentage using utility function
+  // Note: formatTime is imported from timer-utils
+  const timerProgress = calculateTimerProgress(timerSeconds, restTimeSeconds);
 
   return (
     <View className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600">
@@ -530,18 +577,20 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
             </View>
 
             {/* Stop Button */}
+            {/* RAPID CLICK FIX: Disable button while operation is pending */}
             <Pressable
               onPress={stopTimer}
+              disabled={isOperationPending}
               accessibilityRole="button"
               accessibilityLabel="Stop rest timer"
             >
               {({ pressed }) => (
                 <View
-                  className="bg-red-500 rounded-full py-3 px-6"
-                  style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+                  className={`rounded-full py-3 px-6 ${isOperationPending ? 'bg-red-300' : 'bg-red-500'}`}
+                  style={pressed && !isOperationPending && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                 >
                   <ThemedText className="text-white text-center font-semibold">
-                    ✕ Stop Timer
+                    {isOperationPending ? '...' : '✕ Stop Timer'}
                   </ThemedText>
                 </View>
               )}
@@ -550,18 +599,20 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         ) : (
           <View className="gap-2">
             {!timerCompleted ? (
+              /* RAPID CLICK FIX: Disable button while operation is pending */
               <Pressable
                 onPress={startTimer}
+                disabled={isOperationPending}
                 accessibilityRole="button"
                 accessibilityLabel={`Start ${restTimeSeconds} second rest timer`}
               >
                 {({ pressed }) => (
                   <View
-                    className="bg-orange-500 rounded-full py-3 px-6"
-                    style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+                    className={`rounded-full py-3 px-6 ${isOperationPending ? 'bg-orange-300' : 'bg-orange-500'}`}
+                    style={pressed && !isOperationPending && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
                   >
                     <ThemedText className="text-white text-center font-semibold">
-                      ⏱ Start Rest Timer ({formatTime(restTimeSeconds)})
+                      {isOperationPending ? '...' : `⏱ Start Rest Timer (${formatTime(restTimeSeconds)})`}
                     </ThemedText>
                   </View>
                 )}
@@ -573,18 +624,20 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                     ✓ Rest Complete!
                   </ThemedText>
                 </View>
+                {/* RAPID CLICK FIX: Disable button while operation is pending */}
                 <Pressable
                   onPress={startTimer}
+                  disabled={isOperationPending}
                   accessibilityRole="button"
                   accessibilityLabel="Restart rest timer"
                 >
                   {({ pressed }) => (
                     <View
-                      className="bg-orange-500 rounded-full py-2 px-4"
-                      style={pressed && { opacity: 0.8 }}
+                      className={`rounded-full py-2 px-4 ${isOperationPending ? 'bg-orange-300' : 'bg-orange-500'}`}
+                      style={pressed && !isOperationPending && { opacity: 0.8 }}
                     >
                       <ThemedText className="text-white text-center font-semibold text-sm">
-                        ↻ Restart Timer
+                        {isOperationPending ? '...' : '↻ Restart Timer'}
                       </ThemedText>
                     </View>
                   )}
