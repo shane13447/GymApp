@@ -36,6 +36,9 @@ yarn-error.*
 # IDE/Editor files
 .cursorrules
 
+# Project documents (local only)
+Documents/
+
 # typescript
 *.tsbuildinfo
 
