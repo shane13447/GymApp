@@ -566,6 +566,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
               <ThemedText className="text-4xl font-bold text-orange-500">
                 {formatTime(timerSeconds)}
               </ThemedText>
+              <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {formatTime(restTimeSeconds)} rest period
+              </ThemedText>
             </View>
 
             {/* Progress Bar */}

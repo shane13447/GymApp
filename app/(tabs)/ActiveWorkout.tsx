@@ -3,17 +3,17 @@
  * Track and log an active workout session
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
-import { DaySelector } from '@/components/workout/DaySelector';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { DaySelector } from '@/components/workout/DaySelector';
+import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
 import * as db from '@/services/database';
 import type {
   Program,
