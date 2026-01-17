@@ -9,12 +9,12 @@
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
-  Program,
-  ProgramExercise,
-  UserPreferences,
-  Workout,
-  WorkoutDay,
-  WorkoutQueueItem
+    Program,
+    ProgramExercise,
+    UserPreferences,
+    Workout,
+    WorkoutDay,
+    WorkoutQueueItem
 } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
@@ -145,6 +145,15 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       progression REAL DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
+    );
+
+    -- Active Rest Timers Table (for persisting timers across app lifecycle)
+    CREATE TABLE IF NOT EXISTS active_rest_timers (
+      exercise_name TEXT PRIMARY KEY,
+      end_timestamp INTEGER NOT NULL,
+      sets_completed INTEGER DEFAULT 0,
+      rest_duration INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
     -- Create indexes for better query performance
@@ -937,6 +946,107 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
   // Save the generated queue
   await saveWorkoutQueue(queueItems);
   console.log(`Generated workout queue with ${queueItems.length} items for program: ${program.name}`);
+};
+
+// =============================================================================
+// REST TIMER PERSISTENCE
+// =============================================================================
+
+/**
+ * Timer state stored in database
+ */
+export interface ActiveTimerState {
+  exerciseName: string;
+  endTimestamp: number;
+  setsCompleted: number;
+  restDuration: number;
+}
+
+/**
+ * Save an active rest timer (timestamp-based for persistence across app lifecycle)
+ */
+export const saveActiveTimer = async (timer: ActiveTimerState): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT OR REPLACE INTO active_rest_timers 
+     (exercise_name, end_timestamp, sets_completed, rest_duration) 
+     VALUES (?, ?, ?, ?)`,
+    [timer.exerciseName, timer.endTimestamp, timer.setsCompleted, timer.restDuration]
+  );
+};
+
+/**
+ * Get an active timer for a specific exercise
+ */
+export const getActiveTimer = async (exerciseName: string): Promise<ActiveTimerState | null> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{
+    exercise_name: string;
+    end_timestamp: number;
+    sets_completed: number;
+    rest_duration: number;
+  }>('SELECT * FROM active_rest_timers WHERE exercise_name = ?', [exerciseName]);
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    exerciseName: result.exercise_name,
+    endTimestamp: result.end_timestamp,
+    setsCompleted: result.sets_completed,
+    restDuration: result.rest_duration,
+  };
+};
+
+/**
+ * Get all active timers
+ */
+export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
+  const database = await getDatabase();
+  const results = await database.getAllAsync<{
+    exercise_name: string;
+    end_timestamp: number;
+    sets_completed: number;
+    rest_duration: number;
+  }>('SELECT * FROM active_rest_timers');
+
+  return results.map((r) => ({
+    exerciseName: r.exercise_name,
+    endTimestamp: r.end_timestamp,
+    setsCompleted: r.sets_completed,
+    restDuration: r.rest_duration,
+  }));
+};
+
+/**
+ * Clear a specific timer (when stopped or completed)
+ */
+export const clearActiveTimer = async (exerciseName: string): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM active_rest_timers WHERE exercise_name = ?', [exerciseName]);
+};
+
+/**
+ * Clear all active timers (e.g., when workout is saved)
+ */
+export const clearAllActiveTimers = async (): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM active_rest_timers');
+};
+
+/**
+ * Update sets completed for a timer (without changing timer state)
+ */
+export const updateTimerSetsCompleted = async (
+  exerciseName: string,
+  setsCompleted: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_name = ?',
+    [setsCompleted, exerciseName]
+  );
 };
 
 // =============================================================================

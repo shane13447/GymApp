@@ -2,15 +2,17 @@
  * Exercise Log Card Component
  * Displays exercise with input fields for logging weight and reps
  * Includes a rest timer that counts down based on the exercise's restTime
+ * Timer persists across navigation and device lock using timestamp-based approach
  */
 
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, TextInput, View, Vibration } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import type { WorkoutExercise } from '@/types';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import * as db from '@/services/database';
+import type { WorkoutExercise } from '@/types';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, Pressable, TextInput, Vibration, View } from 'react-native';
 
 interface ExerciseLogCardProps {
   exercise: WorkoutExercise;
@@ -28,11 +30,15 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
   
-  // Rest timer state
+  // Rest timer state - using end timestamp for persistence
+  const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [setsCompleted, setSetsCompleted] = useState(0);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [timerCompleted, setTimerCompleted] = useState(false);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasVibratedRef = useRef(false);
+  const isInitializedRef = useRef(false);
 
   // Get rest time in seconds from exercise (defaults to 180)
   const restTimeSeconds = exercise.restTime || 180;
@@ -40,37 +46,147 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // Get target sets for display
   const targetSets = exercise.sets || 0;
 
+  // Load persisted timer state on mount
+  useEffect(() => {
+    const loadTimerState = async () => {
+      try {
+        const savedTimer = await db.getActiveTimer(exercise.name);
+        if (savedTimer) {
+          const now = Date.now();
+          const remaining = Math.max(0, Math.ceil((savedTimer.endTimestamp - now) / 1000));
+          
+          setSetsCompleted(savedTimer.setsCompleted);
+          
+          if (remaining > 0) {
+            // Timer is still running
+            setEndTimestamp(savedTimer.endTimestamp);
+            setTimerSeconds(remaining);
+            setIsTimerRunning(true);
+            setTimerCompleted(false);
+            hasVibratedRef.current = false;
+          } else {
+            // Timer has finished while away
+            setTimerSeconds(0);
+            setIsTimerRunning(false);
+            setTimerCompleted(true);
+            // Clear from database
+            await db.clearActiveTimer(exercise.name);
+            // Vibrate to notify if timer just completed
+            if (savedTimer.endTimestamp > now - 60000) { // Within last minute
+              Vibration.vibrate([0, 500, 200, 500]);
+            }
+          }
+        }
+        isInitializedRef.current = true;
+      } catch (error) {
+        console.error('Error loading timer state:', error);
+        isInitializedRef.current = true;
+      }
+    };
+
+    loadTimerState();
+  }, [exercise.name]);
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && endTimestamp) {
+        // Recalculate remaining time when app becomes active
+        const now = Date.now();
+        const remaining = Math.max(0, Math.ceil((endTimestamp - now) / 1000));
+        
+        if (remaining > 0) {
+          setTimerSeconds(remaining);
+          setIsTimerRunning(true);
+        } else if (!hasVibratedRef.current) {
+          // Timer completed while in background
+          setTimerSeconds(0);
+          setIsTimerRunning(false);
+          setTimerCompleted(true);
+          setEndTimestamp(null);
+          hasVibratedRef.current = true;
+          Vibration.vibrate([0, 500, 200, 500]);
+          db.clearActiveTimer(exercise.name);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [endTimestamp, exercise.name]);
+
   // Start the rest timer and increment sets completed
-  const startTimer = useCallback(() => {
-    setSetsCompleted((prev) => prev + 1);
+  const startTimer = useCallback(async () => {
+    const newSetsCompleted = setsCompleted + 1;
+    const newEndTimestamp = Date.now() + restTimeSeconds * 1000;
+    
+    setSetsCompleted(newSetsCompleted);
+    setEndTimestamp(newEndTimestamp);
     setTimerSeconds(restTimeSeconds);
     setIsTimerRunning(true);
-  }, [restTimeSeconds]);
+    setTimerCompleted(false);
+    hasVibratedRef.current = false;
+
+    // Persist to database
+    try {
+      await db.saveActiveTimer({
+        exerciseName: exercise.name,
+        endTimestamp: newEndTimestamp,
+        setsCompleted: newSetsCompleted,
+        restDuration: restTimeSeconds,
+      });
+    } catch (error) {
+      console.error('Error saving timer state:', error);
+    }
+  }, [restTimeSeconds, setsCompleted, exercise.name]);
 
   // Stop/reset the timer
-  const stopTimer = useCallback(() => {
+  const stopTimer = useCallback(async () => {
     setIsTimerRunning(false);
     setTimerSeconds(0);
+    setEndTimestamp(null);
+    setTimerCompleted(false);
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-  }, []);
 
-  // Timer countdown effect
+    // Clear from database
+    try {
+      await db.clearActiveTimer(exercise.name);
+    } catch (error) {
+      console.error('Error clearing timer state:', error);
+    }
+  }, [exercise.name]);
+
+  // Timer countdown effect - recalculates from timestamp each tick
   useEffect(() => {
-    if (isTimerRunning && timerSeconds > 0) {
+    if (isTimerRunning && endTimestamp) {
       timerIntervalRef.current = setInterval(() => {
-        setTimerSeconds((prev) => {
-          if (prev <= 1) {
-            setIsTimerRunning(false);
-            // Vibrate when timer completes
+        const now = Date.now();
+        const remaining = Math.max(0, Math.ceil((endTimestamp - now) / 1000));
+        
+        setTimerSeconds(remaining);
+        
+        if (remaining <= 0) {
+          setIsTimerRunning(false);
+          setTimerCompleted(true);
+          setEndTimestamp(null);
+          
+          if (!hasVibratedRef.current) {
+            hasVibratedRef.current = true;
             Vibration.vibrate([0, 500, 200, 500]);
-            return 0;
           }
-          return prev - 1;
-        });
-      }, 1000);
+          
+          // Clear from database
+          db.clearActiveTimer(exercise.name);
+          
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+        }
+      }, 100); // Update more frequently for accuracy
     }
 
     return () => {
@@ -79,7 +195,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         timerIntervalRef.current = null;
       }
     };
-  }, [isTimerRunning, timerSeconds]);
+  }, [isTimerRunning, endTimestamp, exercise.name]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -221,9 +337,6 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
               <ThemedText className="text-4xl font-bold text-orange-500">
                 {formatTime(timerSeconds)}
               </ThemedText>
-              <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {formatTime(restTimeSeconds)} rest period
-              </ThemedText>
             </View>
 
             {/* Progress Bar */}
@@ -254,7 +367,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
           </View>
         ) : (
           <View className="gap-2">
-            {timerSeconds === 0 && !isTimerRunning && timerIntervalRef.current === null ? (
+            {!timerCompleted ? (
               <Pressable
                 onPress={startTimer}
                 accessibilityRole="button"
