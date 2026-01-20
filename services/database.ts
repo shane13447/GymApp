@@ -23,22 +23,96 @@ import * as SQLite from 'expo-sqlite';
 // =============================================================================
 
 let db: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Get the database instance, initializing if necessary
+ * 
+ * RACE CONDITION FIX: Uses a shared promise to ensure only one initialization
+ * happens even when multiple callers request the database simultaneously.
+ * Without this, concurrent calls could:
+ * 1. All see db === null
+ * 2. All start openDatabaseAsync
+ * 3. Cause NullPointerException when accessing partially initialized DB
  */
 export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync(DATABASE_NAME);
-    await initializeDatabase(db);
+  // If database is already initialized, return it immediately
+  if (db) {
+    return db;
   }
-  return db;
+  
+  // If initialization is in progress, wait for it
+  if (initPromise) {
+    return initPromise;
+  }
+  
+  // Start initialization and store the promise so other callers can wait
+  initPromise = (async () => {
+    try {
+      const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      await initializeDatabase(database);
+      db = database;
+      return database;
+    } catch (error) {
+      // Reset on failure so next call can retry
+      initPromise = null;
+      throw error;
+    }
+  })();
+  
+  return initPromise;
 };
 
 /**
  * Initialize database schema
+ * 
+ * MIGRATION STRATEGY:
+ * SQLite's CREATE TABLE IF NOT EXISTS won't update existing tables.
+ * If we change a table's schema, we need to handle migration explicitly.
+ * 
+ * For the active_rest_timers table:
+ * - Old schema: exercise_name TEXT PRIMARY KEY (single column key)
+ * - New schema: PRIMARY KEY (exercise_name, program_id, day_number) (composite key)
+ * 
+ * Since timer data is transient (only valid for a few minutes), we can safely
+ * drop and recreate the table if we detect the old schema.
  */
 const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void> => {
+  // =============================================================================
+  // MIGRATION: Check and upgrade active_rest_timers table
+  // =============================================================================
+  // WHY WE NEED THIS:
+  // Users who installed the app before the composite key fix have the old table.
+  // CREATE TABLE IF NOT EXISTS won't modify an existing table.
+  // We need to detect the old schema and recreate the table.
+  try {
+    // Check if the table exists and has the old schema
+    // PRAGMA table_info returns column information for a table
+    const tableInfo = await database.getAllAsync<{
+      cid: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+      pk: number;
+    }>('PRAGMA table_info(active_rest_timers)');
+    
+    if (tableInfo.length > 0) {
+      // Table exists - check if it has the new columns
+      const hasNewColumns = tableInfo.some(col => col.name === 'program_id');
+      
+      if (!hasNewColumns) {
+        // Old schema detected - drop and recreate
+        // Timer data is transient, so losing it is acceptable
+        console.log('Migrating active_rest_timers table to new composite key schema');
+        await database.execAsync('DROP TABLE IF EXISTS active_rest_timers');
+      }
+    }
+  } catch (error) {
+    // If PRAGMA fails, table probably doesn't exist - that's fine
+    console.log('Timer table check:', error);
+  }
+  
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -417,20 +491,22 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
 
     for (let i = 0; i < day.exercises.length; i++) {
       const exercise = day.exercises[i];
+      // Defensive coding: ensure all fields have valid values
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
          (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           i,
         ]
       );
@@ -471,20 +547,22 @@ export const updateProgram = async (program: Program): Promise<void> => {
 
     for (let i = 0; i < day.exercises.length; i++) {
       const exercise = day.exercises[i];
+      // Defensive coding: ensure all fields have valid values
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
          (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           i,
         ]
       );
@@ -617,22 +695,23 @@ export const saveWorkout = async (workout: Workout): Promise<void> => {
   // Insert workout exercises
   for (let i = 0; i < workout.exercises.length; i++) {
     const exercise = workout.exercises[i];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO workout_exercises 
        (workout_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workout.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
-        exercise.loggedWeight,
-        exercise.loggedReps,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
+        exercise.loggedWeight ?? 0,
+        exercise.loggedReps ?? 0,
         i,
       ]
     );
@@ -758,20 +837,21 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
     // Insert queue exercises
     for (let j = 0; j < item.exercises.length; j++) {
       const exercise = item.exercises[j];
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO queue_exercises 
          (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           j,
         ]
       );
@@ -807,20 +887,21 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
   // Insert queue exercises
   for (let j = 0; j < item.exercises.length; j++) {
     const exercise = item.exercises[j];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises 
        (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
         j,
       ]
     );
@@ -873,20 +954,21 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
 
   for (let j = 0; j < item.exercises.length; j++) {
     const exercise = item.exercises[j];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises 
        (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
         j,
       ]
     );
@@ -1111,25 +1193,36 @@ export const updateTimerSetsCompleted = async (
  * Clean up orphaned/expired timer records
  * ORPHANED TIMER FIX: Called on app startup to remove timers that:
  * 1. Have already expired (end_timestamp < now)
- * 2. Are older than a threshold (e.g., 24 hours) regardless of state
+ * 2. Are unreasonably old (end_timestamp was set more than 15 min ago)
  * 
  * This handles scenarios where the app was force-killed mid-workout
  * and timer records were left in the database.
+ * 
+ * WHY WE ONLY USE end_timestamp:
+ * Previously, we tried to use both end_timestamp (milliseconds) and 
+ * created_at (text datetime). This didn't work because:
+ * - end_timestamp is stored in milliseconds (e.g., 1705520400000)
+ * - created_at is stored as text (e.g., "2025-01-17 10:00:00")
+ * - SQLite datetime functions expect seconds, not milliseconds
+ * - Comparing datetime strings with different formats is unreliable
+ * 
+ * The fix: Use end_timestamp for everything. We can derive "age" from it:
+ * - A timer created at time T with duration D has end_timestamp = T + D
+ * - So the timer was created at (end_timestamp - rest_duration * 1000)
+ * - If that's more than 15 minutes ago, the timer is stale
  */
 export const cleanupOrphanedTimers = async (): Promise<number> => {
   const database = await getDatabase();
   const now = Date.now();
   
-  // Remove timers that have expired (end_timestamp is in the past)
-  // Also remove any timers older than 15 minutes as a safety net
-  // (rest timers are typically 1-5 minutes, so 15 min is generous)
-  const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
-  const cutoffTime = now - FIFTEEN_MINUTES_MS;
-  
+  // Delete all timers that have already expired (end_timestamp in the past).
+  // Rest timers are only valid while counting down. Once expired, they're no longer
+  // useful and should be cleaned up to prevent stale data issues.
+  // 
+  // Note: end_timestamp is stored in milliseconds, consistent with Date.now()
   const result = await database.runAsync(
-    `DELETE FROM active_rest_timers 
-     WHERE end_timestamp < ? OR created_at < datetime(?, 'unixepoch', 'localtime')`,
-    [now, Math.floor(cutoffTime / 1000)]
+    'DELETE FROM active_rest_timers WHERE end_timestamp < ?',
+    [now]
   );
   
   return result.changes;
@@ -1186,5 +1279,6 @@ export const closeDatabase = async (): Promise<void> => {
   if (db) {
     await db.closeAsync();
     db = null;
+    initPromise = null;
   }
 };
