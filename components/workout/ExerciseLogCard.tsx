@@ -55,6 +55,20 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     dayNumber,
   }), [exercise.name, programId, dayNumber]);
   
+  // =============================================================================
+  // VALIDATION: Check if we have valid context for timer operations
+  // =============================================================================
+  // WHY THIS MATTERS:
+  // Timer persistence requires a valid composite key (exercise, program, day).
+  // If programId is empty, we'd create DB entries with program_id = '' which:
+  // 1. Makes debugging harder (what program is '' ?)
+  // 2. Could cause unintended collisions between different contexts
+  // 3. Is a sign something went wrong upstream
+  // 
+  // We'll still render the component, but disable timer persistence.
+  // The timer UI will work (countdown, vibration) but won't survive app restart.
+  const hasValidContext = Boolean(programId && exercise.name && dayNumber > 0);
+  
   // Rest timer state - using end timestamp for persistence
   const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
@@ -66,6 +80,29 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const [isOperationPending, setIsOperationPending] = useState(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasVibratedRef = useRef(false);
+  
+  // =============================================================================
+  // FIX: Use a ref to track sets completed count
+  // =============================================================================
+  // WHY A REF INSTEAD OF EXTRACTING FROM setState?
+  // 
+  // Old approach:
+  //   let newSetsCompleted = 0;
+  //   setSetsCompleted(prev => {
+  //     newSetsCompleted = prev + 1;  // ← Side effect inside setState!
+  //     return newSetsCompleted;
+  //   });
+  // 
+  // Problems with old approach:
+  // 1. React StrictMode calls state updaters TWICE to detect side effects
+  // 2. The closure variable gets mutated, giving wrong values
+  // 3. It's an anti-pattern that React specifically warns against
+  // 
+  // New approach: Use a ref as the "source of truth" for the count
+  // - Refs persist across renders without re-render overhead
+  // - We can read/write the ref synchronously
+  // - setState is only used to trigger re-renders for the UI
+  const setsCompletedRef = useRef(0);
   
   // =============================================================================
   // RACE CONDITION FIX: Mounted state tracking
@@ -120,6 +157,10 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     // Don't proceed if another clear is already in progress
     if (pendingClearRef.current) return;
     
+    // VALIDATION: Skip DB operation if context is invalid
+    // Timer will still work locally, just won't persist
+    if (!hasValidContext) return;
+    
     pendingClearRef.current = true;
     try {
       await db.clearActiveTimer(timerContext);
@@ -134,7 +175,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         pendingClearRef.current = false;
       }
     }
-  }, [timerContext]);
+  }, [timerContext, hasValidContext]);
   
   // =============================================================================
   // DRY FIX: Centralized vibration notification
@@ -155,6 +196,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // If component unmounts while this async operation is in flight, we skip updates.
   // COMPOSITE KEY FIX: Now uses timerContext to load the correct timer
   useEffect(() => {
+    // VALIDATION: Skip loading if context is invalid
+    if (!hasValidContext) return;
+    
     const loadTimerState = async () => {
       try {
         const savedTimer = await db.getActiveTimer(timerContext);
@@ -166,6 +210,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
           const now = Date.now();
           const remaining = calculateRemainingTime(savedTimer.endTimestamp, now);
           
+          // Sync both the ref (source of truth) and state (for UI)
+          setsCompletedRef.current = savedTimer.setsCompleted;
           setSetsCompleted(savedTimer.setsCompleted);
           
           if (remaining > 0) {
@@ -200,7 +246,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     };
 
     loadTimerState();
-  }, [timerContext, safeClearTimer, notifyTimerComplete]);
+  }, [timerContext, safeClearTimer, notifyTimerComplete, hasValidContext]);
 
   // =============================================================================
   // Handle app state changes (background/foreground)
@@ -251,9 +297,19 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // =============================================================================
   // Start the rest timer and increment sets completed
   // =============================================================================
-  // STALE CLOSURE FIX: Use functional update for setsCompleted.
-  // COMPOSITE KEY FIX: Now uses timerContext when saving to DB
-  // RAPID CLICK FIX: Uses isOperationPending to prevent concurrent operations
+  // WHY WE USE A REF FOR SETS COUNT:
+  // 
+  // We need to:
+  // 1. Increment the count
+  // 2. Update the UI (state)
+  // 3. Save to database (need the new count value)
+  // 
+  // Using the ref as source of truth:
+  // - Increment ref.current (synchronous, immediate)
+  // - Update state for UI re-render
+  // - Use ref.current for the DB save (guaranteed correct value)
+  // 
+  // This avoids the anti-pattern of extracting values from inside setState.
   const startTimer = useCallback(async () => {
     // RACE CONDITION FIX: Check mounted state
     if (!isMountedRef.current) return;
@@ -266,12 +322,13 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     try {
       const newEndTimestamp = Date.now() + restTimeSeconds * 1000;
       
-      // STALE CLOSURE FIX: Use functional update to get accurate count
-      let newSetsCompleted = 0;
-      setSetsCompleted(prev => {
-        newSetsCompleted = prev + 1;
-        return newSetsCompleted;
-      });
+      // FIX: Increment the ref (source of truth) directly
+      // This is synchronous and gives us the exact value we need
+      setsCompletedRef.current += 1;
+      const newSetsCompleted = setsCompletedRef.current;
+      
+      // Update state to trigger UI re-render
+      setSetsCompleted(newSetsCompleted);
       
       setEndTimestamp(newEndTimestamp);
       setTimerSeconds(restTimeSeconds);
@@ -279,13 +336,17 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
       setTimerCompleted(false);
       hasVibratedRef.current = false;
 
-      // Persist to database with full context
-      await db.saveActiveTimer({
-        ...timerContext,
-        endTimestamp: newEndTimestamp,
-        setsCompleted: newSetsCompleted,
-        restDuration: restTimeSeconds,
-      });
+      // Persist to database - we use the ref value which is guaranteed correct
+      // VALIDATION: Only save to DB if we have valid context
+      // Timer will still work locally (countdown, vibration) even without persistence
+      if (hasValidContext) {
+        await db.saveActiveTimer({
+          ...timerContext,
+          endTimestamp: newEndTimestamp,
+          setsCompleted: newSetsCompleted,
+          restDuration: restTimeSeconds,
+        });
+      }
     } catch (error) {
       // Only log if still mounted
       if (isMountedRef.current) {
@@ -297,7 +358,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         setIsOperationPending(false);
       }
     }
-  }, [restTimeSeconds, timerContext, isOperationPending]);
+  }, [restTimeSeconds, timerContext, isOperationPending, hasValidContext]);
 
   // =============================================================================
   // Stop/reset the timer

@@ -35,6 +35,17 @@ export default function ActiveWorkout() {
   const [loadingFromQueue, setLoadingFromQueue] = useState(false);
   const [isLoadedFromQueue, setIsLoadedFromQueue] = useState(false);
   const queueLoadedRef = useRef(false);
+  
+  // =============================================================================
+  // STALE LOAD FIX: Track which day-load request is "current"
+  // =============================================================================
+  // Problem: User switches Day 1 → Day 2 → Day 3 rapidly. The async loads for
+  // Day 2 and Day 3 race. If Day 2's load finishes last, it overwrites Day 3's
+  // exercises, leaving the UI showing Day 3 selected but Day 2's exercises.
+  //
+  // Solution: Increment a counter on each day change. After the async load,
+  // check if the counter still matches. If not, discard the stale result.
+  const dayLoadRequestRef = useRef(0);
 
   // Load programs on mount
   useEffect(() => {
@@ -126,6 +137,11 @@ export default function ActiveWorkout() {
     const selectedDay = currentProgram.workoutDays[selectedDayIndex];
     if (!selectedDay) return;
 
+    // STALE LOAD FIX: Increment and capture request ID
+    // This function can race with handleDayChange if user switches days rapidly
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
+
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
@@ -140,8 +156,17 @@ export default function ActiveWorkout() {
         })
       );
 
+      // STALE LOAD FIX: Discard if a newer request has started
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+
       setWorkoutExercises(initialExercises);
     } catch (error) {
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
       console.error('Error initializing workout exercises:', error);
       const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
         ...ex,
@@ -228,7 +253,10 @@ export default function ActiveWorkout() {
 
       setCurrentProgram(program);
       setSelectedDayIndex(dayIndex);
-      await db.setCurrentProgramId(program.id);
+      
+      // Only update the preference (don't regenerate queue since we're loading FROM it)
+      // Use updateUserPreferences directly to avoid triggering generateWorkoutQueue
+      await db.updateUserPreferences({ currentProgramId: program.id });
 
       await initializeWorkoutExercisesFromQueue(firstWorkout);
       setLoadingFromQueue(false);
@@ -241,6 +269,11 @@ export default function ActiveWorkout() {
   };
 
   const initializeWorkoutExercisesFromQueue = async (queueItem: WorkoutQueueItem) => {
+    // STALE LOAD FIX: Increment and capture request ID
+    // This can race with handleDayChange if user switches days immediately after queue load
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
+
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         queueItem.exercises.map(async (ex) => {
@@ -259,8 +292,17 @@ export default function ActiveWorkout() {
         })
       );
 
+      // STALE LOAD FIX: Discard if a newer request has started
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+
       setWorkoutExercises(initialExercises);
     } catch (error) {
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
       console.error('Error initializing workout exercises from queue:', error);
       const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
         ...ex,
@@ -321,45 +363,49 @@ export default function ActiveWorkout() {
   // =============================================================================
   // Handle day change - allows user to switch days even when loaded from queue
   // =============================================================================
-  // RACE CONDITION FIX: Coordinate unmount/cleanup sequence properly.
-  // Problem: Previously we called clearAllActiveTimers() while old ExerciseLogCard
-  // components were still mounted with active intervals. Those intervals could
-  // fire AFTER we cleared the DB, causing state/DB mismatch.
+  // WHY THIS IS BETTER THAN setTimeout:
   // 
-  // Solution: Orchestrate the sequence carefully:
-  // 1. Clear workoutExercises first → triggers React to unmount old cards
-  // 2. Small delay to let React flush unmount effects (cleanup intervals)
-  // 3. Now safe to clear all timers from DB (no racing intervals)
-  // 4. Load new exercises for the new day
+  // Old approach: Clear exercises → wait 50ms → clear ALL timers from DB
+  // Problem: 50ms is arbitrary. On a slow phone it might not be enough.
+  //          We're "hoping" React finished cleanup, which is unreliable.
+  // 
+  // New approach: Clear only the timers for the SPECIFIC day we're leaving
+  // Benefits:
+  // 1. No arbitrary timeouts - we're being deterministic
+  // 2. More precise - we only touch timers for the old day
+  // 3. The old components' cleanup effects will clear their own DB entries
+  //    when they unmount, which is fine (deleting something already deleted is safe)
+  // 4. New components load fresh - they'll find no timer for the new day
+  //
+  // This works because each timer is uniquely identified by (exercise, program, day).
+  // When we switch from Day 1 to Day 2:
+  // - Day 1's timers have dayNumber=1
+  // - Day 2's exercises will look for dayNumber=2 (different key, won't find Day 1's timers)
   const handleDayChange = useCallback(async (newIndex: number) => {
     if (!currentProgram || newIndex === selectedDayIndex) return;
 
-    // STEP 1: Clear exercises to unmount old ExerciseLogCards
-    // This triggers React to run their cleanup effects (clearing intervals,
-    // setting isMountedRef = false)
-    setWorkoutExercises([]);
-    
-    // STEP 2: Allow React to flush the unmount effects
-    // A small delay ensures cleanup effects have run before we touch the DB.
-    // 50ms is enough for React to process the unmount synchronously.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    const oldDayNumber = selectedDayIndex + 1;
 
-    // STEP 3: Now safe to clear all active timers from DB
-    // At this point, all old ExerciseLogCard instances have:
-    // - Set their isMountedRef to false
-    // - Cleared their intervals
-    // - Any in-flight DB operations will check isMountedRef and bail
+    // Clear timers ONLY for the day we're leaving
+    // This is precise and doesn't require waiting for component unmount
     try {
-      await db.clearAllActiveTimers();
+      await db.clearTimersForContext(currentProgram.id, oldDayNumber);
     } catch (error) {
-      console.error('Error clearing timers:', error);
+      console.error('Error clearing timers for old day:', error);
+      // Non-critical - continue with day change
     }
 
-    // STEP 4: Update state for the new day
-    setSelectedDayIndex(newIndex);
-    setIsLoadedFromQueue(false); // Allow normal day-based loading
+    // STALE LOAD FIX: Increment request counter and capture it
+    // If user switches days again before our load completes, the counter
+    // will have changed and we'll discard our stale results.
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
 
-    // STEP 5: Load exercises for the new day
+    // Update state for the new day
+    setSelectedDayIndex(newIndex);
+    setIsLoadedFromQueue(false);
+
+    // Load exercises for the new day
     const selectedDay = currentProgram.workoutDays[newIndex];
     if (!selectedDay) return;
 
@@ -377,8 +423,20 @@ export default function ActiveWorkout() {
         })
       );
 
+      // STALE LOAD FIX: Only update state if this is still the current request
+      // If user switched days while we were loading, discard these results
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        console.log(`Discarding stale day load (request ${thisRequestId}, current ${dayLoadRequestRef.current})`);
+        return;
+      }
+
       setWorkoutExercises(initialExercises);
     } catch (error) {
+      // STALE LOAD FIX: Also check before setting fallback exercises
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
       console.error('Error loading exercises for new day:', error);
       const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
         ...ex,
@@ -484,18 +542,36 @@ export default function ActiveWorkout() {
   // COMPOSITE KEY FIX: Pass programId and dayNumber to ExerciseLogCard
   // This allows each exercise's timer to be uniquely identified in the database
   // by (exercise_name, program_id, day_number) instead of just exercise_name.
+  // 
+  // WHY WE DON'T USE ?? '' ANYMORE:
+  // Previously: programId={currentProgram?.id ?? ''}
+  // Problem: Empty string '' is a valid string, so timers would be created with
+  //          program_id = '' in the database. If two different flows both had
+  //          no program, their timers would collide on the same key.
+  // 
+  // Now: We only render exercises when currentProgram exists (see the JSX below).
+  //      The ! assertion is safe because renderExercise is only called when
+  //      currentProgram is defined and workoutExercises.length > 0.
   const renderExercise = useCallback(
-    ({ item, index }: { item: WorkoutExercise; index: number }) => (
-      <ExerciseLogCard
-        exercise={item}
-        index={index}
-        programId={currentProgram?.id ?? ''}
-        dayNumber={selectedDayIndex + 1}
-        onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
-        onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
-      />
-    ),
-    [updateLoggedValue, currentProgram?.id, selectedDayIndex]
+    ({ item, index }: { item: WorkoutExercise; index: number }) => {
+      // Safety check - shouldn't happen because we only render when currentProgram exists
+      if (!currentProgram) {
+        console.warn('renderExercise called without currentProgram');
+        return null;
+      }
+      
+      return (
+        <ExerciseLogCard
+          exercise={item}
+          index={index}
+          programId={currentProgram.id}
+          dayNumber={selectedDayIndex + 1}
+          onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
+          onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
+        />
+      );
+    },
+    [updateLoggedValue, currentProgram, selectedDayIndex]
   );
 
   if (isLoading) {
