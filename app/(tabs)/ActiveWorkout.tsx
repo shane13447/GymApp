@@ -37,6 +37,15 @@ export default function ActiveWorkout() {
   const queueLoadedRef = useRef(false);
   
   // =============================================================================
+  // UNDO SUPPORT: Track the original queue state when screen loads
+  // =============================================================================
+  // This enables "undo" when user goes backward (e.g., Day 1 → Day 2 → Day 1).
+  // Without this, each day change would skip relative to the current queue,
+  // causing forward-only movement. With originalQueue, going back to Day 1
+  // restores the queue to start from Day 1 (as it was originally).
+  const originalQueueRef = useRef<WorkoutQueueItem[] | null>(null);
+  
+  // =============================================================================
   // STALE LOAD FIX: Track which day-load request is "current"
   // =============================================================================
   // Problem: User switches Day 1 → Day 2 → Day 3 rapidly. The async loads for
@@ -56,6 +65,7 @@ export default function ActiveWorkout() {
   useFocusEffect(
     useCallback(() => {
       queueLoadedRef.current = false;
+      originalQueueRef.current = null; // Reset original queue on focus
       setIsLoadedFromQueue(false);
       reloadQueue();
     }, [])
@@ -94,6 +104,12 @@ export default function ActiveWorkout() {
     try {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
+      
+      // Store as original queue if not yet set (first load after focus)
+      // This enables undo support when user changes days back and forth
+      if (originalQueueRef.current === null && queue.length > 0) {
+        originalQueueRef.current = queue;
+      }
     } catch (error) {
       console.error('Error loading workout queue:', error);
     }
@@ -179,14 +195,20 @@ export default function ActiveWorkout() {
 
   const calculateAutoWeight = (lastWeight: number | null, progression: number): number => {
     if (lastWeight === null) return 0;
-    if (!progression) return lastWeight;
+    
+    // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+    // Without this, "60" + "0" would give "600" instead of 60
+    const numLastWeight = Number(lastWeight);
+    const numProgression = Number(progression);
+    
+    if (!numProgression || numProgression === 0) return numLastWeight;
 
     try {
-      const newWeight = lastWeight + progression;
-      return isNaN(newWeight) ? lastWeight : newWeight;
+      const newWeight = numLastWeight + numProgression;
+      return isNaN(newWeight) ? numLastWeight : newWeight;
     } catch (error) {
       console.error('Error calculating auto weight:', error);
-      return lastWeight;
+      return numLastWeight;
     }
   };
 
@@ -198,11 +220,13 @@ export default function ActiveWorkout() {
       const progressedExercises: ProgramExercise[] = await Promise.all(
         exercises.map(async (ex) => {
           const lastWeight = await db.getLastLoggedWeight(ex.name, programId);
-          const progressedWeight = calculateAutoWeight(lastWeight, ex.progression);
+          const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          // RUNTIME TYPE SAFETY: Ensure numeric fallback
+          const numExWeight = Number(ex.weight) || 0;
 
           return {
             ...ex,
-            weight: progressedWeight || ex.weight || 0,
+            weight: progressedWeight || numExWeight,
           };
         })
       );
@@ -363,28 +387,21 @@ export default function ActiveWorkout() {
   // =============================================================================
   // Handle day change - allows user to switch days even when loaded from queue
   // =============================================================================
-  // WHY THIS IS BETTER THAN setTimeout:
-  // 
-  // Old approach: Clear exercises → wait 50ms → clear ALL timers from DB
-  // Problem: 50ms is arbitrary. On a slow phone it might not be enough.
-  //          We're "hoping" React finished cleanup, which is unreliable.
-  // 
-  // New approach: Clear only the timers for the SPECIFIC day we're leaving
-  // Benefits:
-  // 1. No arbitrary timeouts - we're being deterministic
-  // 2. More precise - we only touch timers for the old day
-  // 3. The old components' cleanup effects will clear their own DB entries
-  //    when they unmount, which is fine (deleting something already deleted is safe)
-  // 4. New components load fresh - they'll find no timer for the new day
+  // When user changes to a different day:
+  // 1. Clear timers for the old day
+  // 2. Skip the queue to the new day (so next workout in queue matches selection)
+  // 3. Load exercises from the queue item (which has pre-calculated progression weights)
+  // 4. If no queue item exists, fall back to loading from program with progression
   //
-  // This works because each timer is uniquely identified by (exercise, program, day).
-  // When we switch from Day 1 to Day 2:
-  // - Day 1's timers have dayNumber=1
-  // - Day 2's exercises will look for dayNumber=2 (different key, won't find Day 1's timers)
+  // This ensures:
+  // - Pre-populated values come from the queue (with AI modifications if any)
+  // - The queue stays in sync with the user's actual progress
+  // - After saving, the next workout is correctly queued
   const handleDayChange = useCallback(async (newIndex: number) => {
     if (!currentProgram || newIndex === selectedDayIndex) return;
 
     const oldDayNumber = selectedDayIndex + 1;
+    const newDayNumber = newIndex + 1;
 
     // Clear timers ONLY for the day we're leaving
     // This is precise and doesn't require waiting for component unmount
@@ -403,9 +420,52 @@ export default function ActiveWorkout() {
 
     // Update state for the new day
     setSelectedDayIndex(newIndex);
-    setIsLoadedFromQueue(false);
+    setIsLoadedFromQueue(true); // Mark as loaded from queue since we're syncing
 
-    // Load exercises for the new day
+    try {
+      // Skip the queue to the new day - this ensures the queue is aligned
+      // with the user's selection. When they save, the correct next day will be queued.
+      // 
+      // UNDO SUPPORT: Pass originalQueue so going backward restores previous state
+      // instead of skipping further forward. E.g., Day 1 → Day 2 → Day 1 will
+      // restore queue to [Day1, Day2, Day3] instead of skipping to a new Day 1.
+      const updatedQueue = await db.skipQueueToDay(
+        currentProgram.id, 
+        newDayNumber,
+        originalQueueRef.current ?? undefined
+      );
+      
+      // STALE LOAD FIX: Check if still current request
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        console.log(`Discarding stale day load (request ${thisRequestId}, current ${dayLoadRequestRef.current})`);
+        return;
+      }
+
+      if (updatedQueue && updatedQueue.length > 0) {
+        // Update local queue state
+        setWorkoutQueue(updatedQueue);
+        
+        // Load exercises from the first queue item (which is now the selected day)
+        const queueItem = updatedQueue[0];
+        const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
+          ...ex,
+          loggedWeight: ex.weight || 0,
+          loggedReps: 0,
+        }));
+        setWorkoutExercises(initialExercises);
+        return;
+      }
+    } catch (error) {
+      console.error('Error skipping queue to day:', error);
+      // Fall through to load from program
+    }
+
+    // STALE LOAD FIX: Check if still current request
+    if (dayLoadRequestRef.current !== thisRequestId) {
+      return;
+    }
+
+    // Fallback: Load exercises directly from program with progression
     const selectedDay = currentProgram.workoutDays[newIndex];
     if (!selectedDay) return;
 
@@ -424,7 +484,6 @@ export default function ActiveWorkout() {
       );
 
       // STALE LOAD FIX: Only update state if this is still the current request
-      // If user switched days while we were loading, discard these results
       if (dayLoadRequestRef.current !== thisRequestId) {
         console.log(`Discarding stale day load (request ${thisRequestId}, current ${dayLoadRequestRef.current})`);
         return;

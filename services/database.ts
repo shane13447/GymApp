@@ -976,6 +976,146 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
 };
 
 // =============================================================================
+// QUEUE MANIPULATION
+// =============================================================================
+
+/**
+ * Skip queue items until the target day is first in the queue.
+ * 
+ * UNDO BEHAVIOR: When an originalQueue is provided, this function uses it as
+ * the reference point. This enables "undo" when the user goes backward:
+ * - Day 1 → Day 2: originalQueue[1] becomes first (skip forward)
+ * - Day 2 → Day 1: originalQueue[0] becomes first (restore/undo)
+ * 
+ * Without originalQueue, each skip is relative to the current queue state,
+ * which would cause Day 1 → Day 2 → Day 1 to keep skipping forward.
+ * 
+ * @param programId - The current program ID
+ * @param targetDayNumber - The day number to skip to (1-indexed)
+ * @param originalQueue - Optional original queue state for undo support
+ * @returns The updated queue, or null if program not found
+ */
+export const skipQueueToDay = async (
+  programId: string,
+  targetDayNumber: number,
+  originalQueue?: WorkoutQueueItem[]
+): Promise<WorkoutQueueItem[] | null> => {
+  const program = await getProgramById(programId);
+  if (!program || program.workoutDays.length === 0) {
+    console.warn('Cannot skip queue: Program not found or has no workout days');
+    return null;
+  }
+
+  // Use original queue if provided, otherwise fetch current queue
+  const referenceQueue = originalQueue ?? await getWorkoutQueue();
+  
+  // Check if this is even for the same program
+  if (referenceQueue.length > 0 && referenceQueue[0].programId !== programId) {
+    // Queue is for a different program, regenerate
+    await generateWorkoutQueue(programId);
+    return getWorkoutQueue();
+  }
+
+  // Check if target day is already first in reference queue
+  if (referenceQueue.length > 0 && referenceQueue[0].dayNumber === targetDayNumber) {
+    // Restore the reference queue (important for undo: restores original state)
+    await saveWorkoutQueue(referenceQueue);
+    return referenceQueue;
+  }
+
+  // Find if target day exists in the reference queue
+  const targetIndex = referenceQueue.findIndex(q => q.dayNumber === targetDayNumber);
+  
+  let newQueue: WorkoutQueueItem[];
+  
+  if (targetIndex >= 0) {
+    // Target day exists in reference queue - slice from there (preserves original items)
+    newQueue = referenceQueue.slice(targetIndex).map((item, idx) => ({
+      ...item,
+      position: idx,
+    }));
+  } else {
+    // Target day not in reference queue - rebuild queue starting from target day
+    newQueue = [];
+  }
+
+  // Fill queue to maintain DEFAULT_QUEUE_SIZE items
+  const numDays = program.workoutDays.length;
+  const targetDayIndex = program.workoutDays.findIndex(d => d.dayNumber === targetDayNumber);
+  
+  if (targetDayIndex === -1) {
+    console.warn(`Day ${targetDayNumber} not found in program`);
+    return referenceQueue;
+  }
+
+  while (newQueue.length < DEFAULT_QUEUE_SIZE) {
+    // Calculate which day to add next
+    const lastDayNumber = newQueue.length > 0 
+      ? newQueue[newQueue.length - 1].dayNumber 
+      : targetDayNumber - 1; // So first iteration adds targetDayNumber
+    
+    // Find the index of the last day in the program
+    const lastDayIndex = program.workoutDays.findIndex(d => d.dayNumber === lastDayNumber);
+    const nextDayIndex = lastDayIndex === -1 
+      ? targetDayIndex  // If last day not found, start from target
+      : (lastDayIndex + 1) % numDays;
+    
+    const nextDay = program.workoutDays[nextDayIndex];
+
+    // Apply auto-progression to exercises
+    const exercisesWithProgression: ProgramExercise[] = [];
+    for (const exercise of nextDay.exercises) {
+      const lastWeight = await getLastLoggedWeight(exercise.name, programId);
+      
+      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+      // Without this, "60" + "0" would give "600" instead of 60
+      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
+      const numProgression = Number(exercise.progression) || 0;
+      const numExerciseWeight = Number(exercise.weight) || 0;
+      
+      let newWeight = numExerciseWeight;
+      if (numLastWeight !== null && numProgression > 0) {
+        newWeight = numLastWeight + numProgression;
+      } else if (numLastWeight !== null) {
+        newWeight = numLastWeight;
+      }
+
+      exercisesWithProgression.push({
+        ...exercise,
+        weight: newWeight,
+      });
+    }
+
+    newQueue.push({
+      id: `queue-${Date.now()}-${newQueue.length}`,
+      programId: program.id,
+      programName: program.name,
+      dayNumber: nextDay.dayNumber,
+      exercises: exercisesWithProgression,
+      position: newQueue.length,
+    });
+  }
+
+  // Save the new queue
+  await saveWorkoutQueue(newQueue);
+  console.log(`Skipped queue to day ${targetDayNumber}, new queue: [${newQueue.map(q => q.dayNumber).join(', ')}]`);
+  
+  return newQueue;
+};
+
+/**
+ * Get a queue item for a specific day, if it exists in the queue.
+ * Useful for loading pre-calculated exercise values when user switches days.
+ * 
+ * @param dayNumber - The day number to find
+ * @returns The queue item if found, or null
+ */
+export const getQueueItemForDay = async (dayNumber: number): Promise<WorkoutQueueItem | null> => {
+  const queue = await getWorkoutQueue();
+  return queue.find(q => q.dayNumber === dayNumber) ?? null;
+};
+
+// =============================================================================
 // QUEUE GENERATION
 // =============================================================================
 
@@ -1007,12 +1147,18 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
       // Get last logged weight for this exercise
       const lastWeight = await getLastLoggedWeight(exercise.name, programId);
       
-      let newWeight = exercise.weight;
-      if (lastWeight !== null && exercise.progression > 0) {
-        newWeight = lastWeight + exercise.progression;
-      } else if (lastWeight !== null) {
+      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+      // Without this, "60" + "0" would give "600" instead of 60
+      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
+      const numProgression = Number(exercise.progression) || 0;
+      const numExerciseWeight = Number(exercise.weight) || 0;
+      
+      let newWeight = numExerciseWeight;
+      if (numLastWeight !== null && numProgression > 0) {
+        newWeight = numLastWeight + numProgression;
+      } else if (numLastWeight !== null) {
         // Use last logged weight if no progression defined
-        newWeight = lastWeight;
+        newWeight = numLastWeight;
       }
 
       exercisesWithProgression.push({
