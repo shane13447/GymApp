@@ -7,10 +7,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
+  SafeAreaView,
   ScrollView,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView as SafeAreaContextView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -185,7 +187,7 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View
+      <SafeAreaContextView
         className="flex-1"
         style={{ backgroundColor }}
       >
@@ -230,12 +232,6 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
                   <ThemedText className="font-medium">
                     {formatMuscleGroupName(group)}
                   </ThemedText>
-                  {!hasCustomValue && (
-                    <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                      Using global default
-                      {globalTarget ? ` (${globalTarget})` : ''}
-                    </ThemedText>
-                  )}
                   {input.error && (
                     <ThemedText className="text-xs text-red-500">{input.error}</ThemedText>
                   )}
@@ -266,7 +262,7 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
           {/* Bottom padding */}
           <View className="h-10" />
         </ScrollView>
-      </View>
+      </SafeAreaContextView>
     </Modal>
   );
 };
