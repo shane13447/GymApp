@@ -20,7 +20,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
 import * as db from '@/services/database';
 import type {
   Exercise,
@@ -228,6 +228,20 @@ export default function ProgramsScreen() {
       return;
     }
 
+    // Validate all exercises in all workout days
+    for (const day of workoutDays) {
+      for (const exercise of day.exercises) {
+        const exerciseValidation = validateExercise(exercise);
+        if (!exerciseValidation.isValid) {
+          Alert.alert(
+            'Validation Error',
+            `Day ${day.dayNumber} - ${exercise.name}: ${exerciseValidation.errors[0]}`
+          );
+          return;
+        }
+      }
+    }
+
     try {
       setIsSaving(true);
       const newProgram: Omit<Program, 'createdAt' | 'updatedAt'> = {
@@ -269,6 +283,20 @@ export default function ProgramsScreen() {
     if (!nameValidation.isValid) {
       Alert.alert('Validation Error', nameValidation.errors[0]);
       return;
+    }
+
+    // Validate all exercises in all workout days
+    for (const day of workoutDays) {
+      for (const exercise of day.exercises) {
+        const exerciseValidation = validateExercise(exercise);
+        if (!exerciseValidation.isValid) {
+          Alert.alert(
+            'Validation Error',
+            `Day ${day.dayNumber} - ${exercise.name}: ${exerciseValidation.errors[0]}`
+          );
+          return;
+        }
+      }
     }
 
     try {
