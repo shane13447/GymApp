@@ -111,6 +111,39 @@ export interface UserPreferences {
 }
 
 // =============================================================================
+// USER PROFILE TYPES
+// =============================================================================
+
+/**
+ * Training goals available for selection
+ */
+export enum TrainingGoal {
+  Strength = 'strength',
+  Hypertrophy = 'hypertrophy',
+  ImproveOverallHealth = 'improve_overall_health',
+}
+
+/**
+ * User profile information for training preferences
+ */
+export interface UserProfile {
+  id: string;
+  name: string | null;
+  currentWeight: number | null;
+  goalWeight: number | null;
+  trainingGoal: TrainingGoal | null;
+  targetSetsPerWeek: number | null;
+}
+
+/**
+ * Per-muscle group target sets override
+ */
+export interface MuscleGroupTarget {
+  muscleGroup: string;
+  targetSets: number;
+}
+
+// =============================================================================
 // VIEW/UI TYPES
 // =============================================================================
 
