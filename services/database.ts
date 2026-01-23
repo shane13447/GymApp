@@ -26,6 +26,13 @@ let db: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
+ * QUEUE GENERATION LOCK: Prevents race conditions when switching programs rapidly.
+ * Each call to generateWorkoutQueue increments this ID. If a newer request starts,
+ * the older one will abort before writing to the database.
+ */
+let currentQueueGenerationId = 0;
+
+/**
  * Get the database instance, initializing if necessary
  * 
  * RACE CONDITION FIX: Uses a shared promise to ensure only one initialization
@@ -106,6 +113,8 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
         // Timer data is transient, so losing it is acceptable
         console.log('Migrating active_rest_timers table to new composite key schema');
         await database.execAsync('DROP TABLE IF EXISTS active_rest_timers');
+        // UX IMPROVEMENT (Edge Case 4): Log migration success
+        console.log('Successfully migrated active_rest_timers to new schema.');
       }
     }
   } catch (error) {
@@ -1080,6 +1089,9 @@ export const skipQueueToDay = async (
         newWeight = numLastWeight;
       }
 
+      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
+      newWeight = Math.round(newWeight * 4) / 4;
+
       exercisesWithProgression.push({
         ...exercise,
         weight: newWeight,
@@ -1125,9 +1137,19 @@ export const getQueueItemForDay = async (dayNumber: number): Promise<WorkoutQueu
  * Applies auto-progression based on last logged weights
  */
 export const generateWorkoutQueue = async (programId: string): Promise<void> => {
+  // Increment request ID to invalidate any previous in-flight generations
+  currentQueueGenerationId += 1;
+  const thisRequestId = currentQueueGenerationId;
+
   const program = await getProgramById(programId);
   if (!program || program.workoutDays.length === 0) {
     console.warn('Cannot generate queue: Program not found or has no workout days');
+    return;
+  }
+
+  // Check if we've been superseded by a newer request
+  if (thisRequestId !== currentQueueGenerationId) {
+    console.log(`Aborting stale queue generation for program: ${program.name}`);
     return;
   }
 
@@ -1138,6 +1160,9 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
   const numDays = program.workoutDays.length;
 
   for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
+    // Check again inside the loop for long-running generations
+    if (thisRequestId !== currentQueueGenerationId) return;
+
     const dayIndex = i % numDays;
     const workoutDay = program.workoutDays[dayIndex];
 
@@ -1161,6 +1186,9 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
         newWeight = numLastWeight;
       }
 
+      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
+      newWeight = Math.round(newWeight * 4) / 4;
+
       exercisesWithProgression.push({
         ...exercise,
         weight: newWeight,
@@ -1175,6 +1203,12 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
       exercises: exercisesWithProgression,
       position: i,
     });
+  }
+
+  // Final check before saving
+  if (thisRequestId !== currentQueueGenerationId) {
+    console.log(`Aborting stale queue save for program: ${program.name}`);
+    return;
   }
 
   // Save the generated queue
