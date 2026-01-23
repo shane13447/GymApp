@@ -59,6 +59,7 @@ export default function ProgramsScreen() {
       name: ex.name,
       equipment: ex.equipment,
       muscle_groups_worked: ex.muscle_groups_worked,
+      isCompound: ex.isCompound,
     }));
   }, []);
 
