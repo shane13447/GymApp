@@ -84,3 +84,19 @@ export const EQUIPMENT_TYPES = [
 ] as const;
 
 export type EquipmentType = (typeof EQUIPMENT_TYPES)[number];
+
+// =============================================================================
+// TRAINING GOALS
+// =============================================================================
+
+export const TRAINING_GOAL_LABELS = {
+  strength: 'Strength',
+  hypertrophy: 'Hypertrophy',
+  improve_overall_health: 'Improve Overall Health',
+} as const;
+
+// =============================================================================
+// PROFILE DEFAULTS
+// =============================================================================
+
+export const DEFAULT_TARGET_SETS_PER_WEEK = 10;
