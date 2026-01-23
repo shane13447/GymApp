@@ -9,13 +9,16 @@
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
+  MuscleGroupTarget,
   Program,
   ProgramExercise,
   UserPreferences,
+  UserProfile,
   Workout,
   WorkoutDay,
   WorkoutQueueItem
 } from '@/types';
+import { TrainingGoal } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
 // =============================================================================
@@ -245,6 +248,29 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       PRIMARY KEY (exercise_name, program_id, day_number)
     );
 
+    -- User Profile Table (training preferences)
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      name TEXT,
+      current_weight REAL,
+      goal_weight REAL,
+      training_goal TEXT,
+      target_sets_per_week INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Muscle Group Targets Table (per-muscle group set overrides)
+    CREATE TABLE IF NOT EXISTS muscle_group_targets (
+      muscle_group TEXT PRIMARY KEY,
+      target_sets INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Insert default profile if not exists
+    INSERT OR IGNORE INTO user_profile (id) VALUES ('default');
+
     -- Create indexes for better query performance
     CREATE INDEX IF NOT EXISTS idx_workout_days_program ON workout_days(program_id);
     CREATE INDEX IF NOT EXISTS idx_program_exercises_day ON program_exercises(workout_day_id);
@@ -366,6 +392,174 @@ export const setCurrentProgramId = async (programId: string | null): Promise<voi
     await generateWorkoutQueue(programId);
   } else {
     await clearWorkoutQueue();
+  }
+};
+
+// =============================================================================
+// USER PROFILE
+// =============================================================================
+
+/**
+ * Get user profile
+ */
+export const getUserProfile = async (): Promise<UserProfile> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{
+    id: string;
+    name: string | null;
+    current_weight: number | null;
+    goal_weight: number | null;
+    training_goal: string | null;
+    target_sets_per_week: number | null;
+  }>('SELECT * FROM user_profile WHERE id = ?', ['default']);
+
+  if (!result) {
+    // Return defaults
+    return {
+      id: 'default',
+      name: null,
+      currentWeight: null,
+      goalWeight: null,
+      trainingGoal: null,
+      targetSetsPerWeek: null,
+    };
+  }
+
+  return {
+    id: result.id,
+    name: result.name,
+    currentWeight: result.current_weight,
+    goalWeight: result.goal_weight,
+    trainingGoal: result.training_goal as TrainingGoal | null,
+    targetSetsPerWeek: result.target_sets_per_week,
+  };
+};
+
+/**
+ * Update user profile
+ */
+export const updateUserProfile = async (
+  profile: Partial<UserProfile>
+): Promise<void> => {
+  const database = await getDatabase();
+  const updates: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (profile.name !== undefined) {
+    updates.push('name = ?');
+    values.push(profile.name);
+  }
+  if (profile.currentWeight !== undefined) {
+    updates.push('current_weight = ?');
+    values.push(profile.currentWeight);
+  }
+  if (profile.goalWeight !== undefined) {
+    updates.push('goal_weight = ?');
+    values.push(profile.goalWeight);
+  }
+  if (profile.trainingGoal !== undefined) {
+    updates.push('training_goal = ?');
+    values.push(profile.trainingGoal);
+  }
+  if (profile.targetSetsPerWeek !== undefined) {
+    updates.push('target_sets_per_week = ?');
+    values.push(profile.targetSetsPerWeek);
+  }
+
+  if (updates.length > 0) {
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push('default');
+    await database.runAsync(
+      `UPDATE user_profile SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+};
+
+// =============================================================================
+// MUSCLE GROUP TARGETS
+// =============================================================================
+
+/**
+ * Get all muscle group targets
+ */
+export const getMuscleGroupTargets = async (): Promise<MuscleGroupTarget[]> => {
+  const database = await getDatabase();
+  const results = await database.getAllAsync<{
+    muscle_group: string;
+    target_sets: number;
+  }>('SELECT * FROM muscle_group_targets ORDER BY muscle_group');
+
+  return results.map((r) => ({
+    muscleGroup: r.muscle_group,
+    targetSets: r.target_sets,
+  }));
+};
+
+/**
+ * Get target sets for a specific muscle group
+ * Returns null if no override is set (use global default)
+ */
+export const getMuscleGroupTarget = async (
+  muscleGroup: string
+): Promise<number | null> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{ target_sets: number }>(
+    'SELECT target_sets FROM muscle_group_targets WHERE muscle_group = ?',
+    [muscleGroup]
+  );
+  return result?.target_sets ?? null;
+};
+
+/**
+ * Set target sets for a muscle group (upsert)
+ */
+export const setMuscleGroupTarget = async (
+  muscleGroup: string,
+  targetSets: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT INTO muscle_group_targets (muscle_group, target_sets, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(muscle_group) DO UPDATE SET
+       target_sets = excluded.target_sets,
+       updated_at = CURRENT_TIMESTAMP`,
+    [muscleGroup, targetSets]
+  );
+};
+
+/**
+ * Remove a muscle group target override (revert to global default)
+ */
+export const removeMuscleGroupTarget = async (
+  muscleGroup: string
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM muscle_group_targets WHERE muscle_group = ?',
+    [muscleGroup]
+  );
+};
+
+/**
+ * Save all muscle group targets (replaces all existing)
+ */
+export const saveMuscleGroupTargets = async (
+  targets: MuscleGroupTarget[]
+): Promise<void> => {
+  const database = await getDatabase();
+  
+  // Clear existing targets
+  await database.runAsync('DELETE FROM muscle_group_targets');
+  
+  // Insert new targets
+  for (const target of targets) {
+    await database.runAsync(
+      `INSERT INTO muscle_group_targets (muscle_group, target_sets)
+       VALUES (?, ?)`,
+      [target.muscleGroup, target.targetSets]
+    );
   }
 };
 
