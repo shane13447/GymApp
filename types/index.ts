@@ -13,6 +13,7 @@ export interface Exercise {
   name: string;
   equipment: string;
   muscle_groups_worked: string[];
+  isCompound: boolean;
 }
 
 /**
