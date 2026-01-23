@@ -100,3 +100,67 @@ export const TRAINING_GOAL_LABELS = {
 // =============================================================================
 
 export const DEFAULT_TARGET_SETS_PER_WEEK = 10;
+
+// =============================================================================
+// HIERARCHICAL EXERCISE MENU STRUCTURE
+// =============================================================================
+
+/**
+ * Exercise type - top level classification
+ */
+export type ExerciseType = 'compound' | 'isolation';
+
+/**
+ * Broad muscle categories for the hierarchical menu
+ */
+export const BROAD_MUSCLE_CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Abs'] as const;
+export type BroadMuscleCategory = (typeof BROAD_MUSCLE_CATEGORIES)[number];
+
+/**
+ * Maps broad categories to specific muscle groups from the exercise data
+ */
+export const MUSCLE_GROUP_MAPPING: Record<BroadMuscleCategory, string[]> = {
+  Chest: ['chest'],
+  Back: ['lats', 'traps'],
+  Shoulders: ['shoulders'],
+  Legs: ['quads', 'hamstrings', 'glutes', 'calves'],
+  Arms: ['biceps', 'triceps', 'forearms'],
+  Abs: ['abs'],
+};
+
+/**
+ * Compound exercise menu structure
+ * Categories that show exercises directly (no sub-menu)
+ */
+export const COMPOUND_CATEGORIES: BroadMuscleCategory[] = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms'];
+
+/**
+ * Isolation exercise menu structure
+ * Categories with sub-menus for more granular targeting
+ */
+export const ISOLATION_CATEGORIES: BroadMuscleCategory[] = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Abs'];
+
+/**
+ * Sub-categories for isolation exercises
+ * Categories not listed here show exercises directly
+ */
+export const ISOLATION_SUBCATEGORIES: Partial<Record<BroadMuscleCategory, string[]>> = {
+  Back: ['Lats', 'Traps'],
+  Legs: ['Quads', 'Hamstrings', 'Glutes', 'Calves'],
+  Arms: ['Biceps', 'Triceps', 'Forearms'],
+};
+
+/**
+ * Maps sub-category display names to muscle group keys
+ */
+export const SUBCATEGORY_TO_MUSCLE: Record<string, string> = {
+  Lats: 'lats',
+  Traps: 'traps',
+  Quads: 'quads',
+  Hamstrings: 'hamstrings',
+  Glutes: 'glutes',
+  Calves: 'calves',
+  Biceps: 'biceps',
+  Triceps: 'triceps',
+  Forearms: 'forearms',
+};
