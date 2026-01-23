@@ -512,6 +512,17 @@ export default function ActiveWorkout() {
     try {
       setIsSaving(true);
 
+      // DELETION CHECK (Edge Case 3): Verify program still exists before saving
+      const programExists = await db.getProgramById(currentProgram.id);
+      if (!programExists) {
+        Alert.alert(
+          'Program Deleted',
+          'This program has been deleted. The workout cannot be saved.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
+
       const newWorkout: Workout = {
         id: Date.now().toString(),
         date: new Date().toISOString(),
