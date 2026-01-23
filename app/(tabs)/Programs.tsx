@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -222,6 +222,9 @@ export default function ProgramsScreen() {
   };
 
   const handleCreateProgram = async () => {
+    // Dismiss keyboard to trigger blur on any focused inputs, ensuring all values are synced
+    Keyboard.dismiss();
+    
     const nameValidation = validateProgramName(programName);
     if (!nameValidation.isValid) {
       Alert.alert('Validation Error', nameValidation.errors[0]);
@@ -278,6 +281,9 @@ export default function ProgramsScreen() {
 
   const handleUpdateProgram = async () => {
     if (!selectedProgramId) return;
+
+    // Dismiss keyboard to trigger blur on any focused inputs, ensuring all values are synced
+    Keyboard.dismiss();
 
     const nameValidation = validateProgramName(programName);
     if (!nameValidation.isValid) {
