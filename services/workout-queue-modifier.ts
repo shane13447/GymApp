@@ -15,6 +15,7 @@ interface ExerciseData {
   name: string;
   equipment: string;
   muscle_groups_worked: string[];
+  isCompound: boolean;
 }
 
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
@@ -590,6 +591,7 @@ export const parseQueueFormatResponse = (
             name: exerciseData.name,
             equipment: exerciseData.equipment,
             muscle_groups_worked: exerciseData.muscle_groups_worked,
+            isCompound: exerciseData.isCompound,
             weight,
             reps,
             sets,
@@ -614,6 +616,7 @@ export const parseQueueFormatResponse = (
               name: exerciseName,
               equipment: '',
               muscle_groups_worked: [],
+              isCompound: false, // Default to isolation for unknown exercises
               weight,
               reps,
               sets,
