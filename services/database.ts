@@ -166,6 +166,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
+      is_compound INTEGER DEFAULT 0,
       weight REAL DEFAULT 0,
       reps INTEGER DEFAULT 8,
       sets INTEGER DEFAULT 3,
@@ -195,6 +196,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
+      is_compound INTEGER DEFAULT 0,
       weight REAL DEFAULT 0,
       reps INTEGER DEFAULT 8,
       sets INTEGER DEFAULT 3,
@@ -224,6 +226,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
+      is_compound INTEGER DEFAULT 0,
       weight REAL DEFAULT 0,
       reps INTEGER DEFAULT 8,
       sets INTEGER DEFAULT 3,
@@ -642,6 +645,7 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       name: string;
       equipment: string;
       muscle_groups: string;
+      is_compound: number;
       weight: number;
       reps: number;
       sets: number;
@@ -659,6 +663,7 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -698,13 +703,14 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
           exercise.weight ?? 0,
           exercise.reps ?? 8,
           exercise.sets ?? 3,
@@ -754,13 +760,14 @@ export const updateProgram = async (program: Program): Promise<void> => {
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
           exercise.weight ?? 0,
           exercise.reps ?? 8,
           exercise.sets ?? 3,
@@ -818,6 +825,7 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
+      is_compound: number;
       weight: number;
       reps: number;
       sets: number;
@@ -844,6 +852,7 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -901,13 +910,14 @@ export const saveWorkout = async (workout: Workout): Promise<void> => {
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO workout_exercises 
-       (workout_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workout.id,
         exercise.name ?? '',
         exercise.equipment ?? '',
         JSON.stringify(muscleGroups),
+        exercise.isCompound ? 1 : 0,
         exercise.weight ?? 0,
         exercise.reps ?? 8,
         exercise.sets ?? 3,
@@ -978,6 +988,7 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
+      is_compound: number;
       weight: number;
       reps: number;
       sets: number;
@@ -1000,6 +1011,7 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -1043,13 +1055,14 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO queue_exercises 
-         (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
           exercise.weight ?? 0,
           exercise.reps ?? 8,
           exercise.sets ?? 3,
