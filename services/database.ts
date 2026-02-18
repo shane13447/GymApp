@@ -9,13 +9,16 @@
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
+  MuscleGroupTarget,
   Program,
   ProgramExercise,
   UserPreferences,
+  UserProfile,
   Workout,
   WorkoutDay,
   WorkoutQueueItem
 } from '@/types';
+import { TrainingGoal } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
 // =============================================================================
@@ -23,22 +26,105 @@ import * as SQLite from 'expo-sqlite';
 // =============================================================================
 
 let db: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+/**
+ * QUEUE GENERATION LOCK: Prevents race conditions when switching programs rapidly.
+ * Each call to generateWorkoutQueue increments this ID. If a newer request starts,
+ * the older one will abort before writing to the database.
+ */
+let currentQueueGenerationId = 0;
 
 /**
  * Get the database instance, initializing if necessary
+ * 
+ * RACE CONDITION FIX: Uses a shared promise to ensure only one initialization
+ * happens even when multiple callers request the database simultaneously.
+ * Without this, concurrent calls could:
+ * 1. All see db === null
+ * 2. All start openDatabaseAsync
+ * 3. Cause NullPointerException when accessing partially initialized DB
  */
 export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync(DATABASE_NAME);
-    await initializeDatabase(db);
+  // If database is already initialized, return it immediately
+  if (db) {
+    return db;
   }
-  return db;
+  
+  // If initialization is in progress, wait for it
+  if (initPromise) {
+    return initPromise;
+  }
+  
+  // Start initialization and store the promise so other callers can wait
+  initPromise = (async () => {
+    try {
+      const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      await initializeDatabase(database);
+      db = database;
+      return database;
+    } catch (error) {
+      // Reset on failure so next call can retry
+      initPromise = null;
+      throw error;
+    }
+  })();
+  
+  return initPromise;
 };
 
 /**
  * Initialize database schema
+ * 
+ * MIGRATION STRATEGY:
+ * SQLite's CREATE TABLE IF NOT EXISTS won't update existing tables.
+ * If we change a table's schema, we need to handle migration explicitly.
+ * 
+ * For the active_rest_timers table:
+ * - Old schema: exercise_name TEXT PRIMARY KEY (single column key)
+ * - New schema: PRIMARY KEY (exercise_name, program_id, day_number) (composite key)
+ * 
+ * Since timer data is transient (only valid for a few minutes), we can safely
+ * drop and recreate the table if we detect the old schema.
  */
 const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void> => {
+  // =============================================================================
+  // MIGRATION: Check and upgrade active_rest_timers table
+  // =============================================================================
+  // WHY WE NEED THIS:
+  // Users who installed the app before the composite key fix have the old table.
+  // CREATE TABLE IF NOT EXISTS won't modify an existing table.
+  // We need to detect the old schema and recreate the table.
+  try {
+    // Check if the table exists and has the old schema
+    // PRAGMA table_info returns column information for a table
+    const tableInfo = await database.getAllAsync<{
+      cid: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+      pk: number;
+    }>('PRAGMA table_info(active_rest_timers)');
+    
+    if (tableInfo.length > 0) {
+      // Table exists - check if it has the new columns
+      const hasNewColumns = tableInfo.some(col => col.name === 'program_id');
+      
+      if (!hasNewColumns) {
+        // Old schema detected - drop and recreate
+        // Timer data is transient, so losing it is acceptable
+        console.log('Migrating active_rest_timers table to new composite key schema');
+        await database.execAsync('DROP TABLE IF EXISTS active_rest_timers');
+        // UX IMPROVEMENT (Edge Case 4): Log migration success
+        console.log('Successfully migrated active_rest_timers to new schema.');
+      }
+    }
+  } catch (error) {
+    // If PRAGMA fails, table probably doesn't exist - that's fine
+    console.log('Timer table check:', error);
+  }
+  
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -80,11 +166,12 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
+      is_compound INTEGER DEFAULT 0,
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
     );
@@ -109,13 +196,14 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
-      logged_weight TEXT DEFAULT '',
-      logged_reps TEXT DEFAULT '',
+      is_compound INTEGER DEFAULT 0,
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
+      logged_weight REAL DEFAULT 0,
+      logged_reps INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
     );
@@ -138,14 +226,53 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       name TEXT NOT NULL,
       equipment TEXT DEFAULT '',
       muscle_groups TEXT NOT NULL,
-      weight TEXT DEFAULT '0',
-      reps TEXT DEFAULT '8',
-      sets TEXT DEFAULT '3',
-      rest_time TEXT DEFAULT '180',
-      progression TEXT DEFAULT '',
+      is_compound INTEGER DEFAULT 0,
+      weight REAL DEFAULT 0,
+      reps INTEGER DEFAULT 8,
+      sets INTEGER DEFAULT 3,
+      rest_time INTEGER DEFAULT 180,
+      progression REAL DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
     );
+
+    -- Active Rest Timers Table (for persisting timers across app lifecycle)
+    -- COMPOSITE KEY FIX: Uses (exercise_name, program_id, day_number) to prevent
+    -- collisions when the same exercise appears on multiple days or programs.
+    -- This allows timers to be properly isolated per workout context.
+    CREATE TABLE IF NOT EXISTS active_rest_timers (
+      exercise_name TEXT NOT NULL,
+      program_id TEXT NOT NULL,
+      day_number INTEGER NOT NULL,
+      end_timestamp INTEGER NOT NULL,
+      sets_completed INTEGER DEFAULT 0,
+      rest_duration INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (exercise_name, program_id, day_number)
+    );
+
+    -- User Profile Table (training preferences)
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      name TEXT,
+      current_weight REAL,
+      goal_weight REAL,
+      training_goal TEXT,
+      target_sets_per_week INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Muscle Group Targets Table (per-muscle group set overrides)
+    CREATE TABLE IF NOT EXISTS muscle_group_targets (
+      muscle_group TEXT PRIMARY KEY,
+      target_sets INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Insert default profile if not exists
+    INSERT OR IGNORE INTO user_profile (id) VALUES ('default');
 
     -- Create indexes for better query performance
     CREATE INDEX IF NOT EXISTS idx_workout_days_program ON workout_days(program_id);
@@ -272,6 +399,174 @@ export const setCurrentProgramId = async (programId: string | null): Promise<voi
 };
 
 // =============================================================================
+// USER PROFILE
+// =============================================================================
+
+/**
+ * Get user profile
+ */
+export const getUserProfile = async (): Promise<UserProfile> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{
+    id: string;
+    name: string | null;
+    current_weight: number | null;
+    goal_weight: number | null;
+    training_goal: string | null;
+    target_sets_per_week: number | null;
+  }>('SELECT * FROM user_profile WHERE id = ?', ['default']);
+
+  if (!result) {
+    // Return defaults
+    return {
+      id: 'default',
+      name: null,
+      currentWeight: null,
+      goalWeight: null,
+      trainingGoal: null,
+      targetSetsPerWeek: null,
+    };
+  }
+
+  return {
+    id: result.id,
+    name: result.name,
+    currentWeight: result.current_weight,
+    goalWeight: result.goal_weight,
+    trainingGoal: result.training_goal as TrainingGoal | null,
+    targetSetsPerWeek: result.target_sets_per_week,
+  };
+};
+
+/**
+ * Update user profile
+ */
+export const updateUserProfile = async (
+  profile: Partial<UserProfile>
+): Promise<void> => {
+  const database = await getDatabase();
+  const updates: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (profile.name !== undefined) {
+    updates.push('name = ?');
+    values.push(profile.name);
+  }
+  if (profile.currentWeight !== undefined) {
+    updates.push('current_weight = ?');
+    values.push(profile.currentWeight);
+  }
+  if (profile.goalWeight !== undefined) {
+    updates.push('goal_weight = ?');
+    values.push(profile.goalWeight);
+  }
+  if (profile.trainingGoal !== undefined) {
+    updates.push('training_goal = ?');
+    values.push(profile.trainingGoal);
+  }
+  if (profile.targetSetsPerWeek !== undefined) {
+    updates.push('target_sets_per_week = ?');
+    values.push(profile.targetSetsPerWeek);
+  }
+
+  if (updates.length > 0) {
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push('default');
+    await database.runAsync(
+      `UPDATE user_profile SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+};
+
+// =============================================================================
+// MUSCLE GROUP TARGETS
+// =============================================================================
+
+/**
+ * Get all muscle group targets
+ */
+export const getMuscleGroupTargets = async (): Promise<MuscleGroupTarget[]> => {
+  const database = await getDatabase();
+  const results = await database.getAllAsync<{
+    muscle_group: string;
+    target_sets: number;
+  }>('SELECT * FROM muscle_group_targets ORDER BY muscle_group');
+
+  return results.map((r) => ({
+    muscleGroup: r.muscle_group,
+    targetSets: r.target_sets,
+  }));
+};
+
+/**
+ * Get target sets for a specific muscle group
+ * Returns null if no override is set (use global default)
+ */
+export const getMuscleGroupTarget = async (
+  muscleGroup: string
+): Promise<number | null> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{ target_sets: number }>(
+    'SELECT target_sets FROM muscle_group_targets WHERE muscle_group = ?',
+    [muscleGroup]
+  );
+  return result?.target_sets ?? null;
+};
+
+/**
+ * Set target sets for a muscle group (upsert)
+ */
+export const setMuscleGroupTarget = async (
+  muscleGroup: string,
+  targetSets: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT INTO muscle_group_targets (muscle_group, target_sets, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(muscle_group) DO UPDATE SET
+       target_sets = excluded.target_sets,
+       updated_at = CURRENT_TIMESTAMP`,
+    [muscleGroup, targetSets]
+  );
+};
+
+/**
+ * Remove a muscle group target override (revert to global default)
+ */
+export const removeMuscleGroupTarget = async (
+  muscleGroup: string
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM muscle_group_targets WHERE muscle_group = ?',
+    [muscleGroup]
+  );
+};
+
+/**
+ * Save all muscle group targets (replaces all existing)
+ */
+export const saveMuscleGroupTargets = async (
+  targets: MuscleGroupTarget[]
+): Promise<void> => {
+  const database = await getDatabase();
+  
+  // Clear existing targets
+  await database.runAsync('DELETE FROM muscle_group_targets');
+  
+  // Insert new targets
+  for (const target of targets) {
+    await database.runAsync(
+      `INSERT INTO muscle_group_targets (muscle_group, target_sets)
+       VALUES (?, ?)`,
+      [target.muscleGroup, target.targetSets]
+    );
+  }
+};
+
+// =============================================================================
 // PROGRAMS
 // =============================================================================
 
@@ -307,7 +602,7 @@ export const getAllPrograms = async (): Promise<Program[]> => {
 /**
  * Get a single program by ID
  */
-export const getProgramById = async (programId: string): Promise<Program | null> => {
+export const getProgramById = async (programId: string): Promise<Program | null> => { 
   const database = await getDatabase();
   
   const program = await database.getFirstAsync<{
@@ -350,11 +645,12 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
+      is_compound: number;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
       position: number;
     }>(
       'SELECT * FROM program_exercises WHERE workout_day_id = ? ORDER BY position',
@@ -367,6 +663,7 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -402,20 +699,23 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
 
     for (let i = 0; i < day.exercises.length; i++) {
       const exercise = day.exercises[i];
+      // Defensive coding: ensure all fields have valid values
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           i,
         ]
       );
@@ -456,20 +756,23 @@ export const updateProgram = async (program: Program): Promise<void> => {
 
     for (let i = 0; i < day.exercises.length; i++) {
       const exercise = day.exercises[i];
+      // Defensive coding: ensure all fields have valid values
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           i,
         ]
       );
@@ -522,13 +825,14 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
-      logged_weight: string;
-      logged_reps: string;
+      is_compound: number;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
+      logged_weight: number;
+      logged_reps: number;
       position: number;
     }>(
       'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
@@ -548,6 +852,7 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -602,22 +907,24 @@ export const saveWorkout = async (workout: Workout): Promise<void> => {
   // Insert workout exercises
   for (let i = 0; i < workout.exercises.length; i++) {
     const exercise = workout.exercises[i];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO workout_exercises 
-       (workout_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workout.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
-        exercise.loggedWeight,
-        exercise.loggedReps,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.isCompound ? 1 : 0,
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
+        exercise.loggedWeight ?? 0,
+        exercise.loggedReps ?? 0,
         i,
       ]
     );
@@ -638,14 +945,14 @@ export const deleteWorkout = async (workoutId: string): Promise<void> => {
 export const getLastLoggedWeight = async (
   exerciseName: string,
   programId: string
-): Promise<string | null> => {
+): Promise<number | null> => {
   const database = await getDatabase();
   
-  const result = await database.getFirstAsync<{ logged_weight: string }>(
+  const result = await database.getFirstAsync<{ logged_weight: number }>(
     `SELECT we.logged_weight 
      FROM workout_exercises we
      JOIN workouts w ON we.workout_id = w.id
-     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight != ''
+     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight > 0
      ORDER BY w.date DESC
      LIMIT 1`,
     [exerciseName, programId]
@@ -681,11 +988,12 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       name: string;
       equipment: string;
       muscle_groups: string;
-      weight: string;
-      reps: string;
-      sets: string;
-      rest_time: string;
-      progression: string;
+      is_compound: number;
+      weight: number;
+      reps: number;
+      sets: number;
+      rest_time: number;
+      progression: number;
       position: number;
     }>(
       'SELECT * FROM queue_exercises WHERE queue_item_id = ? ORDER BY position',
@@ -703,6 +1011,7 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        isCompound: !!ex.is_compound,
         weight: ex.weight,
         reps: ex.reps,
         sets: ex.sets,
@@ -743,20 +1052,22 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
     // Insert queue exercises
     for (let j = 0; j < item.exercises.length; j++) {
       const exercise = item.exercises[j];
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
         `INSERT INTO queue_exercises 
-         (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
-          exercise.name,
-          exercise.equipment,
-          JSON.stringify(exercise.muscle_groups_worked),
-          exercise.weight,
-          exercise.reps,
-          exercise.sets,
-          exercise.restTime,
-          exercise.progression,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
+          exercise.weight ?? 0,
+          exercise.reps ?? 8,
+          exercise.sets ?? 3,
+          exercise.restTime ?? 180,
+          exercise.progression ?? 0,
           j,
         ]
       );
@@ -792,20 +1103,21 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
   // Insert queue exercises
   for (let j = 0; j < item.exercises.length; j++) {
     const exercise = item.exercises[j];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises 
        (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
         j,
       ]
     );
@@ -858,24 +1170,168 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
 
   for (let j = 0; j < item.exercises.length; j++) {
     const exercise = item.exercises[j];
+    const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises 
        (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
-        exercise.name,
-        exercise.equipment,
-        JSON.stringify(exercise.muscle_groups_worked),
-        exercise.weight,
-        exercise.reps,
-        exercise.sets,
-        exercise.restTime,
-        exercise.progression,
+        exercise.name ?? '',
+        exercise.equipment ?? '',
+        JSON.stringify(muscleGroups),
+        exercise.weight ?? 0,
+        exercise.reps ?? 8,
+        exercise.sets ?? 3,
+        exercise.restTime ?? 180,
+        exercise.progression ?? 0,
         j,
       ]
     );
   }
+};
+
+// =============================================================================
+// QUEUE MANIPULATION
+// =============================================================================
+
+/**
+ * Skip queue items until the target day is first in the queue.
+ * 
+ * UNDO BEHAVIOR: When an originalQueue is provided, this function uses it as
+ * the reference point. This enables "undo" when the user goes backward:
+ * - Day 1 → Day 2: originalQueue[1] becomes first (skip forward)
+ * - Day 2 → Day 1: originalQueue[0] becomes first (restore/undo)
+ * 
+ * Without originalQueue, each skip is relative to the current queue state,
+ * which would cause Day 1 → Day 2 → Day 1 to keep skipping forward.
+ * 
+ * @param programId - The current program ID
+ * @param targetDayNumber - The day number to skip to (1-indexed)
+ * @param originalQueue - Optional original queue state for undo support
+ * @returns The updated queue, or null if program not found
+ */
+export const skipQueueToDay = async (
+  programId: string,
+  targetDayNumber: number,
+  originalQueue?: WorkoutQueueItem[]
+): Promise<WorkoutQueueItem[] | null> => {
+  const program = await getProgramById(programId);
+  if (!program || program.workoutDays.length === 0) {
+    console.warn('Cannot skip queue: Program not found or has no workout days');
+    return null;
+  }
+
+  // Use original queue if provided, otherwise fetch current queue
+  const referenceQueue = originalQueue ?? await getWorkoutQueue();
+  
+  // Check if this is even for the same program
+  if (referenceQueue.length > 0 && referenceQueue[0].programId !== programId) {
+    // Queue is for a different program, regenerate
+    await generateWorkoutQueue(programId);
+    return getWorkoutQueue();
+  }
+
+  // Check if target day is already first in reference queue
+  if (referenceQueue.length > 0 && referenceQueue[0].dayNumber === targetDayNumber) {
+    // Restore the reference queue (important for undo: restores original state)
+    await saveWorkoutQueue(referenceQueue);
+    return referenceQueue;
+  }
+
+  // Find if target day exists in the reference queue
+  const targetIndex = referenceQueue.findIndex(q => q.dayNumber === targetDayNumber);
+  
+  let newQueue: WorkoutQueueItem[];
+  
+  if (targetIndex >= 0) {
+    // Target day exists in reference queue - slice from there (preserves original items)
+    newQueue = referenceQueue.slice(targetIndex).map((item, idx) => ({
+      ...item,
+      position: idx,
+    }));
+  } else {
+    // Target day not in reference queue - rebuild queue starting from target day
+    newQueue = [];
+  }
+
+  // Fill queue to maintain DEFAULT_QUEUE_SIZE items
+  const numDays = program.workoutDays.length;
+  const targetDayIndex = program.workoutDays.findIndex(d => d.dayNumber === targetDayNumber);
+  
+  if (targetDayIndex === -1) {
+    console.warn(`Day ${targetDayNumber} not found in program`);
+    return referenceQueue;
+  }
+
+  while (newQueue.length < DEFAULT_QUEUE_SIZE) {
+    // Calculate which day to add next
+    const lastDayNumber = newQueue.length > 0 
+      ? newQueue[newQueue.length - 1].dayNumber 
+      : targetDayNumber - 1; // So first iteration adds targetDayNumber
+    
+    // Find the index of the last day in the program
+    const lastDayIndex = program.workoutDays.findIndex(d => d.dayNumber === lastDayNumber);
+    const nextDayIndex = lastDayIndex === -1 
+      ? targetDayIndex  // If last day not found, start from target
+      : (lastDayIndex + 1) % numDays;
+    
+    const nextDay = program.workoutDays[nextDayIndex];
+
+    // Apply auto-progression to exercises
+    const exercisesWithProgression: ProgramExercise[] = [];
+    for (const exercise of nextDay.exercises) {
+      const lastWeight = await getLastLoggedWeight(exercise.name, programId);
+      
+      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+      // Without this, "60" + "0" would give "600" instead of 60
+      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
+      const numProgression = Number(exercise.progression) || 0;
+      const numExerciseWeight = Number(exercise.weight) || 0;
+      
+      let newWeight = numExerciseWeight;
+      if (numLastWeight !== null && numProgression > 0) {
+        newWeight = numLastWeight + numProgression;
+      } else if (numLastWeight !== null) {
+        newWeight = numLastWeight;
+      }
+
+      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
+      newWeight = Math.round(newWeight * 4) / 4;
+
+      exercisesWithProgression.push({
+        ...exercise,
+        weight: newWeight,
+      });
+    }
+
+    newQueue.push({
+      id: `queue-${Date.now()}-${newQueue.length}`,
+      programId: program.id,
+      programName: program.name,
+      dayNumber: nextDay.dayNumber,
+      exercises: exercisesWithProgression,
+      position: newQueue.length,
+    });
+  }
+
+  // Save the new queue
+  await saveWorkoutQueue(newQueue);
+  console.log(`Skipped queue to day ${targetDayNumber}, new queue: [${newQueue.map(q => q.dayNumber).join(', ')}]`);
+  
+  return newQueue;
+};
+
+/**
+ * Get a queue item for a specific day, if it exists in the queue.
+ * Useful for loading pre-calculated exercise values when user switches days.
+ * 
+ * @param dayNumber - The day number to find
+ * @returns The queue item if found, or null
+ */
+export const getQueueItemForDay = async (dayNumber: number): Promise<WorkoutQueueItem | null> => {
+  const queue = await getWorkoutQueue();
+  return queue.find(q => q.dayNumber === dayNumber) ?? null;
 };
 
 // =============================================================================
@@ -888,9 +1344,19 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
  * Applies auto-progression based on last logged weights
  */
 export const generateWorkoutQueue = async (programId: string): Promise<void> => {
+  // Increment request ID to invalidate any previous in-flight generations
+  currentQueueGenerationId += 1;
+  const thisRequestId = currentQueueGenerationId;
+
   const program = await getProgramById(programId);
   if (!program || program.workoutDays.length === 0) {
     console.warn('Cannot generate queue: Program not found or has no workout days');
+    return;
+  }
+
+  // Check if we've been superseded by a newer request
+  if (thisRequestId !== currentQueueGenerationId) {
+    console.log(`Aborting stale queue generation for program: ${program.name}`);
     return;
   }
 
@@ -901,6 +1367,9 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
   const numDays = program.workoutDays.length;
 
   for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
+    // Check again inside the loop for long-running generations
+    if (thisRequestId !== currentQueueGenerationId) return;
+
     const dayIndex = i % numDays;
     const workoutDay = program.workoutDays[dayIndex];
 
@@ -910,17 +1379,22 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
       // Get last logged weight for this exercise
       const lastWeight = await getLastLoggedWeight(exercise.name, programId);
       
-      let newWeight = exercise.weight;
-      if (lastWeight && exercise.progression) {
-        const lastWeightNum = parseFloat(lastWeight.replace(/[^0-9.]/g, ''));
-        const progressionNum = parseFloat(exercise.progression);
-        if (!isNaN(lastWeightNum) && !isNaN(progressionNum) && progressionNum > 0) {
-          newWeight = String(lastWeightNum + progressionNum);
-        }
-      } else if (lastWeight) {
+      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+      // Without this, "60" + "0" would give "600" instead of 60
+      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
+      const numProgression = Number(exercise.progression) || 0;
+      const numExerciseWeight = Number(exercise.weight) || 0;
+      
+      let newWeight = numExerciseWeight;
+      if (numLastWeight !== null && numProgression > 0) {
+        newWeight = numLastWeight + numProgression;
+      } else if (numLastWeight !== null) {
         // Use last logged weight if no progression defined
-        newWeight = lastWeight;
+        newWeight = numLastWeight;
       }
+
+      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
+      newWeight = Math.round(newWeight * 4) / 4;
 
       exercisesWithProgression.push({
         ...exercise,
@@ -938,9 +1412,207 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
     });
   }
 
+  // Final check before saving
+  if (thisRequestId !== currentQueueGenerationId) {
+    console.log(`Aborting stale queue save for program: ${program.name}`);
+    return;
+  }
+
   // Save the generated queue
   await saveWorkoutQueue(queueItems);
   console.log(`Generated workout queue with ${queueItems.length} items for program: ${program.name}`);
+};
+
+// =============================================================================
+// REST TIMER PERSISTENCE
+// =============================================================================
+
+/**
+ * Timer context - identifies which workout context a timer belongs to.
+ * COMPOSITE KEY FIX: This allows the same exercise name to have separate timers
+ * on different days or in different programs.
+ */
+export interface TimerContext {
+  exerciseName: string;
+  programId: string;
+  dayNumber: number;
+}
+
+/**
+ * Timer state stored in database
+ * Extends TimerContext with the actual timer data
+ */
+export interface ActiveTimerState extends TimerContext {
+  endTimestamp: number;
+  setsCompleted: number;
+  restDuration: number;
+}
+
+/**
+ * Save an active rest timer (timestamp-based for persistence across app lifecycle)
+ * COMPOSITE KEY FIX: Now requires programId and dayNumber to uniquely identify the timer
+ */
+export const saveActiveTimer = async (timer: ActiveTimerState): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT OR REPLACE INTO active_rest_timers 
+     (exercise_name, program_id, day_number, end_timestamp, sets_completed, rest_duration) 
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      timer.exerciseName,
+      timer.programId,
+      timer.dayNumber,
+      timer.endTimestamp,
+      timer.setsCompleted,
+      timer.restDuration,
+    ]
+  );
+};
+
+/**
+ * Get an active timer for a specific exercise in a specific workout context
+ * COMPOSITE KEY FIX: Now requires full context (exercise + program + day)
+ */
+export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimerState | null> => {
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{
+    exercise_name: string;
+    program_id: string;
+    day_number: number;
+    end_timestamp: number;
+    sets_completed: number;
+    rest_duration: number;
+  }>(
+    'SELECT * FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseName, context.programId, context.dayNumber]
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    exerciseName: result.exercise_name,
+    programId: result.program_id,
+    dayNumber: result.day_number,
+    endTimestamp: result.end_timestamp,
+    setsCompleted: result.sets_completed,
+    restDuration: result.rest_duration,
+  };
+};
+
+/**
+ * Get all active timers
+ */
+export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
+  const database = await getDatabase();
+  const results = await database.getAllAsync<{
+    exercise_name: string;
+    program_id: string;
+    day_number: number;
+    end_timestamp: number;
+    sets_completed: number;
+    rest_duration: number;
+  }>('SELECT * FROM active_rest_timers');
+
+  return results.map((r) => ({
+    exerciseName: r.exercise_name,
+    programId: r.program_id,
+    dayNumber: r.day_number,
+    endTimestamp: r.end_timestamp,
+    setsCompleted: r.sets_completed,
+    restDuration: r.rest_duration,
+  }));
+};
+
+/**
+ * Clear a specific timer (when stopped or completed)
+ * COMPOSITE KEY FIX: Now requires full context to identify which timer to clear
+ */
+export const clearActiveTimer = async (context: TimerContext): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseName, context.programId, context.dayNumber]
+  );
+};
+
+/**
+ * Clear all active timers (e.g., when workout is saved or day is switched)
+ * This clears ALL timers regardless of context - used for full reset scenarios
+ */
+export const clearAllActiveTimers = async (): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM active_rest_timers');
+};
+
+/**
+ * Clear all timers for a specific program/day context
+ * Useful for clearing only timers from a specific workout session
+ */
+export const clearTimersForContext = async (
+  programId: string,
+  dayNumber: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE program_id = ? AND day_number = ?',
+    [programId, dayNumber]
+  );
+};
+
+/**
+ * Update sets completed for a timer (without changing timer state)
+ * COMPOSITE KEY FIX: Now requires full context
+ */
+export const updateTimerSetsCompleted = async (
+  context: TimerContext,
+  setsCompleted: number
+): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
+    [setsCompleted, context.exerciseName, context.programId, context.dayNumber]
+  );
+};
+
+/**
+ * Clean up orphaned/expired timer records
+ * ORPHANED TIMER FIX: Called on app startup to remove timers that:
+ * 1. Have already expired (end_timestamp < now)
+ * 2. Are unreasonably old (end_timestamp was set more than 15 min ago)
+ * 
+ * This handles scenarios where the app was force-killed mid-workout
+ * and timer records were left in the database.
+ * 
+ * WHY WE ONLY USE end_timestamp:
+ * Previously, we tried to use both end_timestamp (milliseconds) and 
+ * created_at (text datetime). This didn't work because:
+ * - end_timestamp is stored in milliseconds (e.g., 1705520400000)
+ * - created_at is stored as text (e.g., "2025-01-17 10:00:00")
+ * - SQLite datetime functions expect seconds, not milliseconds
+ * - Comparing datetime strings with different formats is unreliable
+ * 
+ * The fix: Use end_timestamp for everything. We can derive "age" from it:
+ * - A timer created at time T with duration D has end_timestamp = T + D
+ * - So the timer was created at (end_timestamp - rest_duration * 1000)
+ * - If that's more than 15 minutes ago, the timer is stale
+ */
+export const cleanupOrphanedTimers = async (): Promise<number> => {
+  const database = await getDatabase();
+  const now = Date.now();
+  
+  // Delete all timers that have already expired (end_timestamp in the past).
+  // Rest timers are only valid while counting down. Once expired, they're no longer
+  // useful and should be cleaned up to prevent stale data issues.
+  // 
+  // Note: end_timestamp is stored in milliseconds, consistent with Date.now()
+  const result = await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE end_timestamp < ?',
+    [now]
+  );
+  
+  return result.changes;
 };
 
 // =============================================================================
@@ -994,5 +1666,6 @@ export const closeDatabase = async (): Promise<void> => {
   if (db) {
     await db.closeAsync();
     db = null;
+    initPromise = null;
   }
 };

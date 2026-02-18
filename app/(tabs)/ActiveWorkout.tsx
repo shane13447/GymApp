@@ -3,17 +3,17 @@
  * Track and log an active workout session
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
-import { DaySelector } from '@/components/workout/DaySelector';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { DaySelector } from '@/components/workout/DaySelector';
+import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
 import * as db from '@/services/database';
 import type {
   Program,
@@ -35,6 +35,26 @@ export default function ActiveWorkout() {
   const [loadingFromQueue, setLoadingFromQueue] = useState(false);
   const [isLoadedFromQueue, setIsLoadedFromQueue] = useState(false);
   const queueLoadedRef = useRef(false);
+  
+  // =============================================================================
+  // UNDO SUPPORT: Track the original queue state when screen loads
+  // =============================================================================
+  // This enables "undo" when user goes backward (e.g., Day 1 → Day 2 → Day 1).
+  // Without this, each day change would skip relative to the current queue,
+  // causing forward-only movement. With originalQueue, going back to Day 1
+  // restores the queue to start from Day 1 (as it was originally).
+  const originalQueueRef = useRef<WorkoutQueueItem[] | null>(null);
+  
+  // =============================================================================
+  // STALE LOAD FIX: Track which day-load request is "current"
+  // =============================================================================
+  // Problem: User switches Day 1 → Day 2 → Day 3 rapidly. The async loads for
+  // Day 2 and Day 3 race. If Day 2's load finishes last, it overwrites Day 3's
+  // exercises, leaving the UI showing Day 3 selected but Day 2's exercises.
+  //
+  // Solution: Increment a counter on each day change. After the async load,
+  // check if the counter still matches. If not, discard the stale result.
+  const dayLoadRequestRef = useRef(0);
 
   // Load programs on mount
   useEffect(() => {
@@ -45,6 +65,7 @@ export default function ActiveWorkout() {
   useFocusEffect(
     useCallback(() => {
       queueLoadedRef.current = false;
+      originalQueueRef.current = null; // Reset original queue on focus
       setIsLoadedFromQueue(false);
       reloadQueue();
     }, [])
@@ -83,6 +104,12 @@ export default function ActiveWorkout() {
     try {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
+      
+      // Store as original queue if not yet set (first load after focus)
+      // This enables undo support when user changes days back and forth
+      if (originalQueueRef.current === null && queue.length > 0) {
+        originalQueueRef.current = queue;
+      }
     } catch (error) {
       console.error('Error loading workout queue:', error);
     }
@@ -126,6 +153,11 @@ export default function ActiveWorkout() {
     const selectedDay = currentProgram.workoutDays[selectedDayIndex];
     if (!selectedDay) return;
 
+    // STALE LOAD FIX: Increment and capture request ID
+    // This function can race with handleDayChange if user switches days rapidly
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
+
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
@@ -135,48 +167,48 @@ export default function ActiveWorkout() {
           return {
             ...ex,
             loggedWeight: autoWeight,
-            loggedReps: '',
+            loggedReps: 0,
           };
         })
       );
 
+      // STALE LOAD FIX: Discard if a newer request has started
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+
       setWorkoutExercises(initialExercises);
     } catch (error) {
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
       console.error('Error initializing workout exercises:', error);
       const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
         ...ex,
-        loggedWeight: '',
-        loggedReps: '',
+        loggedWeight: 0,
+        loggedReps: 0,
       }));
       setWorkoutExercises(initialExercises);
     }
   };
 
-  const calculateAutoWeight = (lastWeight: string | null, progression: string): string => {
-    if (!lastWeight) return '';
-    if (!progression || !progression.trim()) return lastWeight;
+  const calculateAutoWeight = (lastWeight: number | null, progression: number): number => {
+    if (lastWeight === null) return 0;
+    
+    // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+    // Without this, "60" + "0" would give "600" instead of 60
+    const numLastWeight = Number(lastWeight);
+    const numProgression = Number(progression);
+    
+    if (!numProgression || numProgression === 0) return numLastWeight;
 
     try {
-      const progressionAmount = parseFloat(progression.trim());
-      if (isNaN(progressionAmount)) return lastWeight;
-
-      const lastWeightMatch = lastWeight.match(/([\d.]+)\s*(kg)?/i);
-      if (!lastWeightMatch) {
-        const lastWeightNum = parseFloat(lastWeight);
-        if (!isNaN(lastWeightNum)) {
-          return (lastWeightNum + progressionAmount).toString();
-        }
-        return lastWeight;
-      }
-
-      const lastWeightAmount = parseFloat(lastWeightMatch[1]);
-      const lastWeightUnit = lastWeightMatch[2]?.toLowerCase() || '';
-      const newWeight = lastWeightAmount + progressionAmount;
-
-      return lastWeightUnit ? `${newWeight} ${lastWeightUnit}` : newWeight.toString();
+      const newWeight = numLastWeight + numProgression;
+      return isNaN(newWeight) ? numLastWeight : newWeight;
     } catch (error) {
       console.error('Error calculating auto weight:', error);
-      return lastWeight;
+      return numLastWeight;
     }
   };
 
@@ -188,11 +220,13 @@ export default function ActiveWorkout() {
       const progressedExercises: ProgramExercise[] = await Promise.all(
         exercises.map(async (ex) => {
           const lastWeight = await db.getLastLoggedWeight(ex.name, programId);
-          const progressedWeight = calculateAutoWeight(lastWeight, ex.progression);
+          const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          // RUNTIME TYPE SAFETY: Ensure numeric fallback
+          const numExWeight = Number(ex.weight) || 0;
 
           return {
             ...ex,
-            weight: progressedWeight || ex.weight || '',
+            weight: progressedWeight || numExWeight,
           };
         })
       );
@@ -243,7 +277,10 @@ export default function ActiveWorkout() {
 
       setCurrentProgram(program);
       setSelectedDayIndex(dayIndex);
-      await db.setCurrentProgramId(program.id);
+      
+      // Only update the preference (don't regenerate queue since we're loading FROM it)
+      // Use updateUserPreferences directly to avoid triggering generateWorkoutQueue
+      await db.updateUserPreferences({ currentProgramId: program.id });
 
       await initializeWorkoutExercisesFromQueue(firstWorkout);
       setLoadingFromQueue(false);
@@ -256,31 +293,45 @@ export default function ActiveWorkout() {
   };
 
   const initializeWorkoutExercisesFromQueue = async (queueItem: WorkoutQueueItem) => {
+    // STALE LOAD FIX: Increment and capture request ID
+    // This can race with handleDayChange if user switches days immediately after queue load
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
+
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         queueItem.exercises.map(async (ex) => {
-          let finalWeight = ex.weight || '';
+          let finalWeight = ex.weight || 0;
 
           if (!finalWeight) {
             const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId);
-            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || '';
+            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || 0;
           }
 
           return {
             ...ex,
             loggedWeight: finalWeight,
-            loggedReps: '',
+            loggedReps: 0,
           };
         })
       );
 
+      // STALE LOAD FIX: Discard if a newer request has started
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+
       setWorkoutExercises(initialExercises);
     } catch (error) {
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
       console.error('Error initializing workout exercises from queue:', error);
       const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
         ...ex,
-        loggedWeight: ex.weight || '',
-        loggedReps: '',
+        loggedWeight: ex.weight || 0,
+        loggedReps: 0,
       }));
       setWorkoutExercises(initialExercises);
     }
@@ -325,18 +376,152 @@ export default function ActiveWorkout() {
 
   const updateLoggedValue = useCallback(
     (exerciseName: string, field: 'loggedWeight' | 'loggedReps', value: string) => {
+      const numValue = field === 'loggedWeight' ? parseFloat(value) || 0 : parseInt(value, 10) || 0;
       setWorkoutExercises((prev) =>
-        prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: value } : ex))
+        prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: numValue } : ex))
       );
     },
     []
   );
+
+  // =============================================================================
+  // Handle day change - allows user to switch days even when loaded from queue
+  // =============================================================================
+  // When user changes to a different day:
+  // 1. Clear timers for the old day
+  // 2. Skip the queue to the new day (so next workout in queue matches selection)
+  // 3. Load exercises from the queue item (which has pre-calculated progression weights)
+  // 4. If no queue item exists, fall back to loading from program with progression
+  //
+  // This ensures:
+  // - Pre-populated values come from the queue (with AI modifications if any)
+  // - The queue stays in sync with the user's actual progress
+  // - After saving, the next workout is correctly queued
+  const handleDayChange = useCallback(async (newIndex: number) => {
+    if (!currentProgram || newIndex === selectedDayIndex) return;
+
+    const oldDayNumber = selectedDayIndex + 1;
+    const newDayNumber = newIndex + 1;
+
+    // Clear timers ONLY for the day we're leaving
+    // This is precise and doesn't require waiting for component unmount
+    try {
+      await db.clearTimersForContext(currentProgram.id, oldDayNumber);
+    } catch (error) {
+      console.error('Error clearing timers for old day:', error);
+      // Non-critical - continue with day change
+    }
+
+    // STALE LOAD FIX: Increment request counter and capture it
+    // If user switches days again before our load completes, the counter
+    // will have changed and we'll discard our stale results.
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
+
+    // Update state for the new day
+    setSelectedDayIndex(newIndex);
+    setIsLoadedFromQueue(true); // Mark as loaded from queue since we're syncing
+
+    try {
+      // Skip the queue to the new day - this ensures the queue is aligned
+      // with the user's selection. When they save, the correct next day will be queued.
+      // 
+      // UNDO SUPPORT: Pass originalQueue so going backward restores previous state
+      // instead of skipping further forward. E.g., Day 1 → Day 2 → Day 1 will
+      // restore queue to [Day1, Day2, Day3] instead of skipping to a new Day 1.
+      const updatedQueue = await db.skipQueueToDay(
+        currentProgram.id, 
+        newDayNumber,
+        originalQueueRef.current ?? undefined
+      );
+      
+      // STALE LOAD FIX: Check if still current request
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        console.log(`Discarding stale day load (request ${thisRequestId}, current ${dayLoadRequestRef.current})`);
+        return;
+      }
+
+      if (updatedQueue && updatedQueue.length > 0) {
+        // Update local queue state
+        setWorkoutQueue(updatedQueue);
+        
+        // Load exercises from the first queue item (which is now the selected day)
+        const queueItem = updatedQueue[0];
+        const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
+          ...ex,
+          loggedWeight: ex.weight || 0,
+          loggedReps: 0,
+        }));
+        setWorkoutExercises(initialExercises);
+        return;
+      }
+    } catch (error) {
+      console.error('Error skipping queue to day:', error);
+      // Fall through to load from program
+    }
+
+    // STALE LOAD FIX: Check if still current request
+    if (dayLoadRequestRef.current !== thisRequestId) {
+      return;
+    }
+
+    // Fallback: Load exercises directly from program with progression
+    const selectedDay = currentProgram.workoutDays[newIndex];
+    if (!selectedDay) return;
+
+    try {
+      const initialExercises: WorkoutExercise[] = await Promise.all(
+        selectedDay.exercises.map(async (ex) => {
+          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
+          const autoWeight = calculateAutoWeight(lastWeight, ex.progression);
+
+          return {
+            ...ex,
+            loggedWeight: autoWeight,
+            loggedReps: 0,
+          };
+        })
+      );
+
+      // STALE LOAD FIX: Only update state if this is still the current request
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        console.log(`Discarding stale day load (request ${thisRequestId}, current ${dayLoadRequestRef.current})`);
+        return;
+      }
+
+      setWorkoutExercises(initialExercises);
+    } catch (error) {
+      // STALE LOAD FIX: Also check before setting fallback exercises
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+      
+      console.error('Error loading exercises for new day:', error);
+      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
+        ...ex,
+        loggedWeight: 0,
+        loggedReps: 0,
+      }));
+      setWorkoutExercises(initialExercises);
+    }
+  }, [currentProgram, selectedDayIndex]);
 
   const saveWorkout = async () => {
     if (!currentProgram) return;
 
     try {
       setIsSaving(true);
+
+      // DELETION CHECK (Edge Case 3): Verify program still exists before saving
+      const programExists = await db.getProgramById(currentProgram.id);
+      if (!programExists) {
+        Alert.alert(
+          'Program Deleted',
+          'This program has been deleted. The workout cannot be saved.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
 
       const newWorkout: Workout = {
         id: Date.now().toString(),
@@ -350,6 +535,17 @@ export default function ActiveWorkout() {
 
       await db.saveWorkout(newWorkout);
       await updateWorkoutQueue();
+
+      // Clear all active rest timers when workout is saved
+      // CONSISTENT ERROR HANDLING: Wrap in its own try/catch so timer clear failure
+      // doesn't cause "Failed to save workout" error when workout was actually saved.
+      // Timer cleanup is non-critical - the timers will be orphaned but won't affect UX.
+      try {
+        await db.clearAllActiveTimers();
+      } catch (timerError) {
+        console.error('Error clearing timers after workout save:', timerError);
+        // Don't rethrow - workout was saved successfully, timer cleanup is non-critical
+      }
 
       Alert.alert('Success', 'Workout saved!', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (error) {
@@ -413,16 +609,39 @@ export default function ActiveWorkout() {
     }
   };
 
+  // COMPOSITE KEY FIX: Pass programId and dayNumber to ExerciseLogCard
+  // This allows each exercise's timer to be uniquely identified in the database
+  // by (exercise_name, program_id, day_number) instead of just exercise_name.
+  // 
+  // WHY WE DON'T USE ?? '' ANYMORE:
+  // Previously: programId={currentProgram?.id ?? ''}
+  // Problem: Empty string '' is a valid string, so timers would be created with
+  //          program_id = '' in the database. If two different flows both had
+  //          no program, their timers would collide on the same key.
+  // 
+  // Now: We only render exercises when currentProgram exists (see the JSX below).
+  //      The ! assertion is safe because renderExercise is only called when
+  //      currentProgram is defined and workoutExercises.length > 0.
   const renderExercise = useCallback(
-    ({ item, index }: { item: WorkoutExercise; index: number }) => (
-      <ExerciseLogCard
-        exercise={item}
-        index={index}
-        onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
-        onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
-      />
-    ),
-    [updateLoggedValue]
+    ({ item, index }: { item: WorkoutExercise; index: number }) => {
+      // Safety check - shouldn't happen because we only render when currentProgram exists
+      if (!currentProgram) {
+        console.warn('renderExercise called without currentProgram');
+        return null;
+      }
+      
+      return (
+        <ExerciseLogCard
+          exercise={item}
+          index={index}
+          programId={currentProgram.id}
+          dayNumber={selectedDayIndex + 1}
+          onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
+          onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
+        />
+      );
+    },
+    [updateLoggedValue, currentProgram, selectedDayIndex]
   );
 
   if (isLoading) {
@@ -483,15 +702,13 @@ export default function ActiveWorkout() {
             </ThemedText>
           </ThemedView>
 
-          {/* Day Selector */}
-          {!isLoadedFromQueue && (
-            <DaySelector
-              days={currentProgram.workoutDays}
-              selectedIndex={selectedDayIndex}
-              onSelectDay={setSelectedDayIndex}
-              disabled={loadingFromQueue}
-            />
-          )}
+          {/* Day Selector - Always shown to allow switching days */}
+          <DaySelector
+            days={currentProgram.workoutDays}
+            selectedIndex={selectedDayIndex}
+            onSelectDay={handleDayChange}
+            disabled={loadingFromQueue}
+          />
 
           {/* Exercises */}
           {workoutExercises.length > 0 && (

@@ -135,6 +135,7 @@ export default function CoachScreen() {
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: ex.muscle_groups_worked,
+        isCompound: ex.isCompound,
       }));
       setAvailableExercises(exercises);
     } catch (err) {

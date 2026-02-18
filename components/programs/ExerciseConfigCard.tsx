@@ -3,13 +3,13 @@
  * Displays and allows editing of exercise details (sets, reps, weight, etc.)
  */
 
+import React, { memo, useCallback, useState, useEffect, useRef } from 'react';
+import { TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ProgramExercise } from '@/types';
-import React, { memo, useCallback } from 'react';
-import { TextInput, View } from 'react-native';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface ExerciseConfigCardProps {
   exercise: ProgramExercise;
@@ -18,6 +18,91 @@ interface ExerciseConfigCardProps {
   showRemove?: boolean;
   onRemove?: () => void;
 }
+
+/**
+ * Normalizes a decimal string input for consistent storage.
+ * - Removes leading zeros (except for "0.x" patterns)
+ * - Removes trailing decimal point ("2." -> "2")
+ * - Adds leading zero for decimals (".5" -> "0.5")
+ * - Returns empty string for invalid/empty input
+ */
+const normalizeDecimalString = (input: string): string => {
+  if (!input || input.trim() === '') return '';
+  
+  let normalized = input.trim();
+  
+  // Handle leading decimal point: ".5" -> "0.5"
+  if (normalized.startsWith('.')) {
+    normalized = '0' + normalized;
+  }
+  
+  // Handle trailing decimal point: "2." -> "2"
+  if (normalized.endsWith('.')) {
+    normalized = normalized.slice(0, -1);
+  }
+  
+  // Remove unnecessary leading zeros: "007" -> "7", but keep "0.5"
+  if (normalized.includes('.')) {
+    const [intPart, decPart] = normalized.split('.');
+    normalized = `${parseInt(intPart, 10) || 0}.${decPart}`;
+  } else if (normalized !== '') {
+    normalized = String(parseInt(normalized, 10) || 0);
+  }
+  
+  return normalized;
+};
+
+/**
+ * Custom hook for decimal input fields that allows typing "2.5" without losing the decimal point.
+ * 
+ * PROBLEM: If we convert to number on every keystroke, "2." becomes "2" immediately,
+ * preventing the user from ever typing "2.5".
+ * 
+ * SOLUTION: Keep a local string state while typing. Only sync to parent on blur.
+ * Use focus tracking to prevent the useEffect from overwriting while user is typing.
+ */
+const useDecimalInput = (
+  value: number | undefined,
+  onUpdate: (value: string) => void
+) => {
+  const [localValue, setLocalValue] = useState(value?.toString() || '');
+  const isFocusedRef = useRef(false);
+  // Store onUpdate in a ref to avoid dependency issues with handleBlur
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+  
+  // Sync from parent when value changes externally (only if not focused)
+  useEffect(() => {
+    // Don't overwrite while user is actively typing
+    if (isFocusedRef.current) return;
+    
+    const strValue = value?.toString() || '';
+    setLocalValue(strValue);
+  }, [value]);
+  
+  const handleFocus = useCallback(() => {
+    isFocusedRef.current = true;
+  }, []);
+  
+  const handleChange = useCallback((text: string) => {
+    // Allow empty, digits, and one decimal point
+    if (text === '' || /^\d*\.?\d*$/.test(text)) {
+      setLocalValue(text);
+    }
+  }, []);
+  
+  const handleBlur = useCallback(() => {
+    isFocusedRef.current = false;
+    // Normalize and sync to parent on blur
+    const normalized = normalizeDecimalString(localValue);
+    // Update local display to normalized value
+    setLocalValue(normalized);
+    // Sync to parent
+    onUpdateRef.current(normalized);
+  }, [localValue]);
+  
+  return { localValue, handleFocus, handleChange, handleBlur };
+};
 
 export const ExerciseConfigCard = memo(function ExerciseConfigCard({
   exercise,
@@ -35,6 +120,20 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
     },
     [onUpdate]
   );
+  
+  // Memoize the specific field handlers to provide stable references for the decimal input hooks
+  const handleWeightChange = useCallback(
+    (value: string) => onUpdate('weight', value),
+    [onUpdate]
+  );
+  const handleProgressionChange = useCallback(
+    (value: string) => onUpdate('progression', value),
+    [onUpdate]
+  );
+  
+  // Use decimal input hooks for weight and progression fields
+  const weightInput = useDecimalInput(exercise.weight, handleWeightChange);
+  const progressionInput = useDecimalInput(exercise.progression, handleProgressionChange);
 
   return (
     <View className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600">
@@ -82,7 +181,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 3"
             placeholderTextColor="#999"
-            value={exercise.sets}
+            value={exercise.sets?.toString() || ''}
             onChangeText={handleFieldChange('sets')}
             keyboardType="numeric"
             style={{ color: textColor }}
@@ -94,10 +193,11 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           <ThemedText className="text-sm font-semibold">Reps</ThemedText>
           <TextInput
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="e.g., 8-10"
+            placeholder="e.g., 8"
             placeholderTextColor="#999"
-            value={exercise.reps}
+            value={exercise.reps?.toString() || ''}
             onChangeText={handleFieldChange('reps')}
+            keyboardType="numeric"
             style={{ color: textColor }}
             accessibilityLabel="Number of reps"
           />
@@ -107,10 +207,12 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           <ThemedText className="text-sm font-semibold">Weight</ThemedText>
           <TextInput
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="e.g., 60 kg"
+            placeholder="e.g., 60"
             placeholderTextColor="#999"
-            value={exercise.weight}
-            onChangeText={handleFieldChange('weight')}
+            value={weightInput.localValue}
+            onFocus={weightInput.handleFocus}
+            onChangeText={weightInput.handleChange}
+            onBlur={weightInput.handleBlur}
             keyboardType="decimal-pad"
             style={{ color: textColor }}
             accessibilityLabel="Weight"
@@ -123,7 +225,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 90"
             placeholderTextColor="#999"
-            value={exercise.restTime}
+            value={exercise.restTime?.toString() || ''}
             onChangeText={handleFieldChange('restTime')}
             keyboardType="numeric"
             style={{ color: textColor }}
@@ -137,8 +239,10 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
             placeholder="e.g., 2.5"
             placeholderTextColor="#999"
-            value={exercise.progression}
-            onChangeText={handleFieldChange('progression')}
+            value={progressionInput.localValue}
+            onFocus={progressionInput.handleFocus}
+            onChangeText={progressionInput.handleChange}
+            onBlur={progressionInput.handleBlur}
             keyboardType="decimal-pad"
             style={{ color: textColor }}
             accessibilityLabel="Weight progression"

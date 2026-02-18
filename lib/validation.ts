@@ -214,3 +214,63 @@ export const parseReps = (reps: string): { value: number; isValid: boolean } => 
 export const formatReps = (value: number): string => {
   return value.toString();
 };
+
+// =============================================================================
+// PROFILE VALIDATION
+// =============================================================================
+
+/**
+ * Validate a positive decimal number (for weight fields)
+ * Returns parsed value and validation state
+ */
+export const validatePositiveDecimal = (
+  input: string
+): { value: number | null; isValid: boolean; error: string | null } => {
+  // Empty is valid (field is optional)
+  if (!input || !input.trim()) {
+    return { value: null, isValid: true, error: null };
+  }
+
+  const trimmed = input.trim();
+  const num = parseFloat(trimmed);
+
+  if (isNaN(num)) {
+    return { value: null, isValid: false, error: 'Must be a valid number' };
+  }
+
+  if (num <= 0) {
+    return { value: null, isValid: false, error: 'Must be a positive number' };
+  }
+
+  return { value: num, isValid: true, error: null };
+};
+
+/**
+ * Validate a positive integer (for target sets)
+ * Returns parsed value and validation state
+ */
+export const validatePositiveInteger = (
+  input: string
+): { value: number | null; isValid: boolean; error: string | null } => {
+  // Empty is valid (field is optional)
+  if (!input || !input.trim()) {
+    return { value: null, isValid: true, error: null };
+  }
+
+  const trimmed = input.trim();
+  const num = parseInt(trimmed, 10);
+
+  if (isNaN(num)) {
+    return { value: null, isValid: false, error: 'Must be a valid number' };
+  }
+
+  if (num <= 0) {
+    return { value: null, isValid: false, error: 'Must be a positive number' };
+  }
+
+  if (!Number.isInteger(parseFloat(trimmed))) {
+    return { value: null, isValid: false, error: 'Must be a whole number' };
+  }
+
+  return { value: num, isValid: true, error: null };
+};
