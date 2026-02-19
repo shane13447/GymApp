@@ -6,7 +6,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, TextInput, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ExerciseConfigCard } from '@/components/programs/ExerciseConfigCard';
 import { ExerciseSelector, createProgramExercise } from '@/components/programs/ExerciseSelector';
@@ -379,12 +378,11 @@ export default function ProgramsScreen() {
   if (viewMode === ProgramViewMode.List) {
     return (
       <ParallaxScrollView>
-        <ThemedView className="flex-row items-center gap-2">
-          <ThemedText type="title">Programs</ThemedText>
-          <HelloWave />
+        <ThemedView className="border-b border-gray-200 dark:border-gray-700 pb-6">
+          <ThemedText type="subtitle">Programs</ThemedText>
         </ThemedView>
 
-        <ThemedView className="mt-5 gap-4">
+        <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
           <Pressable
             onPress={() => {
               clearForm();
@@ -406,10 +404,32 @@ export default function ProgramsScreen() {
           </Pressable>
 
           {programs.length > 0 ? (
-            <ThemedView className="gap-3">
-              <ThemedText type="subtitle" className="text-lg font-semibold">
-                Your Programs ({programs.length})
-              </ThemedText>
+            <ThemedView className="gap-3 border-t border-gray-200 dark:border-gray-700 pt-5">
+              <View className="flex-row items-start justify-between border-b border-gray-200 dark:border-gray-700 pb-4">
+                <View className="flex-1">
+                  <ThemedText type="subtitle">Your Programs</ThemedText>
+                  <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-1">
+                    {programs.length} total
+                  </ThemedText>
+                </View>
+                {currentProgramId ? (
+                  <View className="items-end max-w-[60%]">
+                    <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Current
+                    </ThemedText>
+                    <ThemedText className="text-sm font-semibold" numberOfLines={1}>
+                      {programs.find((program) => program.id === currentProgramId)?.name ?? 'None'}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <View className="items-end">
+                    <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Current
+                    </ThemedText>
+                    <ThemedText className="text-sm font-semibold">None</ThemedText>
+                  </View>
+                )}
+              </View>
               <View className="gap-3">
                 {programs.map((item) => (
                   <ProgramCard
@@ -437,7 +457,7 @@ export default function ProgramsScreen() {
   if (viewMode === ProgramViewMode.Create && createStep === CreateProgramStep.BasicInfo) {
     return (
       <ParallaxScrollView>
-        <ThemedView className="flex-row items-center gap-2">
+        <ThemedView className="border-b border-gray-200 dark:border-gray-700 pb-6">
           <View className="flex-row items-center gap-4">
             <Pressable
               onPress={() => {
@@ -456,15 +476,15 @@ export default function ProgramsScreen() {
                 </View>
               )}
             </Pressable>
-            <ThemedText type="title">Create Program</ThemedText>
+            <ThemedText type="subtitle">Create Program</ThemedText>
           </View>
         </ThemedView>
 
-        <ThemedView className="mt-5 gap-4">
-          <ThemedView className="gap-2">
+        <ThemedView className="gap-3">
+          <ThemedView className="gap-2 border-b border-gray-200 dark:border-gray-700 pb-5">
             <ThemedText className="text-base font-semibold">Program Name</ThemedText>
             <TextInput
-              className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3"
               placeholder="Enter program name..."
               placeholderTextColor="#999"
               value={programName}
@@ -474,10 +494,10 @@ export default function ProgramsScreen() {
             />
           </ThemedView>
 
-          <ThemedView className="gap-2">
+          <ThemedView className="gap-2 border-b border-gray-200 dark:border-gray-700 pb-5">
             <ThemedText className="text-base font-semibold">Number of Workout Days</ThemedText>
             <TextInput
-              className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3"
               placeholder="e.g., 3 (for a 3-day split)"
               placeholderTextColor="#999"
               value={numberOfDays}
@@ -516,7 +536,7 @@ export default function ProgramsScreen() {
   if (viewMode === ProgramViewMode.Create && createStep === CreateProgramStep.ExerciseSelection) {
     return (
       <ParallaxScrollView>
-        <ThemedView className="flex-row items-center gap-2">
+        <ThemedView className="border-b border-gray-200 dark:border-gray-700 pb-6">
           <View className="flex-row items-center gap-4">
             <Pressable
               onPress={() => setCreateStep(CreateProgramStep.BasicInfo)}
@@ -532,12 +552,12 @@ export default function ProgramsScreen() {
                 </View>
               )}
             </Pressable>
-            <ThemedText type="title">Day {currentDayIndex + 1}</ThemedText>
+            <ThemedText type="subtitle">Day {currentDayIndex + 1}</ThemedText>
           </View>
         </ThemedView>
 
-        <ThemedView className="mt-5 gap-4">
-          <ThemedView className="flex-row items-center justify-between">
+        <ThemedView className="gap-3">
+          <ThemedView className="flex-row items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-5">
             <ThemedText className="text-base font-semibold">
               {programName} - Day {currentDayIndex + 1} of {workoutDays.length}
             </ThemedText>
@@ -656,7 +676,7 @@ export default function ProgramsScreen() {
 
     return (
       <ParallaxScrollView>
-        <ThemedView className="flex-row items-center gap-2">
+        <ThemedView className="border-b border-gray-200 dark:border-gray-700 pb-6">
           <View className="flex-row items-center gap-4">
             <Pressable
               onPress={() => {
@@ -680,18 +700,18 @@ export default function ProgramsScreen() {
                 </View>
               )}
             </Pressable>
-            <ThemedText type="title">
+            <ThemedText type="subtitle">
               {isEditing ? 'Edit Program' : 'Configure Exercises'}
             </ThemedText>
           </View>
         </ThemedView>
 
-        <ThemedView className="mt-5 gap-4">
+        <ThemedView className="gap-3">
           {isEditing && (
             <ThemedView className="gap-2 mb-4">
               <ThemedText className="text-base font-semibold">Program Name</ThemedText>
               <TextInput
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3"
                 placeholder="Enter program name..."
                 placeholderTextColor="#999"
                 value={programName}
@@ -757,7 +777,7 @@ export default function ProgramsScreen() {
   if (viewMode === ProgramViewMode.View && selectedProgram) {
     return (
       <ParallaxScrollView>
-        <ThemedView className="flex-row items-center gap-2">
+        <ThemedView className="border-b border-gray-200 dark:border-gray-700 pb-6">
           <View className="flex-row items-center gap-4">
             <Pressable
               onPress={() => setViewMode(ProgramViewMode.List)}
@@ -773,14 +793,14 @@ export default function ProgramsScreen() {
                 </View>
               )}
             </Pressable>
-            <ThemedText type="title" numberOfLines={1} className="flex-1">
+            <ThemedText type="subtitle" numberOfLines={1} className="flex-1">
               {selectedProgram.name}
             </ThemedText>
           </View>
         </ThemedView>
 
-        <ThemedView className="mt-5 gap-4">
-          <View className="mb-4">
+        <ThemedView className="gap-3">
+          <View className="mb-4 border-b border-gray-200 dark:border-gray-700 pb-5">
             <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               {selectedProgram.workoutDays.length} day
               {selectedProgram.workoutDays.length !== 1 ? 's' : ''} •{' '}

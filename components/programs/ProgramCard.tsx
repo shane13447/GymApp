@@ -32,22 +32,22 @@ export const ProgramCard = memo(function ProgramCard({
     >
       {({ pressed }) => (
         <View
-          className={`mb-3 p-4 rounded-lg border-2 ${
+          className={`p-4 rounded-2xl border ${
             pressed
               ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400'
-              : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
           }`}
-          style={pressed ? { opacity: 0.9 } : {}}
+          style={pressed ? { opacity: 0.9 } : undefined}
         >
           <View className="flex-row items-center justify-between">
             <View className="flex-1">
               <View className="flex-row items-center gap-2">
-                <ThemedText className="font-bold text-xl mb-1">
+                <ThemedText className="font-semibold text-lg" numberOfLines={1}>
                   {program.name}
                 </ThemedText>
                 {isCurrentProgram && (
-                  <View className="bg-green-500 px-2 py-1 rounded">
-                    <ThemedText className="text-white text-xs font-semibold">
+                  <View className="bg-green-500/15 dark:bg-green-500/20 border border-green-500/40 px-2 py-0.5 rounded-full">
+                    <ThemedText className="text-green-700 dark:text-green-300 text-[10px] font-semibold">
                       CURRENT
                     </ThemedText>
                   </View>
@@ -60,9 +60,7 @@ export const ProgramCard = memo(function ProgramCard({
                 {totalExercises !== 1 ? 's' : ''}
               </ThemedText>
             </View>
-            <View className="ml-3 bg-blue-500 rounded-full w-8 h-8 items-center justify-center">
-              <ThemedText className="text-white text-lg font-bold">›</ThemedText>
-            </View>
+            <ThemedText className="ml-3 text-blue-500 text-2xl leading-none">›</ThemedText>
           </View>
         </View>
       )}
