@@ -23,6 +23,7 @@ export default function ParallaxScrollView({ children, refreshControl, style }: 
     <Animated.ScrollView
       ref={scrollRef}
       style={[{ backgroundColor, flex: 1 }, style]}
+      contentContainerStyle={styles.scrollContent}
       scrollEventThrottle={16}
       refreshControl={refreshControl}
       showsVerticalScrollIndicator={false}
@@ -33,10 +34,16 @@ export default function ParallaxScrollView({ children, refreshControl, style }: 
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 36,
+    paddingBottom: 28,
+  },
   content: {
     flex: 1,
-    padding: 32,
-    paddingTop: 48,
+    width: '100%',
+    maxWidth: 920,
+    alignSelf: 'center',
     gap: 16,
     overflow: 'hidden',
   },

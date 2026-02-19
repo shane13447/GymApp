@@ -1195,6 +1195,44 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
 // QUEUE MANIPULATION
 // =============================================================================
 
+function roundWeightToNearestQuarter(weight: number): number {
+  return Math.round(weight * 4) / 4;
+}
+
+function calculateProgressedWeight(exercise: ProgramExercise, lastWeight: number | null): number {
+  const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
+  const numProgression = Number(exercise.progression) || 0;
+  const numExerciseWeight = Number(exercise.weight) || 0;
+
+  let newWeight = numExerciseWeight;
+  if (numLastWeight !== null && numProgression > 0) {
+    newWeight = numLastWeight + numProgression;
+  } else if (numLastWeight !== null) {
+    newWeight = numLastWeight;
+  }
+
+  return roundWeightToNearestQuarter(newWeight);
+}
+
+async function applyProgressionToExercises(
+  exercises: ProgramExercise[],
+  programId: string
+): Promise<ProgramExercise[]> {
+  const exercisesWithProgression: ProgramExercise[] = [];
+
+  for (const exercise of exercises) {
+    const lastWeight = await getLastLoggedWeight(exercise.name, programId);
+    const newWeight = calculateProgressedWeight(exercise, lastWeight);
+
+    exercisesWithProgression.push({
+      ...exercise,
+      weight: newWeight,
+    });
+  }
+
+  return exercisesWithProgression;
+}
+
 /**
  * Skip queue items until the target day is first in the queue.
  * 
@@ -1278,32 +1316,7 @@ export const skipQueueToDay = async (
     
     const nextDay = program.workoutDays[nextDayIndex];
 
-    // Apply auto-progression to exercises
-    const exercisesWithProgression: ProgramExercise[] = [];
-    for (const exercise of nextDay.exercises) {
-      const lastWeight = await getLastLoggedWeight(exercise.name, programId);
-      
-      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
-      // Without this, "60" + "0" would give "600" instead of 60
-      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
-      const numProgression = Number(exercise.progression) || 0;
-      const numExerciseWeight = Number(exercise.weight) || 0;
-      
-      let newWeight = numExerciseWeight;
-      if (numLastWeight !== null && numProgression > 0) {
-        newWeight = numLastWeight + numProgression;
-      } else if (numLastWeight !== null) {
-        newWeight = numLastWeight;
-      }
-
-      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
-      newWeight = Math.round(newWeight * 4) / 4;
-
-      exercisesWithProgression.push({
-        ...exercise,
-        weight: newWeight,
-      });
-    }
+    const exercisesWithProgression = await applyProgressionToExercises(nextDay.exercises, programId);
 
     newQueue.push({
       id: `queue-${Date.now()}-${newQueue.length}`,
@@ -1373,34 +1386,7 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
     const dayIndex = i % numDays;
     const workoutDay = program.workoutDays[dayIndex];
 
-    // Apply auto-progression to exercises
-    const exercisesWithProgression: ProgramExercise[] = [];
-    for (const exercise of workoutDay.exercises) {
-      // Get last logged weight for this exercise
-      const lastWeight = await getLastLoggedWeight(exercise.name, programId);
-      
-      // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
-      // Without this, "60" + "0" would give "600" instead of 60
-      const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
-      const numProgression = Number(exercise.progression) || 0;
-      const numExerciseWeight = Number(exercise.weight) || 0;
-      
-      let newWeight = numExerciseWeight;
-      if (numLastWeight !== null && numProgression > 0) {
-        newWeight = numLastWeight + numProgression;
-      } else if (numLastWeight !== null) {
-        // Use last logged weight if no progression defined
-        newWeight = numLastWeight;
-      }
-
-      // ROUNDING FIX (Edge Case 5): Round to nearest 0.25
-      newWeight = Math.round(newWeight * 4) / 4;
-
-      exercisesWithProgression.push({
-        ...exercise,
-        weight: newWeight,
-      });
-    }
+    const exercisesWithProgression = await applyProgressionToExercises(workoutDay.exercises, programId);
 
     queueItems.push({
       id: `queue-${Date.now()}-${i}`,
