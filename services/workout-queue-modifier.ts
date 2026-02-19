@@ -222,11 +222,29 @@ const MUSCLE_GROUP_KEYWORDS: Record<string, string[]> = {
   push: ['chest', 'shoulders', 'triceps'],
   pull: ['lats', 'traps', 'biceps'],
   // Slang aliases
-  'guns': ['biceps', 'triceps'],
-  //'wheels': ['quads', 'glutes', 'hamstrings', 'calves'],
-  'upper': ['chest', 'lats', 'traps', 'shoulders', 'biceps', 'triceps'],
-  'lower': ['quads', 'glutes', 'hamstrings', 'calves'],
+  guns: ['biceps', 'triceps'],
+  // 'wheels': ['quads', 'glutes', 'hamstrings', 'calves'],
+  upper: ['chest', 'lats', 'traps', 'shoulders', 'biceps', 'triceps'],
+  lower: ['quads', 'glutes', 'hamstrings', 'calves'],
 };
+
+const REMOVE_REQUEST_KEYWORDS = [
+  'remove',
+  'delete',
+  'drop',
+  'get rid of',
+  'take out',
+  'cut',
+  'skip',
+  'eliminate',
+  'ditch',
+] as const;
+
+const ADD_REQUEST_KEYWORDS = ['add', 'insert', 'put', 'include'] as const;
+
+function includesAnyKeyword(requestLower: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => requestLower.includes(keyword));
+}
 
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
@@ -681,17 +699,7 @@ export const repairQueueWithIntent = (
   console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
   
   const requestLower = userPrompt.toLowerCase();
-  // Expanded removal detection to catch natural language synonyms
-  const isRemoveRequest = 
-    requestLower.includes('remove') || 
-    requestLower.includes('delete') ||
-    requestLower.includes('drop') ||
-    requestLower.includes('get rid of') ||
-    requestLower.includes('take out') ||
-    requestLower.includes('cut') ||
-    requestLower.includes('skip') ||
-    requestLower.includes('eliminate') ||
-    requestLower.includes('ditch');
+  const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS);
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
   // Extract target values from request
@@ -857,37 +865,16 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if (lowerRequest.includes('set')) {
     types.push('sets');
   }
-  // Expanded removal detection to catch natural language synonyms
-  if (
-    lowerRequest.includes('remove') || 
-    lowerRequest.includes('delete') ||
-    lowerRequest.includes('drop') ||
-    lowerRequest.includes('get rid of') ||
-    lowerRequest.includes('take out') ||
-    lowerRequest.includes('cut') ||
-    lowerRequest.includes('skip') ||
-    lowerRequest.includes('eliminate') ||
-    lowerRequest.includes('ditch')
-  ) {
+  if (includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS)) {
     types.push('remove');
   }
-  // Expanded add detection
-  if (
-    lowerRequest.includes('add') || 
-    lowerRequest.includes('insert') ||
-    lowerRequest.includes('put') ||
-    lowerRequest.includes('include')
-  ) {
+  if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS)) {
     types.push('add');
   }
 
   return types.length > 0 ? types : ['unknown'];
 };
 
-/**
- * Extract target exercise names from user request
- * Returns normalized exercise names that were mentioned
- */
 /**
  * Extract target exercise names from user request
  * Uses fuzzy matching, alias resolution, and partial word matching

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { cn } from '@/lib/utils';
@@ -25,24 +25,13 @@ export function ThemedText({
       className={cn(
         type === 'default' && 'text-base leading-6',
         type === 'defaultSemiBold' && 'text-base leading-6 font-semibold',
-        type === 'title' && 'text-3xl font-bold leading-8',
-        type === 'subtitle' && 'text-xl font-bold',
-        type === 'link' && 'text-base leading-8 text-blue-600',
+        type === 'title' && 'text-4xl font-bold leading-[42px] tracking-tight',
+        type === 'subtitle' && 'text-xl font-bold leading-7',
+        type === 'link' && 'text-base font-semibold leading-6 text-blue-600 dark:text-blue-400',
         className
       )}
-      style={[
-        { color },
-        type === 'default' ? styles.default : undefined,
-        style,
-      ]}
+      style={[{ color }, style]}
       {...rest}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-});
