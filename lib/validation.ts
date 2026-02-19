@@ -1,7 +1,3 @@
-/**
- * Validation utilities for the Gym App
- */
-
 import {
   MAX_EXERCISE_NAME_LENGTH,
   MAX_EXERCISES_PER_DAY,
@@ -11,10 +7,14 @@ import {
 } from '@/constants';
 import type { Program, ProgramExercise, ValidationResult, WorkoutDay } from '@/types';
 
-/**
- * Validate a program name
- */
-export const validateProgramName = (name: string): ValidationResult => {
+function toValidationResult(errors: string[]): ValidationResult {
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+export function validateProgramName(name: string): ValidationResult {
   const errors: string[] = [];
 
   if (!name || !name.trim()) {
@@ -23,16 +23,10 @@ export const validateProgramName = (name: string): ValidationResult => {
     errors.push(`Program name must be ${MAX_PROGRAM_NAME_LENGTH} characters or less`);
   }
 
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
+  return toValidationResult(errors);
+}
 
-/**
- * Validate number of workout days
- */
-export const validateNumberOfDays = (days: number): ValidationResult => {
+export function validateNumberOfDays(days: number): ValidationResult {
   const errors: string[] = [];
 
   if (isNaN(days)) {
@@ -43,16 +37,10 @@ export const validateNumberOfDays = (days: number): ValidationResult => {
     errors.push(`Cannot have more than ${MAX_WORKOUT_DAYS} workout days`);
   }
 
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
+  return toValidationResult(errors);
+}
 
-/**
- * Validate a workout day
- */
-export const validateWorkoutDay = (day: WorkoutDay): ValidationResult => {
+export function validateWorkoutDay(day: WorkoutDay): ValidationResult {
   const errors: string[] = [];
 
   if (!day.exercises || day.exercises.length === 0) {
@@ -61,16 +49,10 @@ export const validateWorkoutDay = (day: WorkoutDay): ValidationResult => {
     errors.push(`Day ${day.dayNumber} cannot have more than ${MAX_EXERCISES_PER_DAY} exercises`);
   }
 
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
+  return toValidationResult(errors);
+}
 
-/**
- * Validate an exercise
- */
-export const validateExercise = (exercise: ProgramExercise): ValidationResult => {
+export function validateExercise(exercise: ProgramExercise): ValidationResult {
   const errors: string[] = [];
 
   if (!exercise.name || !exercise.name.trim()) {
@@ -79,7 +61,6 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     errors.push(`Exercise name must be ${MAX_EXERCISE_NAME_LENGTH} characters or less`);
   }
 
-  // Validate weight (should be a number or empty)
   if (exercise.weight && exercise.weight.trim()) {
     const weightNum = parseFloat(exercise.weight.replace(/[^0-9.]/g, ''));
     if (isNaN(weightNum) && exercise.weight.trim() !== '') {
@@ -89,7 +70,6 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     }
   }
 
-  // Validate sets (should be a positive integer)
   if (exercise.sets && exercise.sets.trim()) {
     const setsNum = parseInt(exercise.sets, 10);
     if (isNaN(setsNum)) {
@@ -101,7 +81,6 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     }
   }
 
-  // Validate rest time (should be a positive number in seconds)
   if (exercise.restTime && exercise.restTime.trim()) {
     const restNum = parseInt(exercise.restTime, 10);
     if (isNaN(restNum)) {
@@ -113,55 +92,37 @@ export const validateExercise = (exercise: ProgramExercise): ValidationResult =>
     }
   }
 
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
+  return toValidationResult(errors);
+}
 
-/**
- * Validate an entire program
- */
-export const validateProgram = (program: Partial<Program>): ValidationResult => {
+export function validateProgram(program: Partial<Program>): ValidationResult {
   const errors: string[] = [];
 
-  // Validate name
   const nameValidation = validateProgramName(program.name || '');
   errors.push(...nameValidation.errors);
 
-  // Validate workout days
   if (!program.workoutDays || program.workoutDays.length === 0) {
     errors.push('Program must have at least one workout day');
-  } else {
-    const daysValidation = validateNumberOfDays(program.workoutDays.length);
-    errors.push(...daysValidation.errors);
+    return toValidationResult(errors);
+  }
 
-    // Validate each day
-    for (const day of program.workoutDays) {
-      const dayValidation = validateWorkoutDay(day);
-      errors.push(...dayValidation.errors);
+  const daysValidation = validateNumberOfDays(program.workoutDays.length);
+  errors.push(...daysValidation.errors);
 
-      // Validate each exercise
-      for (const exercise of day.exercises) {
-        const exerciseValidation = validateExercise(exercise);
-        errors.push(...exerciseValidation.errors.map((e) => `Day ${day.dayNumber}: ${e}`));
-      }
+  for (const day of program.workoutDays) {
+    const dayValidation = validateWorkoutDay(day);
+    errors.push(...dayValidation.errors);
+
+    for (const exercise of day.exercises) {
+      const exerciseValidation = validateExercise(exercise);
+      errors.push(...exerciseValidation.errors.map((error) => `Day ${day.dayNumber}: ${error}`));
     }
   }
 
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
+  return toValidationResult(errors);
+}
 
-/**
- * Parse and validate weight input
- * Returns the numeric value and unit
- */
-export const parseWeight = (
-  weight: string
-): { value: number; unit: string; isValid: boolean } => {
+export function parseWeight(weight: string): { value: number; unit: string; isValid: boolean } {
   if (!weight || !weight.trim()) {
     return { value: 0, unit: '', isValid: true };
   }
@@ -179,54 +140,38 @@ export const parseWeight = (
     unit: unit === 'lb' ? 'lbs' : unit,
     isValid: !isNaN(value) && value >= 0,
   };
-};
+}
 
-/**
- * Format weight with unit
- */
-export const formatWeight = (value: number, unit: string = 'kg'): string => {
-  if (value === 0) return '';
+export function formatWeight(value: number, unit: string = 'kg'): string {
+  if (value === 0) {
+    return '';
+  }
+
   return `${value} ${unit}`;
-};
+}
 
-/**
- * Parse reps input (must be a whole number)
- */
-export const parseReps = (reps: string): { value: number; isValid: boolean } => {
+export function parseReps(reps: string): { value: number; isValid: boolean } {
   if (!reps || !reps.trim()) {
     return { value: 0, isValid: true };
   }
 
   const trimmed = reps.trim();
-
-  // Check for single whole number only
   const num = parseInt(trimmed, 10);
+
   if (!isNaN(num) && num > 0 && String(num) === trimmed) {
     return { value: num, isValid: true };
   }
 
   return { value: 0, isValid: false };
-};
+}
 
-/**
- * Format reps for display
- */
-export const formatReps = (value: number): string => {
+export function formatReps(value: number): string {
   return value.toString();
-};
+}
 
-// =============================================================================
-// PROFILE VALIDATION
-// =============================================================================
-
-/**
- * Validate a positive decimal number (for weight fields)
- * Returns parsed value and validation state
- */
-export const validatePositiveDecimal = (
+export function validatePositiveDecimal(
   input: string
-): { value: number | null; isValid: boolean; error: string | null } => {
-  // Empty is valid (field is optional)
+): { value: number | null; isValid: boolean; error: string | null } {
   if (!input || !input.trim()) {
     return { value: null, isValid: true, error: null };
   }
@@ -243,16 +188,11 @@ export const validatePositiveDecimal = (
   }
 
   return { value: num, isValid: true, error: null };
-};
+}
 
-/**
- * Validate a positive integer (for target sets)
- * Returns parsed value and validation state
- */
-export const validatePositiveInteger = (
+export function validatePositiveInteger(
   input: string
-): { value: number | null; isValid: boolean; error: string | null } => {
-  // Empty is valid (field is optional)
+): { value: number | null; isValid: boolean; error: string | null } {
   if (!input || !input.trim()) {
     return { value: null, isValid: true, error: null };
   }
@@ -273,4 +213,4 @@ export const validatePositiveInteger = (
   }
 
   return { value: num, isValid: true, error: null };
-};
+}

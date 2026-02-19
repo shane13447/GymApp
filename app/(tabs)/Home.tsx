@@ -3,12 +3,11 @@
  * Dashboard with quick actions and workout summary
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,11 +15,10 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import * as db from '@/services/database';
 import type { Program, Workout, WorkoutQueueItem } from '@/types';
 
-// Get unique muscle groups from a workout queue item
 const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
   const muscleGroups = new Set<string>();
-  workout.exercises.forEach((ex) => {
-    ex.muscle_groups_worked.forEach((group) => {
+  workout.exercises.forEach((exercise) => {
+    exercise.muscle_groups_worked.forEach((group) => {
       muscleGroups.add(group);
     });
   });
@@ -40,7 +38,6 @@ export default function HomeScreen() {
     streak: 0,
   });
 
-  // Load data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -49,7 +46,6 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      // Get current program
       const currentProgramId = await db.getCurrentProgramId();
       if (currentProgramId) {
         const program = await db.getProgramById(currentProgramId);
@@ -58,27 +54,23 @@ export default function HomeScreen() {
         setCurrentProgram(null);
       }
 
-      // Get workout queue
       const queue = await db.getWorkoutQueue();
       setNextWorkout(queue.length > 0 ? queue[0] : null);
 
-      // Get recent workouts
       const workouts = await db.getAllWorkouts();
-      setRecentWorkouts(workouts.slice(0, 3));
+      setRecentWorkouts(workouts.slice(0, 4));
 
-      // Calculate stats
       const now = new Date();
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - now.getDay());
       weekStart.setHours(0, 0, 0, 0);
 
       const thisWeekWorkouts = workouts.filter(
-        (w) => new Date(w.date) >= weekStart && w.completed
+        (workout) => new Date(workout.date) >= weekStart && workout.completed
       );
 
-      // Calculate streak (consecutive days)
       let streak = 0;
-      const completedWorkouts = workouts.filter((w) => w.completed);
+      const completedWorkouts = workouts.filter((workout) => workout.completed);
       if (completedWorkouts.length > 0) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -87,14 +79,13 @@ export default function HomeScreen() {
         for (let i = 0; i < 365; i++) {
           const dateStr = checkDate.toISOString().split('T')[0];
           const hasWorkout = completedWorkouts.some(
-            (w) => w.date.split('T')[0] === dateStr
+            (workout) => workout.date.split('T')[0] === dateStr
           );
 
           if (hasWorkout) {
             streak++;
             checkDate.setDate(checkDate.getDate() - 1);
           } else if (i === 0) {
-            // Allow today to not have a workout yet
             checkDate.setDate(checkDate.getDate() - 1);
           } else {
             break;
@@ -103,7 +94,7 @@ export default function HomeScreen() {
       }
 
       setStats({
-        totalWorkouts: workouts.filter((w) => w.completed).length,
+        totalWorkouts: completedWorkouts.length,
         thisWeek: thisWeekWorkouts.length,
         streak,
       });
@@ -132,6 +123,8 @@ export default function HomeScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const canStartWorkout = !!nextWorkout;
+
   if (isLoading) {
     return (
       <ParallaxScrollView>
@@ -142,277 +135,253 @@ export default function HomeScreen() {
 
   return (
     <ParallaxScrollView
-      refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-      }
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
     >
-      <ThemedView className="flex-row items-center gap-2">
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-
-      <ThemedView className="mt-5 gap-6">
-        {/* Stats Cards */}
-        <View className="flex-row gap-3">
-          <ThemedView className="flex-1 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg items-center">
-            <ThemedText className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {stats.totalWorkouts}
-            </ThemedText>
-            <ThemedText className="text-xs text-gray-600 dark:text-gray-400">
-              Total Workouts
-            </ThemedText>
-          </ThemedView>
-          <ThemedView className="flex-1 p-4 bg-green-100 dark:bg-green-900/30 rounded-lg items-center">
-            <ThemedText className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {stats.thisWeek}
-            </ThemedText>
-            <ThemedText className="text-xs text-gray-600 dark:text-gray-400">
-              This Week
-            </ThemedText>
-          </ThemedView>
-          <ThemedView className="flex-1 p-4 bg-orange-100 dark:bg-orange-900/30 rounded-lg items-center">
-            <ThemedText className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {stats.streak}
-            </ThemedText>
-            <ThemedText className="text-xs text-gray-600 dark:text-gray-400">
-              Day Streak
-            </ThemedText>
-          </ThemedView>
+      <View className="flex-row items-center justify-between pt-5 pb-5">
+        <View className="flex-1 items-center">
+          <ThemedText className="text-3xl font-bold text-center">{stats.totalWorkouts}</ThemedText>
+          <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
+            Total
+          </ThemedText>
         </View>
+        <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
+        <View className="flex-1 items-center">
+          <ThemedText className="text-3xl font-bold text-center">{stats.thisWeek}</ThemedText>
+          <ThemedText
+            numberOfLines={1}
+            className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center"
+          >
+            {'This\u00A0Week'}
+          </ThemedText>
+        </View>
+        <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
+        <View className="flex-1 items-center">
+          <ThemedText className="text-3xl font-bold text-center">{stats.streak}</ThemedText>
+          <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
+            Streak
+          </ThemedText>
+        </View>
+      </View>
 
-        {/* Start Workout Button */}
+      <View className="border-b border-gray-200 dark:border-gray-700 pb-6">
         <Pressable
-          onPress={() => router.push('/(tabs)/ActiveWorkout')}
+          onPress={() =>
+            canStartWorkout ? router.push('/(tabs)/ActiveWorkout') : router.push('/(tabs)/Programs')
+          }
           accessibilityRole="button"
-          accessibilityLabel="Start active workout"
+          accessibilityLabel={canStartWorkout ? 'Start active workout' : 'Create or choose a program'}
         >
           {({ pressed }) => (
             <View
-              className="bg-green-500 rounded-full p-4"
-              style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+              className={`rounded-full py-4 px-5 ${
+                canStartWorkout ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-400 dark:bg-gray-600'
+              }`}
+              style={pressed ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : undefined}
             >
-              <ThemedText className="text-white text-center font-semibold text-lg">
-                🏋️ Start Workout
+              <ThemedText className="text-center text-white font-semibold text-base">
+                {canStartWorkout ? `Start Day ${nextWorkout.dayNumber}` : 'Create Your First Program'}
               </ThemedText>
             </View>
           )}
         </Pressable>
+      </View>
 
-        {/* Next Workout Preview */}
-        {nextWorkout && (
-          <ThemedView className="gap-2">
-            <ThemedText type="subtitle">Up Next</ThemedText>
-            <ThemedView className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <ThemedText className="font-bold text-lg">
-                {nextWorkout.programName}
-              </ThemedText>
+      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
+        <ThemedText type="subtitle">Quick Actions</ThemedText>
+        <View className="flex-row flex-wrap gap-2">
+          <Pressable
+            onPress={() => router.push('/(tabs)/Coach')}
+            accessibilityRole="button"
+            accessibilityLabel="Open AI Coach"
+            className="w-[48%]"
+          >
+            {({ pressed }) => (
+              <View
+                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
+                style={pressed ? { opacity: 0.75 } : undefined}
+              >
+                <ThemedText className="text-base font-semibold text-center text-white">AI Coach</ThemedText>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/(tabs)/Programs')}
+            accessibilityRole="button"
+            accessibilityLabel="Manage programs"
+            className="w-[48%]"
+          >
+            {({ pressed }) => (
+              <View
+                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
+                style={pressed ? { opacity: 0.75 } : undefined}
+              >
+                <ThemedText className="text-base font-semibold text-center text-white">Programs</ThemedText>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/(tabs)/History')}
+            accessibilityRole="button"
+            accessibilityLabel="Open workout history"
+            className="w-[48%]"
+          >
+            {({ pressed }) => (
+              <View
+                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
+                style={pressed ? { opacity: 0.75 } : undefined}
+              >
+                <ThemedText className="text-base font-semibold text-center text-white">History</ThemedText>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/(tabs)/Profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            className="w-[48%]"
+          >
+            {({ pressed }) => (
+              <View
+                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
+                style={pressed ? { opacity: 0.75 } : undefined}
+              >
+                <ThemedText className="text-base font-semibold text-center text-white">Settings</ThemedText>
+              </View>
+            )}
+          </Pressable>
+        </View>
+      </ThemedView>
+
+      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
+        <ThemedText type="subtitle">Up Next</ThemedText>
+        {nextWorkout ? (
+          <View className="gap-3">
+            <View className="border-l-2 border-blue-500 pl-3">
+              <ThemedText className="font-semibold text-base">{nextWorkout.programName}</ThemedText>
               <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
                 Day {nextWorkout.dayNumber} • {nextWorkout.exercises.length} exercises
               </ThemedText>
-              
-              {/* Muscle Groups */}
-              <View className="mt-3">
-                <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                  Muscle Groups
-                </ThemedText>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {getMuscleGroups(nextWorkout).map((group) => (
-                    <View
-                      key={group}
-                      className="bg-blue-100 dark:bg-blue-900/50 px-2.5 py-1 rounded-full"
-                    >
-                      <ThemedText className="text-xs font-medium capitalize text-blue-700 dark:text-blue-300">
-                        {group}
-                      </ThemedText>
-                    </View>
-                  ))}
-                </View>
-              </View>
-              
-              {/* Exercises */}
-              <View className="mt-3">
-                <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                  Exercises
-                </ThemedText>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {nextWorkout.exercises.map((ex, i) => (
-                    <View
-                      key={i}
-                      className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
-                    >
-                      <ThemedText className="text-xs">{ex.name}</ThemedText>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </ThemedView>
-          </ThemedView>
-        )}
+            </View>
 
-        {/* Current Program */}
-        {currentProgram ? (
-          <ThemedView className="gap-2">
-            <ThemedText type="subtitle">Current Program</ThemedText>
-            <Pressable
-              onPress={() => router.push('/(tabs)/Programs')}
-              accessibilityRole="button"
-            >
-              {({ pressed }) => (
-                <ThemedView
-                  className={`p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 ${
-                    pressed ? 'opacity-80' : ''
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View>
-                      <ThemedText className="font-bold text-lg">
-                        {currentProgram.name}
-                      </ThemedText>
-                      <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-                        {currentProgram.workoutDays.length} day
-                        {currentProgram.workoutDays.length !== 1 ? 's' : ''} •{' '}
-                        {currentProgram.workoutDays.reduce(
-                          (sum, day) => sum + day.exercises.length,
-                          0
-                        )}{' '}
-                        exercises
-                      </ThemedText>
-                    </View>
-                    <ThemedText className="text-blue-500 text-lg">›</ThemedText>
-                  </View>
-                </ThemedView>
-              )}
-            </Pressable>
-          </ThemedView>
-        ) : (
-          <ThemedView className="gap-2">
-            <ThemedText type="subtitle">Get Started</ThemedText>
-            <ThemedView className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <ThemedText className="text-center text-gray-600 dark:text-gray-400 mb-3">
-                Create your first program to start tracking workouts
-              </ThemedText>
-              <Pressable
-                onPress={() => router.push('/(tabs)/Programs')}
-                accessibilityRole="button"
-              >
-                {({ pressed }) => (
-                  <View
-                    className={`bg-blue-500 py-2 px-4 rounded-full ${
-                      pressed ? 'opacity-80' : ''
-                    }`}
-                  >
-                    <ThemedText className="text-white text-center font-semibold">
-                      Create Program
-                    </ThemedText>
-                  </View>
-                )}
-              </Pressable>
-            </ThemedView>
-          </ThemedView>
-        )}
-
-        {/* Recent Activity */}
-        {recentWorkouts.length > 0 && (
-          <ThemedView className="gap-2">
-            <ThemedText type="subtitle">Recent Activity</ThemedText>
-            {recentWorkouts.map((workout) => (
-              <ThemedView
-                key={workout.id}
-                className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-              >
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <ThemedText className="font-semibold">
-                      {workout.programName} - Day {workout.dayNumber}
-                    </ThemedText>
-                    <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                      {workout.exercises.length} exercises
-                    </ThemedText>
-                  </View>
-                  <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(workout.date)}
+            <View className="flex-row flex-wrap gap-1.5">
+              {getMuscleGroups(nextWorkout).map((group) => (
+                <View key={group} className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40">
+                  <ThemedText className="text-xs font-medium capitalize text-blue-700 dark:text-blue-300">
+                    {group}
                   </ThemedText>
                 </View>
-              </ThemedView>
-            ))}
+              ))}
+            </View>
+
+            <View className="gap-1.5">
+              {nextWorkout.exercises.slice(0, 5).map((exercise) => (
+                <ThemedText key={exercise.name} className="text-sm text-gray-700 dark:text-gray-300">
+                  • {exercise.name}
+                </ThemedText>
+              ))}
+              {nextWorkout.exercises.length > 5 && (
+                <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
+                  +{nextWorkout.exercises.length - 5} more exercises
+                </ThemedText>
+              )}
+            </View>
+          </View>
+        ) : (
+          <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
+            Queue is empty. Choose a program to generate your next workout.
+          </ThemedText>
+        )}
+      </ThemedView>
+
+      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
+        <ThemedText type="subtitle">Program</ThemedText>
+        {currentProgram ? (
+          <Pressable
+            onPress={() => router.push('/(tabs)/Programs')}
+            accessibilityRole="button"
+            accessibilityLabel="Open programs"
+          >
+            {({ pressed }) => (
+              <View
+                className="flex-row items-center justify-between"
+                style={pressed ? { opacity: 0.75 } : undefined}
+              >
+                <View className="flex-1 pr-3">
+                  <ThemedText className="font-semibold text-base">{currentProgram.name}</ThemedText>
+                  <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                    {currentProgram.workoutDays.length} day
+                    {currentProgram.workoutDays.length !== 1 ? 's' : ''} •{' '}
+                    {currentProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercises
+                  </ThemedText>
+                </View>
+                <ThemedText className="text-blue-500 text-lg">›</ThemedText>
+              </View>
+            )}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => router.push('/(tabs)/Programs')}
+            accessibilityRole="button"
+            accessibilityLabel="Create your first program"
+          >
+            {({ pressed }) => (
+              <ThemedText
+                className="text-sm text-blue-500 font-semibold"
+                style={pressed ? { opacity: 0.7 } : undefined}
+              >
+                Create your first program
+              </ThemedText>
+            )}
+          </Pressable>
+        )}
+      </ThemedView>
+
+      {recentWorkouts.length > 0 && (
+        <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
+          <View className="flex-row items-center justify-between">
+            <ThemedText type="subtitle">Recent Activity</ThemedText>
             <Pressable
               onPress={() => router.push('/(tabs)/History')}
               accessibilityRole="button"
+              accessibilityLabel="View all workout history"
             >
               {({ pressed }) => (
                 <ThemedText
-                  className={`text-blue-500 text-center text-sm font-semibold ${
-                    pressed ? 'opacity-70' : ''
-                  }`}
+                  className="text-sm text-blue-500 font-semibold"
+                  style={pressed ? { opacity: 0.7 } : undefined}
                 >
-                  View All History →
+                  View all
                 </ThemedText>
               )}
             </Pressable>
-          </ThemedView>
-        )}
+          </View>
 
-        {/* Quick Actions */}
-        <ThemedView className="gap-2">
-          <ThemedText type="subtitle">Quick Actions</ThemedText>
-          <View className="flex-row gap-3">
-            <Pressable
-              onPress={() => router.push('/(tabs)/Coach')}
-              className="flex-1"
-              accessibilityRole="button"
-            >
-              {({ pressed }) => (
-                <ThemedView
-                  className={`p-4 bg-purple-100 dark:bg-purple-900/30 rounded-lg items-center ${
-                    pressed ? 'opacity-80' : ''
-                  }`}
-                >
-                  <ThemedText className="text-2xl mb-1">🤖</ThemedText>
-                  <ThemedText className="text-sm font-semibold text-center">
-                    AI Coach
+          <View className="gap-2">
+            {recentWorkouts.map((workout) => (
+              <View
+                key={workout.id}
+                className="flex-row items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+              >
+                <View className="flex-1 pr-3">
+                  <ThemedText className="font-medium" numberOfLines={1}>
+                    {workout.programName} • Day {workout.dayNumber}
                   </ThemedText>
-                </ThemedView>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/(tabs)/Programs')}
-              className="flex-1"
-              accessibilityRole="button"
-            >
-              {({ pressed }) => (
-                <ThemedView
-                  className={`p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg items-center ${
-                    pressed ? 'opacity-80' : ''
-                  }`}
-                >
-                  <ThemedText className="text-2xl mb-1">📋</ThemedText>
-                  <ThemedText className="text-sm font-semibold text-center">
-                    Programs
+                  <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {workout.exercises.length} exercises
                   </ThemedText>
-                </ThemedView>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/(tabs)/Profile')}
-              className="flex-1"
-              accessibilityRole="button"
-            >
-              {({ pressed }) => (
-                <ThemedView
-                  className={`p-4 bg-gray-100 dark:bg-gray-800 rounded-lg items-center ${
-                    pressed ? 'opacity-80' : ''
-                  }`}
-                >
-                  <ThemedText className="text-2xl mb-1">⚙️</ThemedText>
-                  <ThemedText className="text-sm font-semibold text-center">
-                    Settings
-                  </ThemedText>
-                </ThemedView>
-              )}
-            </Pressable>
+                </View>
+                <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                  {formatDate(workout.date)}
+                </ThemedText>
+              </View>
+            ))}
           </View>
         </ThemedView>
-      </ThemedView>
+      )}
+
     </ParallaxScrollView>
   );
 }
