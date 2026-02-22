@@ -25,14 +25,17 @@ export interface ProgramExercise extends Exercise {
   sets: string;
   restTime: string;
   progression: string;
+  hasCustomisedSets: boolean;
 }
 
 /**
  * Exercise with logged values from a completed workout
  */
 export interface WorkoutExercise extends ProgramExercise {
-  loggedWeight: string;
-  loggedReps: string;
+  loggedWeight: number;
+  loggedReps: number;
+  loggedSetWeights: number[];
+  loggedSetReps: number[];
 }
 
 // =============================================================================
