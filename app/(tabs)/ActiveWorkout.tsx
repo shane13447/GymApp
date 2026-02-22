@@ -162,12 +162,14 @@ export default function ActiveWorkout() {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
           const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
-          const autoWeight = calculateAutoWeight(lastWeight, ex.progression);
+          const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
 
           return {
             ...ex,
             loggedWeight: autoWeight,
             loggedReps: 0,
+            loggedSetWeights: [],
+            loggedSetReps: [],
           };
         })
       );
@@ -188,6 +190,8 @@ export default function ActiveWorkout() {
         ...ex,
         loggedWeight: 0,
         loggedReps: 0,
+        loggedSetWeights: [],
+        loggedSetReps: [],
       }));
       setWorkoutExercises(initialExercises);
     }
@@ -312,6 +316,8 @@ export default function ActiveWorkout() {
             ...ex,
             loggedWeight: finalWeight,
             loggedReps: 0,
+            loggedSetWeights: [],
+            loggedSetReps: [],
           };
         })
       );
@@ -330,8 +336,10 @@ export default function ActiveWorkout() {
       console.error('Error initializing workout exercises from queue:', error);
       const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
         ...ex,
-        loggedWeight: ex.weight || 0,
+        loggedWeight: Number(ex.weight) || 0,
         loggedReps: 0,
+        loggedSetWeights: [],
+        loggedSetReps: [],
       }));
       setWorkoutExercises(initialExercises);
     }
@@ -379,6 +387,58 @@ export default function ActiveWorkout() {
       const numValue = field === 'loggedWeight' ? parseFloat(value) || 0 : parseInt(value, 10) || 0;
       setWorkoutExercises((prev) =>
         prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: numValue } : ex))
+      );
+    },
+    []
+  );
+
+  const updateLoggedSetWeight = useCallback(
+    (exerciseName: string, setIndex: number, value: string) => {
+      const numValue = parseFloat(value) || 0;
+
+      setWorkoutExercises((prev) =>
+        prev.map((ex) => {
+          if (ex.name !== exerciseName) return ex;
+
+          const nextSetWeights = [...ex.loggedSetWeights];
+          nextSetWeights[setIndex] = numValue;
+
+          const nonZeroSetWeights = nextSetWeights.filter((weight) => weight > 0);
+          const derivedLoggedWeight =
+            nonZeroSetWeights.length > 0 ? nonZeroSetWeights[nonZeroSetWeights.length - 1] : 0;
+
+          return {
+            ...ex,
+            loggedSetWeights: nextSetWeights,
+            loggedWeight: derivedLoggedWeight,
+          };
+        })
+      );
+    },
+    []
+  );
+
+  const updateLoggedSetReps = useCallback(
+    (exerciseName: string, setIndex: number, value: string) => {
+      const numValue = parseInt(value, 10) || 0;
+
+      setWorkoutExercises((prev) =>
+        prev.map((ex) => {
+          if (ex.name !== exerciseName) return ex;
+
+          const nextSetReps = [...ex.loggedSetReps];
+          nextSetReps[setIndex] = numValue;
+
+          const nonZeroSetReps = nextSetReps.filter((reps) => reps > 0);
+          const derivedLoggedReps =
+            nonZeroSetReps.length > 0 ? nonZeroSetReps[nonZeroSetReps.length - 1] : 0;
+
+          return {
+            ...ex,
+            loggedSetReps: nextSetReps,
+            loggedReps: derivedLoggedReps,
+          };
+        })
       );
     },
     []
@@ -449,8 +509,10 @@ export default function ActiveWorkout() {
         const queueItem = updatedQueue[0];
         const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
           ...ex,
-          loggedWeight: ex.weight || 0,
+          loggedWeight: Number(ex.weight) || 0,
           loggedReps: 0,
+          loggedSetWeights: [],
+          loggedSetReps: [],
         }));
         setWorkoutExercises(initialExercises);
         return;
@@ -473,12 +535,14 @@ export default function ActiveWorkout() {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
           const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
-          const autoWeight = calculateAutoWeight(lastWeight, ex.progression);
+          const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
 
           return {
             ...ex,
             loggedWeight: autoWeight,
             loggedReps: 0,
+            loggedSetWeights: [],
+            loggedSetReps: [],
           };
         })
       );
@@ -501,6 +565,8 @@ export default function ActiveWorkout() {
         ...ex,
         loggedWeight: 0,
         loggedReps: 0,
+        loggedSetWeights: [],
+        loggedSetReps: [],
       }));
       setWorkoutExercises(initialExercises);
     }
@@ -638,10 +704,22 @@ export default function ActiveWorkout() {
           dayNumber={selectedDayIndex + 1}
           onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
           onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
+          onUpdateLoggedSetWeight={(setIndex, value) =>
+            updateLoggedSetWeight(item.name, setIndex, value)
+          }
+          onUpdateLoggedSetReps={(setIndex, value) =>
+            updateLoggedSetReps(item.name, setIndex, value)
+          }
         />
       );
     },
-    [updateLoggedValue, currentProgram, selectedDayIndex]
+    [
+      updateLoggedValue,
+      updateLoggedSetWeight,
+      updateLoggedSetReps,
+      currentProgram,
+      selectedDayIndex,
+    ]
   );
 
   if (isLoading) {

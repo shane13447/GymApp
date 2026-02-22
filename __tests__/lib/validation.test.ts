@@ -24,11 +24,13 @@ const createValidExercise = (overrides: Partial<ProgramExercise> = {}): ProgramE
   name: 'Barbell Bench Press',
   equipment: 'Barbell',
   muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
+  isCompound: true,
   weight: '80',
   reps: '8',
   sets: '3',
   restTime: '180',
   progression: '2.5',
+  hasCustomisedSets: false,
   ...overrides,
 });
 

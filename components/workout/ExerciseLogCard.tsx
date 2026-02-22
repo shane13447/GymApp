@@ -31,6 +31,8 @@ interface ExerciseLogCardProps {
   dayNumber: number;
   onUpdateLoggedWeight: (value: string) => void;
   onUpdateLoggedReps: (value: string) => void;
+  onUpdateLoggedSetWeight: (setIndex: number, value: string) => void;
+  onUpdateLoggedSetReps: (setIndex: number, value: string) => void;
 }
 
 export const ExerciseLogCard = memo(function ExerciseLogCard({
@@ -40,6 +42,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   dayNumber,
   onUpdateLoggedWeight,
   onUpdateLoggedReps,
+  onUpdateLoggedSetWeight,
+  onUpdateLoggedSetReps,
 }: ExerciseLogCardProps) {
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
@@ -138,7 +142,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const restTimeSeconds = sanitizeRestTime(exercise.restTime);
   
   // Get target sets for display
-  const targetSets = exercise.sets || 0;
+  const targetSets = Number(exercise.sets) || 0;
+  const totalCustomisedSetInputs = targetSets > 0 ? targetSets : 1;
   
   // =============================================================================
   // RACE CONDITION FIX: Safe DB clear operation
@@ -546,7 +551,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
               <ThemedText className="text-base font-semibold">{exercise.reps}</ThemedText>
             </View>
           )}
-          {exercise.weight !== undefined && exercise.weight !== 0 && (
+          {Number(exercise.weight) > 0 && (
             <View>
               <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                 Target Weight
@@ -565,33 +570,83 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
 
       {/* Logged Values Input */}
       <View className="mt-3 gap-3">
-        <ThemedView className="gap-1">
-          <ThemedText className="text-sm font-semibold">Weight Logged</ThemedText>
-          <TextInput
-            className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="Enter weight used..."
-            placeholderTextColor="#999"
-            value={exercise.loggedWeight === 0 ? '' : exercise.loggedWeight.toString()}
-            onChangeText={onUpdateLoggedWeight}
-            keyboardType="decimal-pad"
-            style={{ color: textColor }}
-            accessibilityLabel={`Log weight for ${exercise.name}`}
-          />
-        </ThemedView>
+        {exercise.hasCustomisedSets ? (
+          <View className="gap-3">
+            <ThemedText className="text-sm font-semibold">Customised Sets Logged</ThemedText>
+            {Array.from({ length: totalCustomisedSetInputs }).map((_, setIndex) => {
+              const setNumber = setIndex + 1;
+              const currentSetWeight = exercise.loggedSetWeights[setIndex] ?? 0;
+              const currentSetReps = exercise.loggedSetReps[setIndex] ?? 0;
 
-        <ThemedView className="gap-1">
-          <ThemedText className="text-sm font-semibold">Reps Logged</ThemedText>
-          <TextInput
-            className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
-            placeholder="Enter reps completed..."
-            placeholderTextColor="#999"
-            value={exercise.loggedReps === 0 ? '' : exercise.loggedReps.toString()}
-            onChangeText={onUpdateLoggedReps}
-            keyboardType="numeric"
-            style={{ color: textColor }}
-            accessibilityLabel={`Log reps for ${exercise.name}`}
-          />
-        </ThemedView>
+              return (
+                <ThemedView
+                  key={`${exercise.name}-set-${setNumber}`}
+                  className="gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
+                >
+                  <ThemedText className="text-sm font-semibold">Set {setNumber}</ThemedText>
+                  <View className="flex-row gap-2">
+                    <View className="flex-1 gap-1">
+                      <ThemedText className="text-xs text-gray-500 dark:text-gray-400">Weight</ThemedText>
+                      <TextInput
+                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                        placeholder="Weight"
+                        placeholderTextColor="#999"
+                        value={currentSetWeight === 0 ? '' : currentSetWeight.toString()}
+                        onChangeText={(value) => onUpdateLoggedSetWeight(setIndex, value)}
+                        keyboardType="decimal-pad"
+                        style={{ color: textColor }}
+                        accessibilityLabel={`Log weight for ${exercise.name} set ${setNumber}`}
+                      />
+                    </View>
+                    <View className="flex-1 gap-1">
+                      <ThemedText className="text-xs text-gray-500 dark:text-gray-400">Reps</ThemedText>
+                      <TextInput
+                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                        placeholder="Reps"
+                        placeholderTextColor="#999"
+                        value={currentSetReps === 0 ? '' : currentSetReps.toString()}
+                        onChangeText={(value) => onUpdateLoggedSetReps(setIndex, value)}
+                        keyboardType="numeric"
+                        style={{ color: textColor }}
+                        accessibilityLabel={`Log reps for ${exercise.name} set ${setNumber}`}
+                      />
+                    </View>
+                  </View>
+                </ThemedView>
+              );
+            })}
+          </View>
+        ) : (
+          <>
+            <ThemedView className="gap-1">
+              <ThemedText className="text-sm font-semibold">Weight Logged</ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                placeholder="Enter weight used..."
+                placeholderTextColor="#999"
+                value={exercise.loggedWeight === 0 ? '' : exercise.loggedWeight.toString()}
+                onChangeText={onUpdateLoggedWeight}
+                keyboardType="decimal-pad"
+                style={{ color: textColor }}
+                accessibilityLabel={`Log weight for ${exercise.name}`}
+              />
+            </ThemedView>
+
+            <ThemedView className="gap-1">
+              <ThemedText className="text-sm font-semibold">Reps Logged</ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                placeholder="Enter reps completed..."
+                placeholderTextColor="#999"
+                value={exercise.loggedReps === 0 ? '' : exercise.loggedReps.toString()}
+                onChangeText={onUpdateLoggedReps}
+                keyboardType="numeric"
+                style={{ color: textColor }}
+                accessibilityLabel={`Log reps for ${exercise.name}`}
+              />
+            </ThemedView>
+          </>
+        )}
       </View>
 
       {/* Rest Timer */}

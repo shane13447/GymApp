@@ -106,11 +106,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       dflt_value: string | null;
       pk: number;
     }>('PRAGMA table_info(active_rest_timers)');
-    
+
     if (tableInfo.length > 0) {
       // Table exists - check if it has the new columns
       const hasNewColumns = tableInfo.some(col => col.name === 'program_id');
-      
+
       if (!hasNewColumns) {
         // Old schema detected - drop and recreate
         // Timer data is transient, so losing it is acceptable
@@ -124,7 +124,28 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     // If PRAGMA fails, table probably doesn't exist - that's fine
     console.log('Timer table check:', error);
   }
-  
+
+  const ensureColumnExists = async (
+    tableName: string,
+    columnName: string,
+    columnDefinition: string
+  ) => {
+    const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+    const hasColumn = columns.some((column) => column.name === columnName);
+
+    if (!hasColumn) {
+      await database.execAsync(
+        `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`
+      );
+    }
+  };
+
+  await ensureColumnExists('program_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+  await ensureColumnExists('workout_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+  await ensureColumnExists('workout_exercises', 'logged_set_weights', "TEXT DEFAULT '[]'");
+  await ensureColumnExists('workout_exercises', 'logged_set_reps', "TEXT DEFAULT '[]'");
+  await ensureColumnExists('queue_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -172,6 +193,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       sets INTEGER DEFAULT 3,
       rest_time INTEGER DEFAULT 180,
       progression REAL DEFAULT 0,
+      has_customised_sets INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
     );
@@ -202,8 +224,11 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       sets INTEGER DEFAULT 3,
       rest_time INTEGER DEFAULT 180,
       progression REAL DEFAULT 0,
+      has_customised_sets INTEGER DEFAULT 0,
       logged_weight REAL DEFAULT 0,
       logged_reps INTEGER DEFAULT 0,
+      logged_set_weights TEXT DEFAULT '[]',
+      logged_set_reps TEXT DEFAULT '[]',
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
     );
@@ -232,6 +257,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       sets INTEGER DEFAULT 3,
       rest_time INTEGER DEFAULT 180,
       progression REAL DEFAULT 0,
+      has_customised_sets INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
     );
@@ -651,6 +677,7 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       sets: number;
       rest_time: number;
       progression: number;
+      has_customised_sets: number;
       position: number;
     }>(
       'SELECT * FROM program_exercises WHERE workout_day_id = ? ORDER BY position',
@@ -664,11 +691,12 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
         isCompound: !!ex.is_compound,
-        weight: ex.weight,
-        reps: ex.reps,
-        sets: ex.sets,
-        restTime: ex.rest_time,
-        progression: ex.progression,
+        weight: ex.weight.toString(),
+        reps: ex.reps.toString(),
+        sets: ex.sets.toString(),
+        restTime: ex.rest_time.toString(),
+        progression: ex.progression.toString(),
+        hasCustomisedSets: ex.has_customised_sets === 1,
       })),
     });
   }
@@ -702,20 +730,21 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
       // Defensive coding: ensure all fields have valid values
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
-        `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO program_exercises
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
           exercise.isCompound ? 1 : 0,
-          exercise.weight ?? 0,
-          exercise.reps ?? 8,
-          exercise.sets ?? 3,
-          exercise.restTime ?? 180,
-          exercise.progression ?? 0,
+          parseFloat(exercise.weight) || 0,
+          parseInt(exercise.reps, 10) || 8,
+          parseInt(exercise.sets, 10) || 3,
+          parseInt(exercise.restTime, 10) || 180,
+          parseFloat(exercise.progression) || 0,
+          exercise.hasCustomisedSets ? 1 : 0,
           i,
         ]
       );
@@ -759,20 +788,21 @@ export const updateProgram = async (program: Program): Promise<void> => {
       // Defensive coding: ensure all fields have valid values
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
-        `INSERT INTO program_exercises 
-         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO program_exercises
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dayId,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
           exercise.isCompound ? 1 : 0,
-          exercise.weight ?? 0,
-          exercise.reps ?? 8,
-          exercise.sets ?? 3,
-          exercise.restTime ?? 180,
-          exercise.progression ?? 0,
+          parseFloat(exercise.weight) || 0,
+          parseInt(exercise.reps, 10) || 8,
+          parseInt(exercise.sets, 10) || 3,
+          parseInt(exercise.restTime, 10) || 180,
+          parseFloat(exercise.progression) || 0,
+          exercise.hasCustomisedSets ? 1 : 0,
           i,
         ]
       );
@@ -831,8 +861,11 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       sets: number;
       rest_time: number;
       progression: number;
+      has_customised_sets: number;
       logged_weight: number;
       logged_reps: number;
+      logged_set_weights: string;
+      logged_set_reps: string;
       position: number;
     }>(
       'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
@@ -853,13 +886,16 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
         isCompound: !!ex.is_compound,
-        weight: ex.weight,
-        reps: ex.reps,
-        sets: ex.sets,
-        restTime: ex.rest_time,
-        progression: ex.progression,
+        weight: ex.weight.toString(),
+        reps: ex.reps.toString(),
+        sets: ex.sets.toString(),
+        restTime: ex.rest_time.toString(),
+        progression: ex.progression.toString(),
+        hasCustomisedSets: ex.has_customised_sets === 1,
         loggedWeight: ex.logged_weight,
         loggedReps: ex.logged_reps,
+        loggedSetWeights: JSON.parse(ex.logged_set_weights ?? '[]') as number[],
+        loggedSetReps: JSON.parse(ex.logged_set_reps ?? '[]') as number[],
       })),
     });
   }
@@ -909,22 +945,25 @@ export const saveWorkout = async (workout: Workout): Promise<void> => {
     const exercise = workout.exercises[i];
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
-      `INSERT INTO workout_exercises 
-       (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, logged_weight, logged_reps, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO workout_exercises
+       (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, logged_weight, logged_reps, logged_set_weights, logged_set_reps, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workout.id,
         exercise.name ?? '',
         exercise.equipment ?? '',
         JSON.stringify(muscleGroups),
         exercise.isCompound ? 1 : 0,
-        exercise.weight ?? 0,
-        exercise.reps ?? 8,
-        exercise.sets ?? 3,
-        exercise.restTime ?? 180,
-        exercise.progression ?? 0,
+        parseFloat(exercise.weight) || 0,
+        parseInt(exercise.reps, 10) || 8,
+        parseInt(exercise.sets, 10) || 3,
+        parseInt(exercise.restTime, 10) || 180,
+        parseFloat(exercise.progression) || 0,
+        exercise.hasCustomisedSets ? 1 : 0,
         exercise.loggedWeight ?? 0,
         exercise.loggedReps ?? 0,
+        JSON.stringify(exercise.loggedSetWeights ?? []),
+        JSON.stringify(exercise.loggedSetReps ?? []),
         i,
       ]
     );
@@ -994,6 +1033,7 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       sets: number;
       rest_time: number;
       progression: number;
+      has_customised_sets: number;
       position: number;
     }>(
       'SELECT * FROM queue_exercises WHERE queue_item_id = ? ORDER BY position',
@@ -1012,11 +1052,12 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
         isCompound: !!ex.is_compound,
-        weight: ex.weight,
-        reps: ex.reps,
-        sets: ex.sets,
-        restTime: ex.rest_time,
-        progression: ex.progression,
+        weight: ex.weight.toString(),
+        reps: ex.reps.toString(),
+        sets: ex.sets.toString(),
+        restTime: ex.rest_time.toString(),
+        progression: ex.progression.toString(),
+        hasCustomisedSets: ex.has_customised_sets === 1,
       })),
     });
   }
@@ -1054,20 +1095,21 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
       const exercise = item.exercises[j];
       const muscleGroups = exercise.muscle_groups_worked ?? [];
       await database.runAsync(
-        `INSERT INTO queue_exercises 
-         (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO queue_exercises
+         (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           item.id,
           exercise.name ?? '',
           exercise.equipment ?? '',
           JSON.stringify(muscleGroups),
           exercise.isCompound ? 1 : 0,
-          exercise.weight ?? 0,
-          exercise.reps ?? 8,
-          exercise.sets ?? 3,
-          exercise.restTime ?? 180,
-          exercise.progression ?? 0,
+          parseFloat(exercise.weight) || 0,
+          parseInt(exercise.reps, 10) || 8,
+          parseInt(exercise.sets, 10) || 3,
+          parseInt(exercise.restTime, 10) || 180,
+          parseFloat(exercise.progression) || 0,
+          exercise.hasCustomisedSets ? 1 : 0,
           j,
         ]
       );
@@ -1105,19 +1147,21 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
     const exercise = item.exercises[j];
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
-      `INSERT INTO queue_exercises 
-       (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO queue_exercises
+       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         exercise.name ?? '',
         exercise.equipment ?? '',
         JSON.stringify(muscleGroups),
-        exercise.weight ?? 0,
-        exercise.reps ?? 8,
-        exercise.sets ?? 3,
-        exercise.restTime ?? 180,
-        exercise.progression ?? 0,
+        exercise.isCompound ? 1 : 0,
+        parseFloat(exercise.weight) || 0,
+        parseInt(exercise.reps, 10) || 8,
+        parseInt(exercise.sets, 10) || 3,
+        parseInt(exercise.restTime, 10) || 180,
+        parseFloat(exercise.progression) || 0,
+        exercise.hasCustomisedSets ? 1 : 0,
         j,
       ]
     );
@@ -1172,19 +1216,21 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
     const exercise = item.exercises[j];
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
-      `INSERT INTO queue_exercises 
-       (queue_item_id, name, equipment, muscle_groups, weight, reps, sets, rest_time, progression, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO queue_exercises
+       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         exercise.name ?? '',
         exercise.equipment ?? '',
         JSON.stringify(muscleGroups),
-        exercise.weight ?? 0,
-        exercise.reps ?? 8,
-        exercise.sets ?? 3,
-        exercise.restTime ?? 180,
-        exercise.progression ?? 0,
+        exercise.isCompound ? 1 : 0,
+        parseFloat(exercise.weight) || 0,
+        parseInt(exercise.reps, 10) || 8,
+        parseInt(exercise.sets, 10) || 3,
+        parseInt(exercise.restTime, 10) || 180,
+        parseFloat(exercise.progression) || 0,
+        exercise.hasCustomisedSets ? 1 : 0,
         j,
       ]
     );

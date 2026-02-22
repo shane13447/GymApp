@@ -27,6 +27,7 @@ export const EXERCISE_DEFAULTS = {
   sets: DEFAULT_SETS,
   restTime: DEFAULT_REST_TIME,
   progression: DEFAULT_PROGRESSION,
+  hasCustomisedSets: false,
 } as const;
 
 // =============================================================================
