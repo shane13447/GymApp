@@ -120,12 +120,26 @@ export default function ProgramsScreen() {
   }, []);
 
   const updateExerciseField = useCallback(
-    (exerciseName: string, field: keyof ProgramExercise, value: string, dayNumber?: number) => {
-      // Determine if field is numeric and parse accordingly
-      const numericFields: (keyof ProgramExercise)[] = ['weight', 'reps', 'sets', 'restTime', 'progression'];
-      const finalValue = numericFields.includes(field)
-        ? (field === 'weight' || field === 'progression' ? parseFloat(value) || 0 : parseInt(value, 10) || 0)
-        : value;
+    (
+      exerciseName: string,
+      field: keyof ProgramExercise,
+      value: string | boolean,
+      dayNumber?: number
+    ) => {
+      const numericFields: (keyof ProgramExercise)[] = [
+        'weight',
+        'reps',
+        'sets',
+        'restTime',
+        'progression',
+      ];
+
+      const finalValue: ProgramExercise[keyof ProgramExercise] =
+        field === 'hasCustomisedSets'
+          ? Boolean(value)
+          : numericFields.includes(field)
+          ? String(value)
+          : String(value);
 
       if (createStep === CreateProgramStep.Configuration && dayNumber !== undefined) {
         setWorkoutDays((prev) =>

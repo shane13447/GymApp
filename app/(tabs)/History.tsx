@@ -127,36 +127,66 @@ export default function HistoryScreen() {
 
               {/* Logged Values */}
               <View className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                <View className="flex-row flex-wrap gap-4">
-                  {exercise.loggedWeight && (
-                    <View>
-                      <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                        Weight
-                      </ThemedText>
-                      <ThemedText className="text-base font-semibold">
-                        {exercise.loggedWeight}
-                      </ThemedText>
-                    </View>
-                  )}
-                  {exercise.loggedReps && (
-                    <View>
-                      <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                        Reps
-                      </ThemedText>
-                      <ThemedText className="text-base font-semibold">
-                        {exercise.loggedReps}
-                      </ThemedText>
-                    </View>
-                  )}
-                  {exercise.sets && (
-                    <View>
-                      <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                        Sets
-                      </ThemedText>
-                      <ThemedText className="text-base font-semibold">{exercise.sets}</ThemedText>
-                    </View>
-                  )}
-                </View>
+                {exercise.hasCustomisedSets ? (
+                  <View className="gap-2">
+                    <ThemedText className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                      Customised Sets
+                    </ThemedText>
+                    {Array.from({ length: Number(exercise.sets) || 0 }).map((_, setIndex) => {
+                      const setNumber = setIndex + 1;
+                      const setWeight = exercise.loggedSetWeights[setIndex] ?? 0;
+                      const setReps = exercise.loggedSetReps[setIndex] ?? 0;
+
+                      return (
+                        <View
+                          key={`${workout.id}-${exercise.name}-set-${setNumber}`}
+                          className="flex-row items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded"
+                        >
+                          <ThemedText className="text-sm font-medium">Set {setNumber}</ThemedText>
+                          <View className="flex-row gap-4">
+                            <ThemedText className="text-sm">
+                              W: <ThemedText className="font-semibold">{setWeight || '-'}</ThemedText>
+                            </ThemedText>
+                            <ThemedText className="text-sm">
+                              R: <ThemedText className="font-semibold">{setReps || '-'}</ThemedText>
+                            </ThemedText>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View className="flex-row flex-wrap gap-4">
+                    {exercise.loggedWeight > 0 && (
+                      <View>
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                          Weight
+                        </ThemedText>
+                        <ThemedText className="text-base font-semibold">
+                          {exercise.loggedWeight}
+                        </ThemedText>
+                      </View>
+                    )}
+                    {exercise.loggedReps > 0 && (
+                      <View>
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                          Reps
+                        </ThemedText>
+                        <ThemedText className="text-base font-semibold">
+                          {exercise.loggedReps}
+                        </ThemedText>
+                      </View>
+                    )}
+                    {exercise.sets && (
+                      <View>
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                          Sets
+                        </ThemedText>
+                        <ThemedText className="text-base font-semibold">{exercise.sets}</ThemedText>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
           ))}

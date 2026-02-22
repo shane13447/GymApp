@@ -321,6 +321,7 @@ export const createProgramExercise = (exercise: Exercise): ProgramExercise => ({
   sets: EXERCISE_DEFAULTS.sets,
   restTime: EXERCISE_DEFAULTS.restTime,
   progression: EXERCISE_DEFAULTS.progression,
+  hasCustomisedSets: EXERCISE_DEFAULTS.hasCustomisedSets,
 });
 
 export default ExerciseSelector;

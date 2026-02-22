@@ -4,7 +4,7 @@
  */
 
 import React, { memo, useCallback, useState, useEffect, useRef } from 'react';
-import { TextInput, View } from 'react-native';
+import { Switch, TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
@@ -14,7 +14,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 interface ExerciseConfigCardProps {
   exercise: ProgramExercise;
   index: number;
-  onUpdate: (field: keyof ProgramExercise, value: string) => void;
+  onUpdate: (field: keyof ProgramExercise, value: string | boolean) => void;
   showRemove?: boolean;
   onRemove?: () => void;
 }
@@ -62,7 +62,7 @@ const normalizeDecimalString = (input: string): string => {
  * Use focus tracking to prevent the useEffect from overwriting while user is typing.
  */
 const useDecimalInput = (
-  value: number | undefined,
+  value: string | undefined,
   onUpdate: (value: string) => void
 ) => {
   const [localValue, setLocalValue] = useState(value?.toString() || '');
@@ -175,6 +175,21 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
 
       {/* Input Fields */}
       <View className="mt-3 gap-3">
+        <ThemedView className="gap-2">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <ThemedText className="text-sm font-semibold">Customised Sets</ThemedText>
+              <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                Enable per-set logging for this exercise
+              </ThemedText>
+            </View>
+            <Switch
+              value={exercise.hasCustomisedSets}
+              onValueChange={(value) => onUpdate('hasCustomisedSets', value)}
+              accessibilityLabel="Toggle customised sets"
+            />
+          </View>
+        </ThemedView>
         <ThemedView className="gap-1">
           <ThemedText className="text-sm font-semibold">Sets</ThemedText>
           <TextInput

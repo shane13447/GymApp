@@ -597,6 +597,7 @@ export const parseQueueFormatResponse = (
             sets,
             restTime: '180',
             progression: '',
+            hasCustomisedSets: false,
           });
         } else {
           // Try to find in original exercises by comparing names
@@ -621,6 +622,7 @@ export const parseQueueFormatResponse = (
               sets,
               restTime: '180',
               progression: '',
+              hasCustomisedSets: false,
             });
           }
         }
