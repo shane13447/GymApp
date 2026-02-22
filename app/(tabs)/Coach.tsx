@@ -3,16 +3,15 @@
  * AI-powered workout coach for modifying workout queues and general fitness advice
  */
 
+import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
-import { LLAMA3_2_3B_QLORA, Message, useLLM } from 'react-native-executorch';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
-import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as db from '@/services/database';
 import {
@@ -26,7 +25,7 @@ import {
   validateChanges,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
-import type { Exercise, WorkoutQueueItem } from '@/types';
+import type { WorkoutQueueItem } from '@/types';
 import { CoachMode } from '@/types';
 
 // Test prompts for automated testing
@@ -60,20 +59,104 @@ const TEST_PROMPTS = [
 
   // --- TIER 4: SAFETY & SLANG ---
   // Slang/Fuzzy matching
-  { type: 'Safety - Fuzzy Name', prompt: 'set deadlifts to a hundred' }, 
-  
+  { type: 'Safety - Fuzzy Name', prompt: 'set deadlifts to a hundred' },
+
   // Implicit context (Asking for a change without saying "weight" or "reps")
-  { type: 'Safety - Day Boundary', prompt: 'switch lat pulldowns to 50' }, 
+  { type: 'Safety - Day Boundary', prompt: 'switch lat pulldowns to 50' },
 
   // Testing if the LLM/Repair system handles "by" vs "to"
   { type: 'Logic - Relative Math', prompt: 'add 5kg to my decline crunches' },
 
   // Very blunt/short phrasing
-  { type: 'Logic - Ambiguity', prompt: 'leg extensions 12 reps' }, 
+  { type: 'Logic - Ambiguity', prompt: 'leg extensions 12 reps' },
 
   // Natural language duplication
   { type: 'Safety - Duplicate Add', prompt: 'hey add decline crunches to day 2 again' },
 ];
+
+type CoachProxyMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+type CoachTestResult = {
+  type: string;
+  success: boolean;
+  error?: string;
+};
+
+const COACH_API_TIMEOUT_MS = 60000;
+
+const getCoachProxyUrl = (): string => {
+  const extra = Constants.expoConfig?.extra as { coachProxyUrl?: unknown } | undefined;
+  return typeof extra?.coachProxyUrl === 'string' ? extra.coachProxyUrl.trim() : '';
+};
+
+const extractProxyResponseText = (rawBody: string): string => {
+  const trimmedBody = rawBody.trim();
+  if (!trimmedBody) return '';
+
+  try {
+    const parsed = JSON.parse(trimmedBody) as unknown;
+
+    if (typeof parsed === 'string') return parsed;
+    if (!parsed || typeof parsed !== 'object') return trimmedBody;
+
+    const payload = parsed as {
+      response?: unknown;
+      content?: unknown;
+      output?: unknown;
+      text?: unknown;
+      message?: { content?: unknown };
+      choices?: { text?: unknown; message?: { content?: unknown } }[];
+    };
+
+    if (typeof payload.response === 'string') return payload.response;
+    if (typeof payload.content === 'string') return payload.content;
+    if (typeof payload.output === 'string') return payload.output;
+    if (typeof payload.text === 'string') return payload.text;
+    if (typeof payload.message?.content === 'string') return payload.message.content;
+
+    const firstChoice = payload.choices?.[0];
+    if (typeof firstChoice?.text === 'string') return firstChoice.text;
+    if (typeof firstChoice?.message?.content === 'string') return firstChoice.message.content;
+
+    return trimmedBody;
+  } catch {
+    return trimmedBody;
+  }
+};
+
+const callCoachProxy = async (proxyUrl: string, messages: CoachProxyMessage[]): Promise<string> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), COACH_API_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ messages }),
+      signal: controller.signal,
+    });
+
+    const rawBody = await response.text();
+
+    if (!response.ok) {
+      throw new Error(rawBody || `Coach proxy request failed (${response.status})`);
+    }
+
+    const parsedText = extractProxyResponseText(rawBody);
+    if (!parsedText.trim()) {
+      throw new Error('Coach proxy returned an empty response.');
+    }
+
+    return parsedText;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 
 export default function CoachScreen() {
   const [mode, setMode] = useState<CoachMode>(CoachMode.ModifyWorkout);
@@ -84,100 +167,74 @@ export default function CoachScreen() {
   const [proposedChanges, setProposedChanges] = useState<ProposedChanges | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
-  const [availableExercises, setAvailableExercises] = useState<Exercise[]>([]);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
-  const [targetedExercises, setTargetedExercises] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [proxyResponse, setProxyResponse] = useState('');
+  const [proxyError, setProxyError] = useState('');
   const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
-  
+  const coachProxyUrl = useRef(getCoachProxyUrl());
+
   // Test mode state
   const [isTestMode, setIsTestMode] = useState(false);
   const [testIndex, setTestIndex] = useState(0);
-  const [testResults, setTestResults] = useState<{ type: string; success: boolean; error?: string }[]>([]);
+  const [testResults, setTestResults] = useState<CoachTestResult[]>([]);
   const pendingNextTestRef = useRef<number | null>(null);
   const totalTests = TEST_PROMPTS.length;
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
 
-  // Initialize Executorch LLM
-  const llm = useLLM({
-    model: LLAMA3_2_3B_QLORA,
-    preventLoad: false,
-  });
-
-  // Configure LLM when ready
-  useEffect(() => {
-    if (llm.isReady) {
-      llm.configure({
-        chatConfig: {
-          contextWindowLength: 8192,
-        },
-        generationConfig: {
-          outputTokenBatchSize: 32,
-          batchTimeInterval: 50,
-        },
-      });
-    }
-  }, [llm.isReady]);
-
-  // Load workout queue and exercises on mount
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = useCallback(async () => {
     try {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
-
-      const exercises: Exercise[] = exercisesData.map((ex) => ({
-        name: ex.name,
-        equipment: ex.equipment,
-        muscle_groups_worked: ex.muscle_groups_worked,
-        isCompound: ex.isCompound,
-      }));
-      setAvailableExercises(exercises);
     } catch (err) {
       console.error('Error loading data:', err);
     }
   }, []);
 
-  // Watch for response updates
+  // Load workout queue on mount
   useEffect(() => {
-    if (llm.response) {
-      setResponse(llm.response);
+    loadData();
+  }, [loadData]);
+
+  // Keep response/error state in sync with proxy transport
+  useEffect(() => {
+    if (proxyResponse) {
+      setResponse(proxyResponse);
     }
-    if (!llm.isGenerating && loading && mode === CoachMode.Chat) {
+
+    if (!isGenerating && loading && mode === CoachMode.Chat) {
       setLoading(false);
-      if (llm.response) {
+      if (proxyResponse) {
         setError('');
       }
     }
-  }, [llm.response, llm.isGenerating, loading, mode]);
+  }, [proxyResponse, isGenerating, loading, mode]);
 
-  // Watch for errors
   useEffect(() => {
-    if (llm.error) {
-      setError(llm.error);
+    if (proxyError) {
+      setError(proxyError);
       setLoading(false);
+      setIsGenerating(false);
     }
-  }, [llm.error]);
+  }, [proxyError]);
 
   // Handle response in modify_workout mode
   useEffect(() => {
     if (
       mode === CoachMode.ModifyWorkout &&
-      llm.response &&
-      !llm.isGenerating &&
-      llm.response !== lastProcessedResponseRef.current
+      proxyResponse &&
+      !isGenerating &&
+      proxyResponse !== lastProcessedResponseRef.current
     ) {
       console.log('[QUEUE FORMAT] Processing LLM response');
-      lastProcessedResponseRef.current = llm.response;
+      lastProcessedResponseRef.current = proxyResponse;
 
       // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
       // Use ref to avoid race condition with async state updates
-      const parsedQueue = parseQueueFormatResponse(llm.response, workoutQueue, inputText, targetedExercisesRef.current);
+      const parsedQueue = parseQueueFormatResponse(proxyResponse, workoutQueue, inputText, targetedExercisesRef.current);
 
       if (parsedQueue && parsedQueue.length > 0) {
         console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
@@ -273,24 +330,27 @@ export default function CoachScreen() {
         }
       }
     }
-  }, [llm.response, llm.isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText]);
+  }, [proxyResponse, isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText, testResults]);
 
-  const sendToLlama = async () => {
-    if (!inputText.trim()) {
+  const sendToCoach = async () => {
+    const trimmedInput = inputText.trim();
+    if (!trimmedInput) {
       setError('Please enter some text');
       return;
     }
 
-    if (!llm.isReady) {
-      setError('Model is still loading. Please wait...');
+    if (!coachProxyUrl.current) {
+      setError('Coach proxy URL is not configured.');
       return;
     }
 
     setLoading(true);
+    setIsGenerating(true);
     setError('');
+    setProxyError('');
     setResponse('');
+    setProxyResponse('');
     setGeneratedQueue(null);
-    setTargetedExercises([]); // Reset targeted exercises
     targetedExercisesRef.current = []; // Reset ref too
     lastProcessedResponseRef.current = '';
 
@@ -299,28 +359,35 @@ export default function CoachScreen() {
         if (workoutQueue.length === 0) {
           setError('No workout queue found. Please create a program and start a workout first.');
           setLoading(false);
+          setIsGenerating(false);
           return;
         }
 
-        const { processedRequest, wasProcessed, matchedExercises, muscleGroupDetected, noMatchesFound } = preprocessMuscleGroupRequest(
-          inputText,
-          workoutQueue
-        );
+        const {
+          processedRequest,
+          wasProcessed,
+          matchedExercises,
+          muscleGroupDetected,
+          noMatchesFound,
+        } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
 
         // Store matched exercises for use in repair system
         // For muscle group requests, use matchedExercises from preprocessor
         // For other requests, extract from the original request
-        const exercisesToStore = wasProcessed && matchedExercises.length > 0
-          ? matchedExercises
-          : extractTargetExercises(inputText, workoutQueue);
+        const exercisesToStore =
+          wasProcessed && matchedExercises.length > 0
+            ? matchedExercises
+            : extractTargetExercises(trimmedInput, workoutQueue);
         console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
         targetedExercisesRef.current = exercisesToStore; // Sync update for immediate use
-        setTargetedExercises(exercisesToStore);
-
+        
         // Check if user mentioned a muscle group but no matching exercises exist in queue
         if (noMatchesFound && muscleGroupDetected) {
-          setError(`No ${muscleGroupDetected} exercises found in your workout queue. The queue only contains exercises for other muscle groups.`);
+          setError(
+            `No ${muscleGroupDetected} exercises found in your workout queue. The queue only contains exercises for other muscle groups.`
+          );
           setLoading(false);
+          setIsGenerating(false);
           return;
         }
 
@@ -332,123 +399,166 @@ export default function CoachScreen() {
 
         const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
         console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
-        console.log(`[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`);
+        console.log(
+          `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
+        );
 
-        const chat: Message[] = [
+        const messages: CoachProxyMessage[] = [
           { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
         ];
 
-        await llm.generate(chat);
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        setProxyResponse(generatedText);
       } else {
-        const chat: Message[] = [
+        const messages: CoachProxyMessage[] = [
           {
             role: 'system',
             content:
               'You are a fitness coach. Provide motivational advice and help with workout planning and execution.',
           },
-          { role: 'user', content: inputText },
+          { role: 'user', content: trimmedInput },
         ];
 
-        await llm.generate(chat);
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        setProxyResponse(generatedText);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to get response';
-      setError(errorMessage);
-      console.error('Error calling Llama:', err);
-      setLoading(false);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setProxyError('Coach proxy request timed out. Please try again.');
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to get response';
+        setProxyError(errorMessage);
+      }
+      console.error('Error calling coach proxy:', err);
+    } finally {
+      setIsGenerating(false);
+      if (mode === CoachMode.Chat) {
+        setLoading(false);
+      }
     }
   };
 
   // Run a specific test by index
-  const runNextTest = useCallback(async (index: number) => {
-    if (index >= TEST_PROMPTS.length) {
-      setIsTestMode(false);
-      console.log('[TEST] All tests complete!');
-      return;
-    }
+  const runNextTest = useCallback(
+    async (index: number) => {
+      if (index >= TEST_PROMPTS.length) {
+        setIsTestMode(false);
+        console.log('[TEST] All tests complete!');
+        return;
+      }
 
-    // Wait for any previous generation to complete
-    if (llm.isGenerating) {
-      console.log('[TEST] Waiting for previous generation to complete...');
-      pendingNextTestRef.current = index;
-      return;
-    }
+      // Wait for any previous generation to complete
+      if (isGenerating) {
+        console.log('[TEST] Waiting for previous generation to complete...');
+        pendingNextTestRef.current = index;
+        return;
+      }
 
-    const test = TEST_PROMPTS[index];
-    console.log(`\n[TEST ${index + 1}/${TEST_PROMPTS.length}] Running: ${test.type}`);
-    console.log(`[TEST] Prompt: "${test.prompt}"`);
-    
-    setTestIndex(index);
-    setInputText(test.prompt);
-    setError('');
-    setResponse('');
-    setGeneratedQueue(null);
-    lastProcessedResponseRef.current = '';
-    setLoading(true);
-    
-    try {
-      const { processedRequest, wasProcessed, matchedExercises, muscleGroupDetected, noMatchesFound } = preprocessMuscleGroupRequest(
-        test.prompt,
-        workoutQueue
-      );
+      if (!coachProxyUrl.current) {
+        setError('Coach proxy URL is not configured.');
+        setIsTestMode(false);
+        return;
+      }
 
-      // Check if user mentioned a muscle group but no matching exercises exist in queue
-      if (noMatchesFound && muscleGroupDetected) {
-        console.log(`[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: SKIPPED - No ${muscleGroupDetected} exercises in queue`);
-        setTestResults(prev => [...prev, { type: test.type, success: false, error: `No ${muscleGroupDetected} exercises` }]);
-        setLoading(false);
-        // Mark any existing response as processed to prevent stale response handling
-        lastProcessedResponseRef.current = llm.response || '';
+      const test = TEST_PROMPTS[index];
+      console.log(`\n[TEST ${index + 1}/${TEST_PROMPTS.length}] Running: ${test.type}`);
+      console.log(`[TEST] Prompt: "${test.prompt}"`);
+
+      setTestIndex(index);
+      setInputText(test.prompt);
+      setError('');
+      setProxyError('');
+      setResponse('');
+      setProxyResponse('');
+      setGeneratedQueue(null);
+      lastProcessedResponseRef.current = '';
+      setLoading(true);
+      setIsGenerating(true);
+
+      try {
+        const {
+          processedRequest,
+          wasProcessed,
+          matchedExercises,
+          muscleGroupDetected,
+          noMatchesFound,
+        } = preprocessMuscleGroupRequest(test.prompt, workoutQueue);
+
+        // Check if user mentioned a muscle group but no matching exercises exist in queue
+        if (noMatchesFound && muscleGroupDetected) {
+          console.log(
+            `[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: SKIPPED - No ${muscleGroupDetected} exercises in queue`
+          );
+          setTestResults((prev) => [
+            ...prev,
+            { type: test.type, success: false, error: `No ${muscleGroupDetected} exercises` },
+          ]);
+          setLoading(false);
+          setIsGenerating(false);
+
+          if (index < TEST_PROMPTS.length - 1) {
+            pendingNextTestRef.current = index + 1;
+          } else {
+            setIsTestMode(false);
+            Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
+          }
+          return;
+        }
+
+        if (wasProcessed) {
+          console.log(
+            `[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`
+          );
+        }
+
+        // Store matched exercises for use in repair system (same as sendToCoach)
+        const exercisesToStore =
+          wasProcessed && matchedExercises.length > 0
+            ? matchedExercises
+            : extractTargetExercises(test.prompt, workoutQueue);
+        console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
+        targetedExercisesRef.current = exercisesToStore;
         
+        const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
+        console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
+        console.log(
+          `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
+        );
+
+        const messages: CoachProxyMessage[] = [
+          { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ];
+
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        setProxyResponse(generatedText);
+      } catch (err) {
+        console.log(`[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: ERROR - ${err}`);
+        const errorMessage =
+          err instanceof Error && err.name === 'AbortError'
+            ? 'Coach proxy request timed out.'
+            : String(err);
+
+        setTestResults((prev) => [...prev, { type: test.type, success: false, error: errorMessage }]);
+        setProxyError(errorMessage);
+
         if (index < TEST_PROMPTS.length - 1) {
           pendingNextTestRef.current = index + 1;
         } else {
           setIsTestMode(false);
           Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
         }
-        return;
+      } finally {
+        setIsGenerating(false);
       }
+    },
+    [isGenerating, workoutQueue]
+  );
 
-      if (wasProcessed) {
-        console.log(`[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`);
-      }
-
-      // Store matched exercises for use in repair system (same as sendToLlama)
-      const exercisesToStore = wasProcessed && matchedExercises.length > 0
-        ? matchedExercises
-        : extractTargetExercises(test.prompt, workoutQueue);
-      console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
-      targetedExercisesRef.current = exercisesToStore;
-      setTargetedExercises(exercisesToStore);
-
-      const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
-      console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
-      console.log(`[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`);
-
-      const chat: Message[] = [
-        { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ];
-
-      await llm.generate(chat);
-    } catch (err) {
-      console.log(`[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: ERROR - ${err}`);
-      setTestResults(prev => [...prev, { type: test.type, success: false, error: String(err) }]);
-      setLoading(false);
-      
-      if (index < TEST_PROMPTS.length - 1) {
-        pendingNextTestRef.current = index + 1;
-      } else {
-        setIsTestMode(false);
-        Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
-      }
-    }
-  }, [llm.isGenerating, llm, workoutQueue]);
-
-  // Watch for pending test and run when LLM is ready
+  // Watch for pending test and run when proxy call is idle
   useEffect(() => {
-    if (pendingNextTestRef.current !== null && !llm.isGenerating && isTestMode) {
+    if (pendingNextTestRef.current !== null && !isGenerating && isTestMode) {
       const nextIndex = pendingNextTestRef.current;
       pendingNextTestRef.current = null;
       // Small delay to ensure state is settled
@@ -456,15 +566,15 @@ export default function CoachScreen() {
         runNextTest(nextIndex);
       }, 500);
     }
-  }, [llm.isGenerating, isTestMode, runNextTest]);
+  }, [isGenerating, isTestMode, runNextTest]);
 
   // Start the test suite
   const startTests = () => {
-    if (!llm.isReady) {
-      setError('Model is still loading. Please wait...');
+    if (!coachProxyUrl.current) {
+      setError('Coach proxy URL is not configured.');
       return;
     }
-    
+
     if (workoutQueue.length === 0) {
       setError('No workout queue found. Please create a program and start a workout first.');
       return;
@@ -474,7 +584,7 @@ export default function CoachScreen() {
     console.log('[TEST] Starting automated test suite');
     console.log(`[TEST] ${totalTests} tests to run`);
     console.log('========================================\n');
-    
+
     setIsTestMode(true);
     setTestIndex(0);
     setTestResults([]);
@@ -625,25 +735,25 @@ export default function CoachScreen() {
           multiline
           numberOfLines={4}
           textAlignVertical="top"
-          editable={llm.isReady}
+          editable={Boolean(coachProxyUrl.current)}
           style={{ color: textColor, fontSize: 16 }}
           accessibilityLabel="Message input"
         />
 
         {/* Send Button */}
         <Pressable
-          onPress={sendToLlama}
-          disabled={loading || llm.isGenerating || !llm.isReady}
+          onPress={sendToCoach}
+          disabled={loading || isGenerating || !coachProxyUrl.current}
           accessibilityRole="button"
           accessibilityLabel="Send message"
         >
           {({ pressed }) => (
             <View
               className={`bg-blue-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
-                loading || llm.isGenerating || !llm.isReady ? 'opacity-50' : ''
+                loading || isGenerating || !coachProxyUrl.current ? 'opacity-50' : ''
               } ${pressed ? 'opacity-70' : ''}`}
             >
-              {loading || llm.isGenerating ? (
+              {loading || isGenerating ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <ThemedText className="text-white font-semibold">Send</ThemedText>
@@ -656,14 +766,14 @@ export default function CoachScreen() {
         {mode === CoachMode.ModifyWorkout && (
           <Pressable
             onPress={startTests}
-            disabled={loading || llm.isGenerating || !llm.isReady || isTestMode}
+            disabled={loading || isGenerating || !coachProxyUrl.current || isTestMode}
             accessibilityRole="button"
             accessibilityLabel={`Run all tests (${totalTests})`}
           >
             {({ pressed }) => (
               <View
                 className={`bg-purple-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
-                  loading || llm.isGenerating || !llm.isReady || isTestMode ? 'opacity-50' : ''
+                  loading || isGenerating || !coachProxyUrl.current || isTestMode ? 'opacity-50' : ''
                 } ${pressed ? 'opacity-70' : ''}`}
               >
                 {isTestMode ? (
@@ -705,21 +815,18 @@ export default function CoachScreen() {
           </ThemedView>
         ) : null}
 
-        {/* Model Status */}
-        {!llm.isReady && (
+        {/* Coach Proxy Status */}
+        {!coachProxyUrl.current ? (
           <ThemedView className="flex-row items-center gap-2 bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
             <ActivityIndicator size="small" />
             <ThemedText className="text-xs text-orange-800 dark:text-orange-200">
-              Loading model...{' '}
-              {llm.downloadProgress > 0 ? `${Math.round(llm.downloadProgress * 100)}%` : ''}
+              Coach proxy URL is missing. Set extra.coachProxyUrl in app config.
             </ThemedText>
           </ThemedView>
-        )}
-
-        {llm.isReady && (
+        ) : (
           <ThemedView className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
             <ThemedText className="text-xs text-green-800 dark:text-green-200">
-              ✓ Using Executorch - Llama 3.2 3B QLoRA (on-device, offline-capable)
+              ✓ Using backend Coach proxy
             </ThemedText>
           </ThemedView>
         )}
@@ -728,8 +835,8 @@ export default function CoachScreen() {
           <>
             <ThemedView className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
               <ThemedText className="text-xs text-blue-800 dark:text-blue-200 leading-4">
-                💡 Examples: "Change bench press to 84 kg", "Remove all chest exercises", "Add
-                barbell curl to day 1", "Swap bench press with dumbbell press"
+                💡 Examples: &quot;Change bench press to 84 kg&quot;, &quot;Remove all chest exercises&quot;,
+                &quot;Add barbell curl to day 1&quot;, &quot;Swap bench press with dumbbell press&quot;
               </ThemedText>
             </ThemedView>
 

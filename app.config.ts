@@ -1,6 +1,7 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
 const IS_DEV = process.env.APP_VARIANT === 'development';
+const COACH_PROXY_URL = process.env.EXPO_PUBLIC_COACH_PROXY_URL ?? '';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -56,5 +57,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  extra: {
+    ...config.extra,
+    coachProxyUrl: COACH_PROXY_URL,
   },
 });
