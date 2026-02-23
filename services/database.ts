@@ -50,12 +50,12 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   if (db) {
     return db;
   }
-  
+
   // If initialization is in progress, wait for it
   if (initPromise) {
     return initPromise;
   }
-  
+
   // Start initialization and store the promise so other callers can wait
   initPromise = (async () => {
     try {
@@ -69,8 +69,57 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       throw error;
     }
   })();
-  
+
   return initPromise;
+};
+
+const runInTransaction = async <T>(
+  database: SQLite.SQLiteDatabase,
+  operation: () => Promise<T>
+): Promise<T> => {
+  await database.execAsync('BEGIN IMMEDIATE TRANSACTION');
+
+  try {
+    const result = await operation();
+    await database.execAsync('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await database.execAsync('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error rolling back transaction:', rollbackError);
+    }
+    throw error;
+  }
+};
+
+export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): void => {
+  const seenIds = new Set<string>();
+
+  for (let index = 0; index < queue.length; index++) {
+    const item = queue[index];
+
+    if (!item?.id) {
+      throw new Error(`Invalid queue item at index ${index}: missing id.`);
+    }
+
+    if (seenIds.has(item.id)) {
+      throw new Error(`Invalid queue: duplicate queue item id "${item.id}".`);
+    }
+    seenIds.add(item.id);
+
+    if (!item.programId) {
+      throw new Error(`Invalid queue item "${item.id}": missing programId.`);
+    }
+
+    if (!Number.isInteger(item.dayNumber) || item.dayNumber < 1) {
+      throw new Error(`Invalid queue item "${item.id}": dayNumber must be a positive integer.`);
+    }
+
+    if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
+      throw new Error(`Invalid queue item "${item.id}": exercises must be a non-empty array.`);
+    }
+  }
 };
 
 /**
@@ -130,6 +179,15 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     columnName: string,
     columnDefinition: string
   ) => {
+    const tableExists = await database.getFirstAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [tableName]
+    );
+
+    if (!tableExists) {
+      return;
+    }
+
     const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
     const hasColumn = columns.some((column) => column.name === columnName);
 
@@ -139,12 +197,6 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       );
     }
   };
-
-  await ensureColumnExists('program_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
-  await ensureColumnExists('workout_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
-  await ensureColumnExists('workout_exercises', 'logged_set_weights', "TEXT DEFAULT '[]'");
-  await ensureColumnExists('workout_exercises', 'logged_set_reps', "TEXT DEFAULT '[]'");
-  await ensureColumnExists('queue_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
 
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -312,6 +364,12 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     -- Insert default preferences if not exists
     INSERT OR IGNORE INTO user_preferences (id) VALUES ('default');
   `);
+
+  await ensureColumnExists('program_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+  await ensureColumnExists('workout_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+  await ensureColumnExists('workout_exercises', 'logged_set_weights', "TEXT DEFAULT '[]'");
+  await ensureColumnExists('workout_exercises', 'logged_set_reps', "TEXT DEFAULT '[]'");
+  await ensureColumnExists('queue_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
 };
 
 // =============================================================================
@@ -578,18 +636,20 @@ export const saveMuscleGroupTargets = async (
   targets: MuscleGroupTarget[]
 ): Promise<void> => {
   const database = await getDatabase();
-  
-  // Clear existing targets
-  await database.runAsync('DELETE FROM muscle_group_targets');
-  
-  // Insert new targets
-  for (const target of targets) {
-    await database.runAsync(
-      `INSERT INTO muscle_group_targets (muscle_group, target_sets)
-       VALUES (?, ?)`,
-      [target.muscleGroup, target.targetSets]
-    );
-  }
+
+  await runInTransaction(database, async () => {
+    // Clear existing targets
+    await database.runAsync('DELETE FROM muscle_group_targets');
+
+    // Insert new targets
+    for (const target of targets) {
+      await database.runAsync(
+        `INSERT INTO muscle_group_targets (muscle_group, target_sets)
+         VALUES (?, ?)`,
+        [target.muscleGroup, target.targetSets]
+      );
+    }
+  });
 };
 
 // =============================================================================
@@ -711,45 +771,47 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
   const database = await getDatabase();
   const now = new Date().toISOString();
 
-  await database.runAsync(
-    'INSERT INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-    [program.id, program.name, now, now]
-  );
-
-  // Insert workout days and exercises
-  for (const day of program.workoutDays) {
-    const dayResult = await database.runAsync(
-      'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-      [program.id, day.dayNumber]
+  await runInTransaction(database, async () => {
+    await database.runAsync(
+      'INSERT INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+      [program.id, program.name, now, now]
     );
 
-    const dayId = dayResult.lastInsertRowId;
-
-    for (let i = 0; i < day.exercises.length; i++) {
-      const exercise = day.exercises[i];
-      // Defensive coding: ensure all fields have valid values
-      const muscleGroups = exercise.muscle_groups_worked ?? [];
-      await database.runAsync(
-        `INSERT INTO program_exercises
-         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          dayId,
-          exercise.name ?? '',
-          exercise.equipment ?? '',
-          JSON.stringify(muscleGroups),
-          exercise.isCompound ? 1 : 0,
-          parseFloat(exercise.weight) || 0,
-          parseInt(exercise.reps, 10) || 8,
-          parseInt(exercise.sets, 10) || 3,
-          parseInt(exercise.restTime, 10) || 180,
-          parseFloat(exercise.progression) || 0,
-          exercise.hasCustomisedSets ? 1 : 0,
-          i,
-        ]
+    // Insert workout days and exercises
+    for (const day of program.workoutDays) {
+      const dayResult = await database.runAsync(
+        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
+        [program.id, day.dayNumber]
       );
+
+      const dayId = dayResult.lastInsertRowId;
+
+      for (let i = 0; i < day.exercises.length; i++) {
+        const exercise = day.exercises[i];
+        // Defensive coding: ensure all fields have valid values
+        const muscleGroups = exercise.muscle_groups_worked ?? [];
+        await database.runAsync(
+          `INSERT INTO program_exercises
+           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dayId,
+            exercise.name ?? '',
+            exercise.equipment ?? '',
+            JSON.stringify(muscleGroups),
+            exercise.isCompound ? 1 : 0,
+            parseFloat(exercise.weight) || 0,
+            parseInt(exercise.reps, 10) || 8,
+            parseInt(exercise.sets, 10) || 3,
+            parseInt(exercise.restTime, 10) || 180,
+            parseFloat(exercise.progression) || 0,
+            exercise.hasCustomisedSets ? 1 : 0,
+            i,
+          ]
+        );
+      }
     }
-  }
+  });
 
   return {
     ...program,
@@ -765,49 +827,51 @@ export const updateProgram = async (program: Program): Promise<void> => {
   const database = await getDatabase();
   const now = new Date().toISOString();
 
-  // Update program name
-  await database.runAsync(
-    'UPDATE programs SET name = ?, updated_at = ? WHERE id = ?',
-    [program.name, now, program.id]
-  );
-
-  // Delete existing workout days (cascade deletes exercises)
-  await database.runAsync('DELETE FROM workout_days WHERE program_id = ?', [program.id]);
-
-  // Re-insert workout days and exercises
-  for (const day of program.workoutDays) {
-    const dayResult = await database.runAsync(
-      'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-      [program.id, day.dayNumber]
+  await runInTransaction(database, async () => {
+    // Update program name
+    await database.runAsync(
+      'UPDATE programs SET name = ?, updated_at = ? WHERE id = ?',
+      [program.name, now, program.id]
     );
 
-    const dayId = dayResult.lastInsertRowId;
+    // Delete existing workout days (cascade deletes exercises)
+    await database.runAsync('DELETE FROM workout_days WHERE program_id = ?', [program.id]);
 
-    for (let i = 0; i < day.exercises.length; i++) {
-      const exercise = day.exercises[i];
-      // Defensive coding: ensure all fields have valid values
-      const muscleGroups = exercise.muscle_groups_worked ?? [];
-      await database.runAsync(
-        `INSERT INTO program_exercises
-         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          dayId,
-          exercise.name ?? '',
-          exercise.equipment ?? '',
-          JSON.stringify(muscleGroups),
-          exercise.isCompound ? 1 : 0,
-          parseFloat(exercise.weight) || 0,
-          parseInt(exercise.reps, 10) || 8,
-          parseInt(exercise.sets, 10) || 3,
-          parseInt(exercise.restTime, 10) || 180,
-          parseFloat(exercise.progression) || 0,
-          exercise.hasCustomisedSets ? 1 : 0,
-          i,
-        ]
+    // Re-insert workout days and exercises
+    for (const day of program.workoutDays) {
+      const dayResult = await database.runAsync(
+        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
+        [program.id, day.dayNumber]
       );
+
+      const dayId = dayResult.lastInsertRowId;
+
+      for (let i = 0; i < day.exercises.length; i++) {
+        const exercise = day.exercises[i];
+        // Defensive coding: ensure all fields have valid values
+        const muscleGroups = exercise.muscle_groups_worked ?? [];
+        await database.runAsync(
+          `INSERT INTO program_exercises
+           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dayId,
+            exercise.name ?? '',
+            exercise.equipment ?? '',
+            JSON.stringify(muscleGroups),
+            exercise.isCompound ? 1 : 0,
+            parseFloat(exercise.weight) || 0,
+            parseInt(exercise.reps, 10) || 8,
+            parseInt(exercise.sets, 10) || 3,
+            parseInt(exercise.restTime, 10) || 180,
+            parseFloat(exercise.progression) || 0,
+            exercise.hasCustomisedSets ? 1 : 0,
+            i,
+          ]
+        );
+      }
     }
-  }
+  });
 };
 
 /**
@@ -925,49 +989,51 @@ export const getCompletedWorkoutsForProgram = async (programId: string): Promise
 export const saveWorkout = async (workout: Workout): Promise<void> => {
   const database = await getDatabase();
 
-  await database.runAsync(
-    `INSERT INTO workouts (id, date, program_id, program_name, day_number, completed, duration, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      workout.id,
-      workout.date,
-      workout.programId,
-      workout.programName,
-      workout.dayNumber,
-      workout.completed ? 1 : 0,
-      workout.duration ?? null,
-      workout.notes ?? null,
-    ]
-  );
-
-  // Insert workout exercises
-  for (let i = 0; i < workout.exercises.length; i++) {
-    const exercise = workout.exercises[i];
-    const muscleGroups = exercise.muscle_groups_worked ?? [];
+  await runInTransaction(database, async () => {
     await database.runAsync(
-      `INSERT INTO workout_exercises
-       (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, logged_weight, logged_reps, logged_set_weights, logged_set_reps, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO workouts (id, date, program_id, program_name, day_number, completed, duration, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workout.id,
-        exercise.name ?? '',
-        exercise.equipment ?? '',
-        JSON.stringify(muscleGroups),
-        exercise.isCompound ? 1 : 0,
-        parseFloat(exercise.weight) || 0,
-        parseInt(exercise.reps, 10) || 8,
-        parseInt(exercise.sets, 10) || 3,
-        parseInt(exercise.restTime, 10) || 180,
-        parseFloat(exercise.progression) || 0,
-        exercise.hasCustomisedSets ? 1 : 0,
-        exercise.loggedWeight ?? 0,
-        exercise.loggedReps ?? 0,
-        JSON.stringify(exercise.loggedSetWeights ?? []),
-        JSON.stringify(exercise.loggedSetReps ?? []),
-        i,
+        workout.date,
+        workout.programId,
+        workout.programName,
+        workout.dayNumber,
+        workout.completed ? 1 : 0,
+        workout.duration ?? null,
+        workout.notes ?? null,
       ]
     );
-  }
+
+    // Insert workout exercises
+    for (let i = 0; i < workout.exercises.length; i++) {
+      const exercise = workout.exercises[i];
+      const muscleGroups = exercise.muscle_groups_worked ?? [];
+      await database.runAsync(
+        `INSERT INTO workout_exercises
+         (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, logged_weight, logged_reps, logged_set_weights, logged_set_reps, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          workout.id,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(muscleGroups),
+          exercise.isCompound ? 1 : 0,
+          parseFloat(exercise.weight) || 0,
+          parseInt(exercise.reps, 10) || 8,
+          parseInt(exercise.sets, 10) || 3,
+          parseInt(exercise.restTime, 10) || 180,
+          parseFloat(exercise.progression) || 0,
+          exercise.hasCustomisedSets ? 1 : 0,
+          exercise.loggedWeight ?? 0,
+          exercise.loggedReps ?? 0,
+          JSON.stringify(exercise.loggedSetWeights ?? []),
+          JSON.stringify(exercise.loggedSetReps ?? []),
+          i,
+        ]
+      );
+    }
+  });
 };
 
 /**
@@ -1070,51 +1136,54 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
  */
 export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void> => {
   const database = await getDatabase();
+  validateWorkoutQueueForPersistence(queue);
 
-  // Clear existing queue
-  await database.runAsync('DELETE FROM workout_queue');
+  await runInTransaction(database, async () => {
+    // Clear existing queue
+    await database.runAsync('DELETE FROM workout_queue');
 
-  // Insert new queue items
-  for (let i = 0; i < queue.length; i++) {
-    const item = queue[i];
-    await database.runAsync(
-      `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        item.id,
-        item.programId,
-        item.programName,
-        item.dayNumber,
-        item.scheduledDate ?? null,
-        i,
-      ]
-    );
-
-    // Insert queue exercises
-    for (let j = 0; j < item.exercises.length; j++) {
-      const exercise = item.exercises[j];
-      const muscleGroups = exercise.muscle_groups_worked ?? [];
+    // Insert new queue items
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
       await database.runAsync(
-        `INSERT INTO queue_exercises
-         (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           item.id,
-          exercise.name ?? '',
-          exercise.equipment ?? '',
-          JSON.stringify(muscleGroups),
-          exercise.isCompound ? 1 : 0,
-          parseFloat(exercise.weight) || 0,
-          parseInt(exercise.reps, 10) || 8,
-          parseInt(exercise.sets, 10) || 3,
-          parseInt(exercise.restTime, 10) || 180,
-          parseFloat(exercise.progression) || 0,
-          exercise.hasCustomisedSets ? 1 : 0,
-          j,
+          item.programId,
+          item.programName,
+          item.dayNumber,
+          item.scheduledDate ?? null,
+          i,
         ]
       );
+
+      // Insert queue exercises
+      for (let j = 0; j < item.exercises.length; j++) {
+        const exercise = item.exercises[j];
+        const muscleGroups = exercise.muscle_groups_worked ?? [];
+        await database.runAsync(
+          `INSERT INTO queue_exercises
+           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            item.id,
+            exercise.name ?? '',
+            exercise.equipment ?? '',
+            JSON.stringify(muscleGroups),
+            exercise.isCompound ? 1 : 0,
+            parseFloat(exercise.weight) || 0,
+            parseInt(exercise.reps, 10) || 8,
+            parseInt(exercise.sets, 10) || 3,
+            parseInt(exercise.restTime, 10) || 180,
+            parseFloat(exercise.progression) || 0,
+            exercise.hasCustomisedSets ? 1 : 0,
+            j,
+          ]
+        );
+      }
     }
-  }
+  });
 };
 
 /**
@@ -1272,7 +1341,7 @@ async function applyProgressionToExercises(
 
     exercisesWithProgression.push({
       ...exercise,
-      weight: newWeight,
+      weight: newWeight.toString(),
     });
   }
 
