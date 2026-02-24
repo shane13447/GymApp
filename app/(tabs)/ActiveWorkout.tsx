@@ -14,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { DaySelector } from '@/components/workout/DaySelector';
 import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
+import { DEFAULT_QUEUE_SIZE } from '@/constants';
 import * as db from '@/services/database';
 import type {
   Program,
@@ -103,12 +104,18 @@ export default function ActiveWorkout() {
   const reloadQueue = async () => {
     try {
       const queue = await db.getWorkoutQueue();
-      setWorkoutQueue(queue);
-      
+      const normalizedQueue = queue.slice(0, DEFAULT_QUEUE_SIZE);
+
+      if (queue.length > DEFAULT_QUEUE_SIZE) {
+        await db.saveWorkoutQueue(normalizedQueue);
+      }
+
+      setWorkoutQueue(normalizedQueue);
+
       // Store as original queue if not yet set (first load after focus)
       // This enables undo support when user changes days back and forth
-      if (originalQueueRef.current === null && queue.length > 0) {
-        originalQueueRef.current = queue;
+      if (originalQueueRef.current === null && normalizedQueue.length > 0) {
+        originalQueueRef.current = [...normalizedQueue];
       }
     } catch (error) {
       console.error('Error loading workout queue:', error);
@@ -197,14 +204,27 @@ export default function ActiveWorkout() {
     }
   };
 
+  const getDayNumberAtIndex = useCallback(
+    (dayIndex: number) => currentProgram?.workoutDays[dayIndex]?.dayNumber ?? dayIndex + 1,
+    [currentProgram]
+  );
+
+  const buildExerciseInstanceKey = useCallback(
+    (exerciseName: string, exerciseIndex: number, dayNumber: number) => {
+      const programId = currentProgram?.id ?? 'no-program';
+      return `${programId}:d${dayNumber}:i${exerciseIndex}:${exerciseName}`;
+    },
+    [currentProgram?.id]
+  );
+
   const calculateAutoWeight = (lastWeight: number | null, progression: number): number => {
     if (lastWeight === null) return 0;
-    
+
     // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
     // Without this, "60" + "0" would give "600" instead of 60
     const numLastWeight = Number(lastWeight);
     const numProgression = Number(progression);
-    
+
     if (!numProgression || numProgression === 0) return numLastWeight;
 
     try {
@@ -350,17 +370,20 @@ export default function ActiveWorkout() {
       const existingQueue = await db.getWorkoutQueue();
 
       if (existingQueue.length > 0 && existingQueue[0].programId === program.id) {
-        // Trim queue to max 3 items
-        if (existingQueue.length > 3) {
-          await db.saveWorkoutQueue(existingQueue.slice(0, 3));
+        // Trim queue to configured max size
+        const normalizedQueue = existingQueue.slice(0, DEFAULT_QUEUE_SIZE);
+        if (existingQueue.length > DEFAULT_QUEUE_SIZE) {
+          await db.saveWorkoutQueue(normalizedQueue);
         }
+
+        setWorkoutQueue(normalizedQueue);
         return;
       }
 
       const queue: WorkoutQueueItem[] = [];
       const totalDays = program.workoutDays.length;
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
         const dayIndex = i % totalDays;
         const day = program.workoutDays[dayIndex];
         const progressedExercises = await applyProgressionToExercises(day.exercises, program.id);
@@ -383,22 +406,31 @@ export default function ActiveWorkout() {
   };
 
   const updateLoggedValue = useCallback(
-    (exerciseName: string, field: 'loggedWeight' | 'loggedReps', value: string) => {
+    (
+      exerciseInstanceKey: string,
+      field: 'loggedWeight' | 'loggedReps',
+      value: string,
+      dayNumber: number
+    ) => {
       const numValue = field === 'loggedWeight' ? parseFloat(value) || 0 : parseInt(value, 10) || 0;
       setWorkoutExercises((prev) =>
-        prev.map((ex) => (ex.name === exerciseName ? { ...ex, [field]: numValue } : ex))
+        prev.map((ex, index) =>
+          buildExerciseInstanceKey(ex.name, index, dayNumber) === exerciseInstanceKey
+            ? { ...ex, [field]: numValue }
+            : ex
+        )
       );
     },
-    []
+    [buildExerciseInstanceKey]
   );
 
   const updateLoggedSetWeight = useCallback(
-    (exerciseName: string, setIndex: number, value: string) => {
+    (exerciseInstanceKey: string, setIndex: number, value: string, dayNumber: number) => {
       const numValue = parseFloat(value) || 0;
 
       setWorkoutExercises((prev) =>
-        prev.map((ex) => {
-          if (ex.name !== exerciseName) return ex;
+        prev.map((ex, index) => {
+          if (buildExerciseInstanceKey(ex.name, index, dayNumber) !== exerciseInstanceKey) return ex;
 
           const nextSetWeights = [...ex.loggedSetWeights];
           nextSetWeights[setIndex] = numValue;
@@ -415,16 +447,16 @@ export default function ActiveWorkout() {
         })
       );
     },
-    []
+    [buildExerciseInstanceKey]
   );
 
   const updateLoggedSetReps = useCallback(
-    (exerciseName: string, setIndex: number, value: string) => {
+    (exerciseInstanceKey: string, setIndex: number, value: string, dayNumber: number) => {
       const numValue = parseInt(value, 10) || 0;
 
       setWorkoutExercises((prev) =>
-        prev.map((ex) => {
-          if (ex.name !== exerciseName) return ex;
+        prev.map((ex, index) => {
+          if (buildExerciseInstanceKey(ex.name, index, dayNumber) !== exerciseInstanceKey) return ex;
 
           const nextSetReps = [...ex.loggedSetReps];
           nextSetReps[setIndex] = numValue;
@@ -441,7 +473,7 @@ export default function ActiveWorkout() {
         })
       );
     },
-    []
+    [buildExerciseInstanceKey]
   );
 
   // =============================================================================
@@ -460,8 +492,8 @@ export default function ActiveWorkout() {
   const handleDayChange = useCallback(async (newIndex: number) => {
     if (!currentProgram || newIndex === selectedDayIndex) return;
 
-    const oldDayNumber = selectedDayIndex + 1;
-    const newDayNumber = newIndex + 1;
+    const oldDayNumber = getDayNumberAtIndex(selectedDayIndex);
+    const newDayNumber = getDayNumberAtIndex(newIndex);
 
     // Clear timers ONLY for the day we're leaving
     // This is precise and doesn't require waiting for component unmount
@@ -570,10 +602,12 @@ export default function ActiveWorkout() {
       }));
       setWorkoutExercises(initialExercises);
     }
-  }, [currentProgram, selectedDayIndex]);
+  }, [currentProgram, getDayNumberAtIndex, selectedDayIndex]);
 
   const saveWorkout = async () => {
     if (!currentProgram) return;
+
+    const selectedDayNumber = getDayNumberAtIndex(selectedDayIndex);
 
     try {
       setIsSaving(true);
@@ -594,7 +628,7 @@ export default function ActiveWorkout() {
         date: new Date().toISOString(),
         programId: currentProgram.id,
         programName: currentProgram.name,
-        dayNumber: selectedDayIndex + 1,
+        dayNumber: selectedDayNumber,
         exercises: workoutExercises,
         completed: true,
       };
@@ -638,10 +672,11 @@ export default function ActiveWorkout() {
         queue = queue.slice(1);
       }
 
-      // Add next workout to maintain 3 items
-      while (queue.length < 3) {
+      // Add next workout to maintain configured queue size
+      while (queue.length < DEFAULT_QUEUE_SIZE) {
         const totalDays = currentProgram.workoutDays.length;
-        const lastDayNumber = queue.length > 0 ? queue[queue.length - 1].dayNumber : selectedDayIndex + 1;
+        const lastDayNumber =
+          queue.length > 0 ? queue[queue.length - 1].dayNumber : getDayNumberAtIndex(selectedDayIndex);
 
         const lastDayIndex = currentProgram.workoutDays.findIndex(
           (day) => day.dayNumber === lastDayNumber
@@ -664,9 +699,9 @@ export default function ActiveWorkout() {
         });
       }
 
-      // Ensure queue doesn't exceed 3 items
-      if (queue.length > 3) {
-        queue = queue.slice(0, 3);
+      // Ensure queue doesn't exceed configured size
+      if (queue.length > DEFAULT_QUEUE_SIZE) {
+        queue = queue.slice(0, DEFAULT_QUEUE_SIZE);
       }
 
       await db.saveWorkoutQueue(queue);
@@ -695,20 +730,27 @@ export default function ActiveWorkout() {
         console.warn('renderExercise called without currentProgram');
         return null;
       }
-      
+
+      const selectedDayNumber = getDayNumberAtIndex(selectedDayIndex);
+      const exerciseInstanceKey = buildExerciseInstanceKey(item.name, index, selectedDayNumber);
+
       return (
         <ExerciseLogCard
           exercise={item}
           index={index}
           programId={currentProgram.id}
-          dayNumber={selectedDayIndex + 1}
-          onUpdateLoggedWeight={(value) => updateLoggedValue(item.name, 'loggedWeight', value)}
-          onUpdateLoggedReps={(value) => updateLoggedValue(item.name, 'loggedReps', value)}
+          dayNumber={selectedDayNumber}
+          onUpdateLoggedWeight={(value) =>
+            updateLoggedValue(exerciseInstanceKey, 'loggedWeight', value, selectedDayNumber)
+          }
+          onUpdateLoggedReps={(value) =>
+            updateLoggedValue(exerciseInstanceKey, 'loggedReps', value, selectedDayNumber)
+          }
           onUpdateLoggedSetWeight={(setIndex, value) =>
-            updateLoggedSetWeight(item.name, setIndex, value)
+            updateLoggedSetWeight(exerciseInstanceKey, setIndex, value, selectedDayNumber)
           }
           onUpdateLoggedSetReps={(setIndex, value) =>
-            updateLoggedSetReps(item.name, setIndex, value)
+            updateLoggedSetReps(exerciseInstanceKey, setIndex, value, selectedDayNumber)
           }
         />
       );
@@ -717,7 +759,9 @@ export default function ActiveWorkout() {
       updateLoggedValue,
       updateLoggedSetWeight,
       updateLoggedSetReps,
+      buildExerciseInstanceKey,
       currentProgram,
+      getDayNumberAtIndex,
       selectedDayIndex,
     ]
   );
@@ -735,7 +779,11 @@ export default function ActiveWorkout() {
       <ParallaxScrollView>
         <ThemedView className="flex-1">
           <ThemedText type="title">No Program Selected</ThemedText>
-          <Pressable onPress={() => router.back()}>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             {({ pressed }) => (
               <View
                 className="bg-blue-500 rounded-full p-4 mt-4"
@@ -776,7 +824,7 @@ export default function ActiveWorkout() {
           <ThemedView className="gap-2">
             <ThemedText className="text-lg font-semibold">{currentProgram.name}</ThemedText>
             <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-              Day {selectedDayIndex + 1} of {currentProgram.workoutDays.length}
+              Day {getDayNumberAtIndex(selectedDayIndex)} of {currentProgram.workoutDays.length}
             </ThemedText>
           </ThemedView>
 
@@ -795,11 +843,20 @@ export default function ActiveWorkout() {
                 Exercises ({workoutExercises.length})
               </ThemedText>
               <View className="gap-0">
-                {workoutExercises.map((exercise, index) => (
-                  <View key={exercise.name}>
-                    {renderExercise({ item: exercise, index })}
-                  </View>
-                ))}
+                {workoutExercises.map((exercise, index) => {
+                  const selectedDayNumber = getDayNumberAtIndex(selectedDayIndex);
+                  const exerciseInstanceKey = buildExerciseInstanceKey(
+                    exercise.name,
+                    index,
+                    selectedDayNumber
+                  );
+
+                  return (
+                    <View key={exerciseInstanceKey}>
+                      {renderExercise({ item: exercise, index })}
+                    </View>
+                  );
+                })}
               </View>
             </ThemedView>
           )}
