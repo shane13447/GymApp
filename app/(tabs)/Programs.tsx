@@ -29,6 +29,18 @@ import type {
 } from '@/types';
 import { CreateProgramStep, ProgramViewMode } from '@/types';
 
+const cloneExercise = (exercise: ProgramExercise): ProgramExercise => ({
+  ...exercise,
+  muscle_groups_worked: [...exercise.muscle_groups_worked],
+});
+
+const cloneWorkoutDay = (day: WorkoutDay): WorkoutDay => ({
+  ...day,
+  exercises: day.exercises.map(cloneExercise),
+});
+
+const cloneWorkoutDays = (days: WorkoutDay[]): WorkoutDay[] => days.map(cloneWorkoutDay);
+
 export default function ProgramsScreen() {
   // View state
   const [viewMode, setViewMode] = useState<ProgramViewMode>(ProgramViewMode.List);
@@ -190,8 +202,8 @@ export default function ProgramsScreen() {
   };
 
   const continueToConfiguration = () => {
-    const updatedDays = [...workoutDays];
-    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    const updatedDays = cloneWorkoutDays(workoutDays);
+    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
     setWorkoutDays(updatedDays);
 
     const allDaysHaveExercises = updatedDays.every((day) => day.exercises.length > 0);
@@ -210,27 +222,27 @@ export default function ProgramsScreen() {
   };
 
   const goToNextDay = () => {
-    const updatedDays = [...workoutDays];
-    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    const updatedDays = cloneWorkoutDays(workoutDays);
+    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
     setWorkoutDays(updatedDays);
 
     if (currentDayIndex < workoutDays.length - 1) {
       const nextIndex = currentDayIndex + 1;
       setCurrentDayIndex(nextIndex);
-      setSelectedExercises(updatedDays[nextIndex].exercises);
+      setSelectedExercises(updatedDays[nextIndex].exercises.map(cloneExercise));
       setShowExerciseList(false);
     }
   };
 
   const goToPreviousDay = () => {
-    const updatedDays = [...workoutDays];
-    updatedDays[currentDayIndex].exercises = [...selectedExercises];
+    const updatedDays = cloneWorkoutDays(workoutDays);
+    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
     setWorkoutDays(updatedDays);
 
     if (currentDayIndex > 0) {
       const prevIndex = currentDayIndex - 1;
       setCurrentDayIndex(prevIndex);
-      setSelectedExercises(updatedDays[prevIndex].exercises);
+      setSelectedExercises(updatedDays[prevIndex].exercises.map(cloneExercise));
       setShowExerciseList(false);
     }
   };
@@ -367,11 +379,13 @@ export default function ProgramsScreen() {
   const editProgram = (programId: string) => {
     const program = programs.find((p) => p.id === programId);
     if (program) {
+      const draftWorkoutDays = cloneWorkoutDays(program.workoutDays);
+
       setSelectedProgramId(programId);
       setProgramName(program.name);
-      setWorkoutDays(program.workoutDays);
+      setWorkoutDays(draftWorkoutDays);
       setCurrentDayIndex(0);
-      setSelectedExercises(program.workoutDays[0]?.exercises || []);
+      setSelectedExercises(draftWorkoutDays[0]?.exercises.map(cloneExercise) || []);
       setCreateStep(CreateProgramStep.Configuration);
       setViewMode(ProgramViewMode.Edit);
     }
@@ -641,8 +655,8 @@ export default function ProgramsScreen() {
           {selectedExercises.length > 0 && (
             <Pressable
               onPress={() => {
-                const updatedDays = [...workoutDays];
-                updatedDays[currentDayIndex].exercises = [...selectedExercises];
+                const updatedDays = cloneWorkoutDays(workoutDays);
+                updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
                 setWorkoutDays(updatedDays);
 
                 const allDaysComplete = updatedDays.every((day) => day.exercises.length > 0);
@@ -656,8 +670,8 @@ export default function ProgramsScreen() {
               }}
             >
               {({ pressed }) => {
-                const updatedDays = [...workoutDays];
-                updatedDays[currentDayIndex].exercises = [...selectedExercises];
+                const updatedDays = cloneWorkoutDays(workoutDays);
+                updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
                 const allDaysComplete = updatedDays.every((day) => day.exercises.length > 0);
                 const isLastDay = currentDayIndex === workoutDays.length - 1;
 
@@ -912,7 +926,7 @@ export default function ProgramsScreen() {
                           <ThemedText className="font-semibold">{exercise.reps}</ThemedText>
                         </View>
                       )}
-                      {exercise.weight !== undefined && exercise.weight !== 0 && (
+                      {exercise.weight !== undefined && exercise.weight !== '0' && (
                         <View>
                           <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
                             Weight
