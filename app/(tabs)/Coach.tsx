@@ -23,6 +23,7 @@ import {
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
   validateChanges,
+  validateQueueStructure,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { WorkoutQueueItem } from '@/types';
@@ -174,6 +175,9 @@ export default function CoachScreen() {
   const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
   const coachProxyUrl = useRef(getCoachProxyUrl());
+  const requestCounterRef = useRef(0);
+  const activeRequestIdRef = useRef<number | null>(null);
+  const sendLockRef = useRef(false);
 
   // Test mode state
   const [isTestMode, setIsTestMode] = useState(false);
@@ -237,38 +241,81 @@ export default function CoachScreen() {
       const parsedQueue = parseQueueFormatResponse(proxyResponse, workoutQueue, inputText, targetedExercisesRef.current);
 
       if (parsedQueue && parsedQueue.length > 0) {
+        const structureValidation = validateQueueStructure(workoutQueue, parsedQueue);
+        if (!structureValidation.valid) {
+          console.warn('[QUEUE FORMAT] Structure validation failed:', structureValidation.errors);
+
+          const structureError = `Unable to safely apply AI changes: ${structureValidation.errors.join(' ')}`;
+
+          if (isTestMode) {
+            const currentTest = TEST_PROMPTS[testIndex];
+            console.log(
+              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: STRUCTURE VALIDATION FAILED`
+            );
+            setTestResults((prev) => [
+              ...prev,
+              { type: currentTest.type, success: false, error: structureError },
+            ]);
+
+            if (testIndex < TEST_PROMPTS.length - 1) {
+              pendingNextTestRef.current = testIndex + 1;
+            } else {
+              setIsTestMode(false);
+              console.log('[TEST] All tests complete!');
+              Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
+            }
+          } else {
+            setError(structureError);
+          }
+
+          setGeneratedQueue(null);
+          setProposedChanges(null);
+          setShowModal(false);
+          setLoading(false);
+          return;
+        }
+
         console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
-        
+
         setGeneratedQueue(parsedQueue);
 
         const differences = compareWorkoutQueues(workoutQueue, parsedQueue);
 
         if (differences.length > 0) {
           const formatted = differencesToProposedChanges(differences);
-          
+
           // Validate for unexpected changes
           const validation = validateChanges(inputText, differences);
           if (!validation.valid) {
             console.warn('[VALIDATION] Warnings:', validation.warnings);
           }
-          
+
           setProposedChanges(formatted);
-          
+
           // In test mode, auto-discard and log result
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
             const hasWarnings = !validation.valid;
-            console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${hasWarnings ? 'SUCCESS (with warnings)' : 'SUCCESS'}`);
+            console.log(
+              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${hasWarnings ? 'SUCCESS (with warnings)' : 'SUCCESS'}`
+            );
             if (hasWarnings) {
               console.log(`[TEST] Validation warnings:`, validation.warnings);
             }
             console.log(`[TEST] Changes proposed:`, formatted);
-            setTestResults(prev => [...prev, { type: currentTest.type, success: true, error: hasWarnings ? validation.warnings.join('; ') : undefined }]);
-            
+            setTestResults((prev) => [
+              ...prev,
+              {
+                type: currentTest.type,
+                success: true,
+                error: hasWarnings ? validation.warnings.join('; ') : undefined,
+              },
+            ]);
+
             // Auto-discard and proceed to next test
             setGeneratedQueue(null);
             setProposedChanges(null);
-            
+
             // Schedule next test
             if (testIndex < TEST_PROMPTS.length - 1) {
               pendingNextTestRef.current = testIndex + 1;
@@ -279,18 +326,28 @@ export default function CoachScreen() {
               Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
             }
           } else {
-            // Show warnings to user in non-test mode
+            // Block confirmation when validation has warnings
             if (!validation.valid) {
-              setError(`Warning: ${validation.warnings.join(' ')}`);
+              setGeneratedQueue(null);
+              setProposedChanges(null);
+              setShowModal(false);
+              setError(`Unable to apply AI changes safely: ${validation.warnings.join(' ')}`);
+            } else {
+              setError('');
+              setShowModal(true);
             }
-            setShowModal(true);
           }
         } else {
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
-            console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO CHANGES DETECTED`);
-            setTestResults(prev => [...prev, { type: currentTest.type, success: false, error: 'No changes detected' }]);
-            
+            console.log(
+              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO CHANGES DETECTED`
+            );
+            setTestResults((prev) => [
+              ...prev,
+              { type: currentTest.type, success: false, error: 'No changes detected' },
+            ]);
+
             // Schedule next test
             if (testIndex < TEST_PROMPTS.length - 1) {
               pendingNextTestRef.current = testIndex + 1;
@@ -307,12 +364,15 @@ export default function CoachScreen() {
         setLoading(false);
       } else {
         console.warn('[QUEUE FORMAT] Failed to parse response');
-        
+
         if (isTestMode) {
           const currentTest = TEST_PROMPTS[testIndex];
           console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: PARSE FAILED`);
-          setTestResults(prev => [...prev, { type: currentTest.type, success: false, error: 'Parse failed' }]);
-          
+          setTestResults((prev) => [
+            ...prev,
+            { type: currentTest.type, success: false, error: 'Parse failed' },
+          ]);
+
           // Schedule next test
           if (testIndex < TEST_PROMPTS.length - 1) {
             pendingNextTestRef.current = testIndex + 1;
@@ -333,6 +393,10 @@ export default function CoachScreen() {
   }, [proxyResponse, isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText, testResults]);
 
   const sendToCoach = async () => {
+    if (sendLockRef.current || loading || isGenerating) {
+      return;
+    }
+
     const trimmedInput = inputText.trim();
     if (!trimmedInput) {
       setError('Please enter some text');
@@ -343,6 +407,12 @@ export default function CoachScreen() {
       setError('Coach proxy URL is not configured.');
       return;
     }
+
+    sendLockRef.current = true;
+
+    const requestId = requestCounterRef.current + 1;
+    requestCounterRef.current = requestId;
+    activeRequestIdRef.current = requestId;
 
     setLoading(true);
     setIsGenerating(true);
@@ -360,6 +430,7 @@ export default function CoachScreen() {
           setError('No workout queue found. Please create a program and start a workout first.');
           setLoading(false);
           setIsGenerating(false);
+          sendLockRef.current = false;
           return;
         }
 
@@ -388,6 +459,7 @@ export default function CoachScreen() {
           );
           setLoading(false);
           setIsGenerating(false);
+          sendLockRef.current = false;
           return;
         }
 
@@ -409,6 +481,9 @@ export default function CoachScreen() {
         ];
 
         const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        if (activeRequestIdRef.current !== requestId) {
+          return;
+        }
         setProxyResponse(generatedText);
       } else {
         const messages: CoachProxyMessage[] = [
@@ -421,9 +496,16 @@ export default function CoachScreen() {
         ];
 
         const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        if (activeRequestIdRef.current !== requestId) {
+          return;
+        }
         setProxyResponse(generatedText);
       }
     } catch (err) {
+      if (activeRequestIdRef.current !== requestId) {
+        return;
+      }
+
       if (err instanceof Error && err.name === 'AbortError') {
         setProxyError('Coach proxy request timed out. Please try again.');
       } else {
@@ -432,10 +514,14 @@ export default function CoachScreen() {
       }
       console.error('Error calling coach proxy:', err);
     } finally {
-      setIsGenerating(false);
-      if (mode === CoachMode.Chat) {
-        setLoading(false);
+      if (activeRequestIdRef.current === requestId) {
+        activeRequestIdRef.current = null;
+        setIsGenerating(false);
+        if (mode === CoachMode.Chat) {
+          setLoading(false);
+        }
       }
+      sendLockRef.current = false;
     }
   };
 
