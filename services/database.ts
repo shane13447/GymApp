@@ -130,22 +130,21 @@ export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): v
  * If we change a table's schema, we need to handle migration explicitly.
  * 
  * For the active_rest_timers table:
- * - Old schema: exercise_name TEXT PRIMARY KEY (single column key)
- * - New schema: PRIMARY KEY (exercise_name, program_id, day_number) (composite key)
- * 
+ * - Legacy schema: exercise_name TEXT PRIMARY KEY (single column key)
+ * - Current schema: PRIMARY KEY (exercise_name, program_id, day_number)
+ * - Hardened schema: PRIMARY KEY (exercise_instance_id, program_id, day_number)
+ *
  * Since timer data is transient (only valid for a few minutes), we can safely
- * drop and recreate the table if we detect the old schema.
+ * drop and recreate the table when required columns are missing.
  */
 const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void> => {
   // =============================================================================
   // MIGRATION: Check and upgrade active_rest_timers table
   // =============================================================================
   // WHY WE NEED THIS:
-  // Users who installed the app before the composite key fix have the old table.
-  // CREATE TABLE IF NOT EXISTS won't modify an existing table.
-  // We need to detect the old schema and recreate the table.
+  // CREATE TABLE IF NOT EXISTS won't modify an existing table definition.
+  // We need to detect legacy/current schemas and recreate for the hardened key.
   try {
-    // Check if the table exists and has the old schema
     // PRAGMA table_info returns column information for a table
     const tableInfo = await database.getAllAsync<{
       cid: number;
@@ -157,16 +156,15 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     }>('PRAGMA table_info(active_rest_timers)');
 
     if (tableInfo.length > 0) {
-      // Table exists - check if it has the new columns
-      const hasNewColumns = tableInfo.some(col => col.name === 'program_id');
+      const hasProgramId = tableInfo.some((col) => col.name === 'program_id');
+      const hasDayNumber = tableInfo.some((col) => col.name === 'day_number');
+      const hasExerciseInstanceId = tableInfo.some((col) => col.name === 'exercise_instance_id');
 
-      if (!hasNewColumns) {
-        // Old schema detected - drop and recreate
-        // Timer data is transient, so losing it is acceptable
-        console.log('Migrating active_rest_timers table to new composite key schema');
+      if (!hasProgramId || !hasDayNumber || !hasExerciseInstanceId) {
+        // Timer data is transient, so dropping old schema data is acceptable.
+        console.log('Migrating active_rest_timers table to exercise-instance key schema');
         await database.execAsync('DROP TABLE IF EXISTS active_rest_timers');
-        // UX IMPROVEMENT (Edge Case 4): Log migration success
-        console.log('Successfully migrated active_rest_timers to new schema.');
+        console.log('Successfully migrated active_rest_timers to hardened schema.');
       }
     }
   } catch (error) {
@@ -315,10 +313,10 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     );
 
     -- Active Rest Timers Table (for persisting timers across app lifecycle)
-    -- COMPOSITE KEY FIX: Uses (exercise_name, program_id, day_number) to prevent
-    -- collisions when the same exercise appears on multiple days or programs.
-    -- This allows timers to be properly isolated per workout context.
+    -- HARDENED KEY FIX: Uses (exercise_instance_id, program_id, day_number) so
+    -- duplicate exercise names in the same day can maintain separate timers.
     CREATE TABLE IF NOT EXISTS active_rest_timers (
+      exercise_instance_id TEXT NOT NULL,
       exercise_name TEXT NOT NULL,
       program_id TEXT NOT NULL,
       day_number INTEGER NOT NULL,
@@ -326,7 +324,7 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       sets_completed INTEGER DEFAULT 0,
       rest_duration INTEGER NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (exercise_name, program_id, day_number)
+      PRIMARY KEY (exercise_instance_id, program_id, day_number)
     );
 
     -- User Profile Table (training preferences)
@@ -365,10 +363,13 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
     INSERT OR IGNORE INTO user_preferences (id) VALUES ('default');
   `);
 
+  await ensureColumnExists('program_exercises', 'is_compound', 'INTEGER DEFAULT 0');
   await ensureColumnExists('program_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
+  await ensureColumnExists('workout_exercises', 'is_compound', 'INTEGER DEFAULT 0');
   await ensureColumnExists('workout_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
   await ensureColumnExists('workout_exercises', 'logged_set_weights', "TEXT DEFAULT '[]'");
   await ensureColumnExists('workout_exercises', 'logged_set_reps', "TEXT DEFAULT '[]'");
+  await ensureColumnExists('queue_exercises', 'is_compound', 'INTEGER DEFAULT 0');
   await ensureColumnExists('queue_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
 };
 
@@ -1530,10 +1531,11 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
 
 /**
  * Timer context - identifies which workout context a timer belongs to.
- * COMPOSITE KEY FIX: This allows the same exercise name to have separate timers
- * on different days or in different programs.
+ * HARDENED KEY FIX: Includes exerciseInstanceId so duplicate exercise names
+ * in the same day/program can still have isolated timer records.
  */
 export interface TimerContext {
+  exerciseInstanceId: string;
   exerciseName: string;
   programId: string;
   dayNumber: number;
@@ -1551,15 +1553,16 @@ export interface ActiveTimerState extends TimerContext {
 
 /**
  * Save an active rest timer (timestamp-based for persistence across app lifecycle)
- * COMPOSITE KEY FIX: Now requires programId and dayNumber to uniquely identify the timer
+ * HARDENED KEY FIX: Uses exerciseInstanceId + programId + dayNumber for uniqueness.
  */
 export const saveActiveTimer = async (timer: ActiveTimerState): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync(
-    `INSERT OR REPLACE INTO active_rest_timers 
-     (exercise_name, program_id, day_number, end_timestamp, sets_completed, rest_duration) 
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO active_rest_timers
+     (exercise_instance_id, exercise_name, program_id, day_number, end_timestamp, sets_completed, rest_duration)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
+      timer.exerciseInstanceId,
       timer.exerciseName,
       timer.programId,
       timer.dayNumber,
@@ -1571,12 +1574,13 @@ export const saveActiveTimer = async (timer: ActiveTimerState): Promise<void> =>
 };
 
 /**
- * Get an active timer for a specific exercise in a specific workout context
- * COMPOSITE KEY FIX: Now requires full context (exercise + program + day)
+ * Get an active timer for a specific exercise instance in a workout context
+ * HARDENED KEY FIX: Requires full context (exerciseInstanceId + program + day).
  */
 export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimerState | null> => {
   const database = await getDatabase();
   const result = await database.getFirstAsync<{
+    exercise_instance_id: string;
     exercise_name: string;
     program_id: string;
     day_number: number;
@@ -1584,8 +1588,8 @@ export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimer
     sets_completed: number;
     rest_duration: number;
   }>(
-    'SELECT * FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
-    [context.exerciseName, context.programId, context.dayNumber]
+    'SELECT * FROM active_rest_timers WHERE exercise_instance_id = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseInstanceId, context.programId, context.dayNumber]
   );
 
   if (!result) {
@@ -1593,6 +1597,7 @@ export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimer
   }
 
   return {
+    exerciseInstanceId: result.exercise_instance_id,
     exerciseName: result.exercise_name,
     programId: result.program_id,
     dayNumber: result.day_number,
@@ -1608,6 +1613,7 @@ export const getActiveTimer = async (context: TimerContext): Promise<ActiveTimer
 export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
   const database = await getDatabase();
   const results = await database.getAllAsync<{
+    exercise_instance_id: string;
     exercise_name: string;
     program_id: string;
     day_number: number;
@@ -1617,6 +1623,7 @@ export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
   }>('SELECT * FROM active_rest_timers');
 
   return results.map((r) => ({
+    exerciseInstanceId: r.exercise_instance_id,
     exerciseName: r.exercise_name,
     programId: r.program_id,
     dayNumber: r.day_number,
@@ -1628,13 +1635,27 @@ export const getAllActiveTimers = async (): Promise<ActiveTimerState[]> => {
 
 /**
  * Clear a specific timer (when stopped or completed)
- * COMPOSITE KEY FIX: Now requires full context to identify which timer to clear
+ * HARDENED KEY FIX: Requires exerciseInstanceId + programId + dayNumber.
  */
-export const clearActiveTimer = async (context: TimerContext): Promise<void> => {
+export const clearActiveTimer = async (
+  context: TimerContext,
+  expectedEndTimestamp?: number
+): Promise<void> => {
   const database = await getDatabase();
+
+  if (typeof expectedEndTimestamp === 'number') {
+    // RACE HARDENING: Delete only the timer generation we expect.
+    // This prevents stale clears from deleting a freshly restarted timer.
+    await database.runAsync(
+      'DELETE FROM active_rest_timers WHERE exercise_instance_id = ? AND program_id = ? AND day_number = ? AND end_timestamp = ?',
+      [context.exerciseInstanceId, context.programId, context.dayNumber, expectedEndTimestamp]
+    );
+    return;
+  }
+
   await database.runAsync(
-    'DELETE FROM active_rest_timers WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
-    [context.exerciseName, context.programId, context.dayNumber]
+    'DELETE FROM active_rest_timers WHERE exercise_instance_id = ? AND program_id = ? AND day_number = ?',
+    [context.exerciseInstanceId, context.programId, context.dayNumber]
   );
 };
 
@@ -1664,7 +1685,7 @@ export const clearTimersForContext = async (
 
 /**
  * Update sets completed for a timer (without changing timer state)
- * COMPOSITE KEY FIX: Now requires full context
+ * HARDENED KEY FIX: Uses exerciseInstanceId + programId + dayNumber.
  */
 export const updateTimerSetsCompleted = async (
   context: TimerContext,
@@ -1672,8 +1693,8 @@ export const updateTimerSetsCompleted = async (
 ): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync(
-    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_name = ? AND program_id = ? AND day_number = ?',
-    [setsCompleted, context.exerciseName, context.programId, context.dayNumber]
+    'UPDATE active_rest_timers SET sets_completed = ? WHERE exercise_instance_id = ? AND program_id = ? AND day_number = ?',
+    [setsCompleted, context.exerciseInstanceId, context.programId, context.dayNumber]
   );
 };
 
