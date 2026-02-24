@@ -738,6 +738,7 @@ export default function ActiveWorkout() {
         <ExerciseLogCard
           exercise={item}
           index={index}
+          exerciseInstanceId={exerciseInstanceKey}
           programId={currentProgram.id}
           dayNumber={selectedDayNumber}
           onUpdateLoggedWeight={(value) =>

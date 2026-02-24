@@ -25,8 +25,9 @@ import { AppState, AppStateStatus, Pressable, TextInput, Vibration, View } from 
 interface ExerciseLogCardProps {
   exercise: WorkoutExercise;
   index: number;
-  // COMPOSITE KEY FIX: These props identify the workout context for timer isolation
-  // This allows the same exercise name to have separate timers on different days/programs
+  // HARDENED KEY FIX: Unique per-exercise instance identity from ActiveWorkout.
+  // This disambiguates duplicate exercise names on the same program/day.
+  exerciseInstanceId: string;
   programId: string;
   dayNumber: number;
   onUpdateLoggedWeight: (value: string) => void;
@@ -38,6 +39,7 @@ interface ExerciseLogCardProps {
 export const ExerciseLogCard = memo(function ExerciseLogCard({
   exercise,
   index,
+  exerciseInstanceId,
   programId,
   dayNumber,
   onUpdateLoggedWeight,
@@ -49,21 +51,22 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
   
   // =============================================================================
-  // COMPOSITE KEY FIX: Timer context for DB operations
+  // HARDENED KEY FIX: Timer context for DB operations
   // =============================================================================
-  // This context uniquely identifies this exercise's timer in the database.
-  // Using useMemo to avoid recreating the object on every render.
+  // exerciseInstanceId makes timer identity unique even for duplicate exercise names
+  // within the same program/day.
   const timerContext = React.useMemo(() => ({
+    exerciseInstanceId,
     exerciseName: exercise.name,
     programId,
     dayNumber,
-  }), [exercise.name, programId, dayNumber]);
+  }), [exerciseInstanceId, exercise.name, programId, dayNumber]);
   
   // =============================================================================
   // VALIDATION: Check if we have valid context for timer operations
   // =============================================================================
   // WHY THIS MATTERS:
-  // Timer persistence requires a valid composite key (exercise, program, day).
+  // Timer persistence requires a valid key (exercise instance, exercise, program, day).
   // If programId is empty, we'd create DB entries with program_id = '' which:
   // 1. Makes debugging harder (what program is '' ?)
   // 2. Could cause unintended collisions between different contexts
@@ -71,7 +74,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // 
   // We'll still render the component, but disable timer persistence.
   // The timer UI will work (countdown, vibration) but won't survive app restart.
-  const hasValidContext = Boolean(programId && exercise.name && dayNumber > 0);
+  const hasValidContext = Boolean(exerciseInstanceId && programId && exercise.name && dayNumber > 0);
   
   // Rest timer state - using end timestamp for persistence
   const [endTimestamp, setEndTimestamp] = useState<number | null>(null);
@@ -123,6 +126,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // overlapping async DB operations that race against each other.
   // Solution: Track if a clear operation is pending to prevent duplicate calls.
   const pendingClearRef = useRef(false);
+  const queuedClearRequestRef = useRef<{ expectedEndTimestamp?: number } | null>(null);
   
   // =============================================================================
   // RACE CONDITION FIX: Stable ref for endTimestamp
@@ -154,21 +158,32 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // 1. Checks if component is still mounted
   // 2. Prevents duplicate concurrent clear operations
   // 3. Properly awaits the DB call with error handling
-  // COMPOSITE KEY FIX: Now uses timerContext instead of just exercise.name
-  const safeClearTimer = useCallback(async () => {
+  // HARDENED KEY FIX: Now uses timerContext with exerciseInstanceId
+  const safeClearTimer = useCallback(async (expectedEndTimestamp?: number) => {
     // Don't proceed if component has unmounted
     if (!isMountedRef.current) return;
-    
-    // Don't proceed if another clear is already in progress
-    if (pendingClearRef.current) return;
-    
+
     // VALIDATION: Skip DB operation if context is invalid
     // Timer will still work locally, just won't persist
     if (!hasValidContext) return;
-    
+
+    // If another clear is already in progress, queue this request instead of dropping it.
+    if (pendingClearRef.current) {
+      queuedClearRequestRef.current = { expectedEndTimestamp };
+      return;
+    }
+
     pendingClearRef.current = true;
     try {
-      await db.clearActiveTimer(timerContext);
+      let clearRequest: { expectedEndTimestamp?: number } | null = { expectedEndTimestamp };
+
+      while (clearRequest) {
+        await db.clearActiveTimer(timerContext, clearRequest.expectedEndTimestamp);
+
+        // Consume any queued clear request that arrived while this one was in-flight.
+        clearRequest = queuedClearRequestRef.current;
+        queuedClearRequestRef.current = null;
+      }
     } catch (error) {
       // Only log if still mounted (otherwise we don't care about the error)
       if (isMountedRef.current) {
@@ -199,7 +214,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // =============================================================================
   // RACE CONDITION FIX: Check isMountedRef before any state updates.
   // If component unmounts while this async operation is in flight, we skip updates.
-  // COMPOSITE KEY FIX: Now uses timerContext to load the correct timer
+  // HARDENED KEY FIX: Uses timerContext with exerciseInstanceId
   useEffect(() => {
     // VALIDATION: Skip loading if context is invalid
     if (!hasValidContext) return;
@@ -233,7 +248,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
             setTimerCompleted(true);
             
             // RACE CONDITION FIX: Use safe clear instead of fire-and-forget
-            await safeClearTimer();
+            await safeClearTimer(savedTimer.endTimestamp);
             
             // Vibrate to notify if timer completed recently
             // Uses shouldNotifyTimerComplete from timer-utils
@@ -288,7 +303,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
           // RACE CONDITION FIX: Use safe clear instead of fire-and-forget
           // Note: We don't await here because we're in an event handler,
           // but safeClearTimer handles errors internally and checks mounted state
-          safeClearTimer();
+          safeClearTimer(currentEndTimestamp);
         }
       }
     };
@@ -392,7 +407,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
       setTimerCompleted(false);
 
       // RACE CONDITION FIX: Use safe clear with proper error handling
-      await safeClearTimer();
+      await safeClearTimer(endTimestampRef.current ?? undefined);
     } finally {
       // Only update state if still mounted
       if (isMountedRef.current) {
@@ -442,7 +457,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
           setTimerCompleted(true);
           setEndTimestamp(null);
           notifyTimerComplete();
-          safeClearTimer();
+          safeClearTimer(endTimestamp);
           return;
         }
         
@@ -466,7 +481,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
           
           // RACE CONDITION FIX: Use safe clear instead of fire-and-forget
           // safeClearTimer handles mounted check and error handling internally
-          safeClearTimer();
+          safeClearTimer(endTimestamp);
         }
       // BATTERY FIX: Changed from 100ms to 1000ms
       // Rationale: For a rest timer, 1-second resolution is perfectly adequate.
