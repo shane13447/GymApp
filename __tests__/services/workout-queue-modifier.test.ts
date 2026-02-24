@@ -27,7 +27,8 @@ import {
     repairQueue,
     resolveExerciseAlias,
     restoreDroppedExercises,
-    validateChanges
+    validateChanges,
+    validateQueueStructure,
 } from '@/services/workout-queue-modifier';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
@@ -381,6 +382,20 @@ describe('parseQueueFormatResponse', () => {
       const result = parseQueueFormatResponse(response, [originalQueue[0]], 'change weight to 100', ['Barbell Bench Press']);
       expect(result).not.toBeNull();
       expect(result![0].exercises[0].weight).toBe('100');
+    });
+
+    it('should return partial queue when response omits queue items', () => {
+      const response = 'Q0:D1:Barbell Bench Press|90|8|3';
+      const result = parseQueueFormatResponse(
+        response,
+        originalQueue,
+        'change bench press to 90kg',
+        ['Barbell Bench Press']
+      );
+
+      expect(result).not.toBeNull();
+      expect(result).toHaveLength(1);
+      expect(result?.[0].id).toBe('q0');
     });
   });
 
@@ -916,6 +931,50 @@ describe('differencesToProposedChanges', () => {
 // validateChanges
 // =============================================================================
 
+describe('validateQueueStructure', () => {
+  const originalQueue = createTestQueue();
+
+  it('should validate identical queue structure', () => {
+    const result = validateQueueStructure(originalQueue, [...originalQueue]);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should reject missing queue items', () => {
+    const parsedQueue = [originalQueue[0]];
+    const result = validateQueueStructure(originalQueue, parsedQueue);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('Missing queue item'))).toBe(true);
+  });
+
+  it('should reject duplicate queue ids', () => {
+    const duplicateIdQueue = [
+      { ...originalQueue[0], id: 'q0', position: 0 },
+      { ...originalQueue[1], id: 'q0', position: 1 },
+      { ...originalQueue[2], id: 'q2', position: 2 },
+    ];
+
+    const result = validateQueueStructure(originalQueue, duplicateIdQueue);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('Duplicate queue item id'))).toBe(true);
+  });
+
+  it('should reject queue item with empty exercises', () => {
+    const parsedQueue = [
+      { ...originalQueue[0] },
+      { ...originalQueue[1], exercises: [] },
+      { ...originalQueue[2] },
+    ];
+
+    const result = validateQueueStructure(originalQueue, parsedQueue);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('has no exercises'))).toBe(true);
+  });
+});
+
 describe('validateChanges', () => {
   describe('valid changes', () => {
     it('should validate expected weight change', () => {
@@ -940,6 +999,30 @@ describe('validateChanges', () => {
         exerciseName: 'Bench Press',
       }];
       const result = validateChanges('remove bench press', differences);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should validate delete synonym as removal request', () => {
+      const differences = [{
+        type: 'removed' as const,
+        queueItemId: 'q0',
+        queueItemName: 'Test',
+        dayNumber: 1,
+        exerciseName: 'Bench Press',
+      }];
+      const result = validateChanges('delete bench press', differences);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should validate insert synonym as add request', () => {
+      const differences = [{
+        type: 'added' as const,
+        queueItemId: 'q0',
+        queueItemName: 'Test',
+        dayNumber: 1,
+        exerciseName: 'Cable Fly',
+      }];
+      const result = validateChanges('insert cable fly', differences);
       expect(result.valid).toBe(true);
     });
   });

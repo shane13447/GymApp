@@ -1580,6 +1580,75 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+export interface QueueStructureValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export const validateQueueStructure = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[]
+): QueueStructureValidationResult => {
+  const errors: string[] = [];
+
+  if (originalQueue.length > 0 && parsedQueue.length !== originalQueue.length) {
+    errors.push(
+      `Expected ${originalQueue.length} queue item(s), but received ${parsedQueue.length}.`
+    );
+  }
+
+  const originalIds = new Set(originalQueue.map((item) => item.id));
+  const originalById = new Map(originalQueue.map((item) => [item.id, item]));
+  const seenIds = new Set<string>();
+  const seenPositions = new Set<number>();
+
+  for (const item of parsedQueue) {
+    if (!item.id) {
+      errors.push('Parsed queue contains an item with no id.');
+      continue;
+    }
+
+    if (seenIds.has(item.id)) {
+      errors.push(`Duplicate queue item id detected: ${item.id}.`);
+    }
+    seenIds.add(item.id);
+
+    if (originalQueue.length > 0 && !originalIds.has(item.id)) {
+      errors.push(`Parsed queue contains unknown queue item id: ${item.id}.`);
+    }
+
+    if (!Number.isInteger(item.position) || item.position < 0) {
+      errors.push(`Queue item ${item.id} has invalid position: ${item.position}.`);
+    } else if (seenPositions.has(item.position)) {
+      errors.push(`Duplicate queue position detected: ${item.position}.`);
+    } else {
+      seenPositions.add(item.position);
+    }
+
+    if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
+      errors.push(`Queue item ${item.id} has no exercises.`);
+    }
+
+    const originalItem = originalById.get(item.id);
+    if (originalItem && item.programId !== originalItem.programId) {
+      errors.push(`Queue item ${item.id} changed program unexpectedly.`);
+    }
+  }
+
+  if (originalQueue.length > 0) {
+    for (const originalItem of originalQueue) {
+      if (!seenIds.has(originalItem.id)) {
+        errors.push(`Missing queue item: ${originalItem.id}.`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+};
+
 /**
  * Validate that the proposed changes match what was requested
  * Returns warnings for unexpected additions/removals
@@ -1591,8 +1660,8 @@ export const validateChanges = (
   const warnings: string[] = [];
   const requestLower = userRequest.toLowerCase();
 
-  // Check for unexpected removals (if user didn't say "remove")
-  if (!requestLower.includes('remove')) {
+  // Check for unexpected removals (if user did not request remove-like action)
+  if (!includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS)) {
     const removals = differences.filter(d => d.type === 'removed');
     if (removals.length > 0) {
       const removedNames = removals.map(r => r.exerciseName).join(', ');
@@ -1600,8 +1669,8 @@ export const validateChanges = (
     }
   }
 
-  // Check for unexpected additions (if user didn't say "add")
-  if (!requestLower.includes('add')) {
+  // Check for unexpected additions (if user did not request add-like action)
+  if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS)) {
     const additions = differences.filter(d => d.type === 'added');
     if (additions.length > 0) {
       const addedNames = additions.map(a => a.exerciseName).join(', ');
