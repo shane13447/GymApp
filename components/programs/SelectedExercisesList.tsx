@@ -7,12 +7,13 @@ import React, { memo } from 'react';
 import { Pressable, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { formatExerciseDisplayName } from '@/lib/utils';
 import type { ProgramExercise } from '@/types';
 
 interface SelectedExercisesListProps {
   exercises: ProgramExercise[];
   dayNumber: number;
-  onRemove: (exerciseName: string) => void;
+  onRemove: (exercise: ProgramExercise) => void;
 }
 
 export const SelectedExercisesList = memo(function SelectedExercisesList({
@@ -32,7 +33,7 @@ export const SelectedExercisesList = memo(function SelectedExercisesList({
       <View className="gap-2">
         {exercises.map((exercise, index) => (
           <View
-            key={exercise.name}
+            key={`${exercise.name}-${index}`}
             className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
           >
             <View className="flex-row items-center gap-2">
@@ -42,13 +43,13 @@ export const SelectedExercisesList = memo(function SelectedExercisesList({
                 </ThemedText>
               </View>
               <ThemedText className="font-semibold text-base flex-1">
-                {exercise.name}
+                {formatExerciseDisplayName(exercise.name, exercise.variant)}
               </ThemedText>
               <Pressable
-                onPress={() => onRemove(exercise.name)}
+                onPress={() => onRemove(exercise)}
                 className="bg-red-500 w-6 h-6 rounded-full items-center justify-center"
                 accessibilityRole="button"
-                accessibilityLabel={`Remove ${exercise.name}`}
+                accessibilityLabel={`Remove ${formatExerciseDisplayName(exercise.name, exercise.variant)}`}
               >
                 <ThemedText className="text-white font-bold text-xs">×</ThemedText>
               </Pressable>
