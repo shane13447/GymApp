@@ -9,17 +9,37 @@
 /**
  * Base exercise interface from the exercise database
  */
+export type ExerciseVariantField = 'angle' | 'grip' | 'posture' | 'laterality';
+
+export interface ExerciseVariant {
+  angle?: string;
+  grip?: string;
+  posture?: string;
+  laterality?: string;
+  extras?: string[];
+}
+
+export interface ExerciseVariantOption {
+  label: string;
+  field?: ExerciseVariantField;
+  value?: string;
+  aliases?: string[];
+}
+
 export interface Exercise {
   name: string;
   equipment: string;
   muscle_groups_worked: string[];
   isCompound: boolean;
+  variantOptions?: ExerciseVariantOption[];
+  aliases?: string[];
 }
 
 /**
  * Exercise with program-specific data (sets, reps, weight, etc.)
  */
 export interface ProgramExercise extends Exercise {
+  variant?: ExerciseVariant | null;
   weight: string;
   reps: string;
   sets: string;
