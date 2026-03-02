@@ -156,7 +156,7 @@
     "isCompound": true
   },
   {
-    "name": "Overhead Barbell Press (Military Press)",
+    "name": "Overhead Barbell Press",
     "equipment": "Barbell",
     "muscle_groups_worked": ["shoulders", "triceps", "chest"],
     "isCompound": true
@@ -213,6 +213,84 @@
     "name": "Triceps Pushdown",
     "equipment": "Cable",
     "muscle_groups_worked": ["triceps"],
+    "isCompound": false
+  },
+  {
+    "name": "Neutral-Grip Incline Dumbbell Press",
+    "equipment": "Dumbbell",
+    "muscle_groups_worked": ["chest", "shoulders", "triceps"],
+    "isCompound": true
+  },
+  {
+    "name": "Neutral-Grip Flat Dumbbell Press",
+    "equipment": "Dumbbell",
+    "muscle_groups_worked": ["chest", "shoulders", "triceps"],
+    "isCompound": true
+  },
+  {
+    "name": "Low-Incline Neutral-Grip Dumbbell Press",
+    "equipment": "Dumbbell",
+    "muscle_groups_worked": ["chest", "shoulders", "triceps"],
+    "isCompound": true
+  },
+  {
+    "name": "Chest-Supported Dumbbell Row",
+    "equipment": "Dumbbell",
+    "muscle_groups_worked": ["lats", "traps", "biceps", "forearms"],
+    "isCompound": true
+  },
+  {
+    "name": "Barbell Romanian Deadlift",
+    "equipment": "Barbell",
+    "muscle_groups_worked": ["hamstrings", "glutes", "forearms"],
+    "isCompound": true
+  },
+  {
+    "name": "Leg Press Calf Raise",
+    "equipment": "",
+    "muscle_groups_worked": ["calves"],
+    "isCompound": false
+  },
+  {
+    "name": "Rope Pressdown",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["triceps"],
+    "isCompound": false
+  },
+  {
+    "name": "Overhead Rope Triceps Extension",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["triceps"],
+    "isCompound": false
+  },
+  {
+    "name": "Reverse Cable Curl",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["biceps", "forearms"],
+    "isCompound": false
+  },
+  {
+    "name": "Rope Hammer Curl",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["biceps", "forearms"],
+    "isCompound": false
+  },
+  {
+    "name": "Cable Curl",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["biceps", "forearms"],
+    "isCompound": false
+  },
+  {
+    "name": "Rope Face Pull",
+    "equipment": "Cable",
+    "muscle_groups_worked": ["shoulders", "traps"],
+    "isCompound": false
+  },
+  {
+    "name": "Farmer Hold",
+    "equipment": "Dumbbell",
+    "muscle_groups_worked": ["forearms", "traps", "abs"],
     "isCompound": false
   }
 ]
