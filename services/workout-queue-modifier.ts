@@ -571,7 +571,7 @@ export const parseQueueFormatResponse = (
       
       const exerciseStrings = exercisesString.split(',').filter((s) => s.trim().length > 0);
       const exercises: ProgramExercise[] = [];
-      
+
       for (const exString of exerciseStrings) {
         // Support both pipe (|) and slash (/) separators for compatibility
         const separator = exString.includes('|') ? '|' : '/';
@@ -582,10 +582,16 @@ export const parseQueueFormatResponse = (
         const weight = parts[1]?.trim() || '0';
         const reps = parts[2]?.trim() || '8';
         const sets = parts[3]?.trim() || '3';
-        
+
+        const originalEx = originalItem.exercises.find((ex) => {
+          return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
+                 ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
+                 exerciseName.toLowerCase().includes(ex.name.toLowerCase());
+        });
+
         // Try to find the exercise by full name or fuzzy match
         const exerciseData = findExerciseByName(exerciseName);
-        
+
         if (exerciseData) {
           exercises.push({
             name: exerciseData.name,
@@ -595,36 +601,27 @@ export const parseQueueFormatResponse = (
             weight,
             reps,
             sets,
+            restTime: originalEx?.restTime || '180',
+            progression: originalEx?.progression || '',
+            hasCustomisedSets: originalEx?.hasCustomisedSets ?? false,
+          });
+        } else if (originalEx) {
+          exercises.push({ ...originalEx, weight, reps, sets });
+        } else {
+          // Warn about unknown exercise name
+          console.warn(`[QUEUE FORMAT] Unknown exercise: "${exerciseName}" - using as-is. This may indicate an LLM hallucination.`);
+          exercises.push({
+            name: exerciseName,
+            equipment: '',
+            muscle_groups_worked: [],
+            isCompound: false, // Default to isolation for unknown exercises
+            weight,
+            reps,
+            sets,
             restTime: '180',
             progression: '',
             hasCustomisedSets: false,
           });
-        } else {
-          // Try to find in original exercises by comparing names
-          const originalEx = originalItem.exercises.find((ex) => {
-            return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
-                   ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
-                   exerciseName.toLowerCase().includes(ex.name.toLowerCase());
-          });
-          
-          if (originalEx) {
-            exercises.push({ ...originalEx, weight, reps, sets });
-          } else {
-            // Warn about unknown exercise name
-            console.warn(`[QUEUE FORMAT] Unknown exercise: "${exerciseName}" - using as-is. This may indicate an LLM hallucination.`);
-            exercises.push({
-              name: exerciseName,
-              equipment: '',
-              muscle_groups_worked: [],
-              isCompound: false, // Default to isolation for unknown exercises
-              weight,
-              reps,
-              sets,
-              restTime: '180',
-              progression: '',
-              hasCustomisedSets: false,
-            });
-          }
         }
       }
       
@@ -740,7 +737,9 @@ export const repairQueueWithIntent = (
       );
       
       if (!originalEx) return finalEx;
-      
+
+      finalEx.hasCustomisedSets = originalEx.hasCustomisedSets;
+
       // Check if this exercise was targeted
       const isTargeted = targetedExerciseNames.some(targetName => 
         targetName === originalEx.name ||
