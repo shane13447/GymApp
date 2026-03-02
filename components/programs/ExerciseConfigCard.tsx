@@ -4,20 +4,93 @@
  */
 
 import React, { memo, useCallback, useState, useEffect, useRef } from 'react';
-import { Switch, TextInput, View } from 'react-native';
+import { Pressable, Switch, TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import type { ProgramExercise } from '@/types';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatExerciseDisplayName } from '@/lib/utils';
+import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise } from '@/types';
 
 interface ExerciseConfigCardProps {
   exercise: ProgramExercise;
   index: number;
-  onUpdate: (field: keyof ProgramExercise, value: string | boolean) => void;
+  onUpdate: (field: keyof ProgramExercise, value: string | boolean | ExerciseVariant | null) => void;
   showRemove?: boolean;
   onRemove?: () => void;
 }
+
+const VARIANT_FIELD_LABELS: Record<NonNullable<ExerciseVariantOption['field']>, string> = {
+  angle: 'Angle',
+  grip: 'Grip',
+  posture: 'Posture',
+  laterality: 'Laterality',
+};
+
+const getVariantOptionKey = (option: ExerciseVariantOption): string => {
+  return `${option.field ?? 'extra'}:${option.value ?? option.label}`;
+};
+
+const getVariantOptionLabel = (option: ExerciseVariantOption): string => {
+  return option.value ?? option.label;
+};
+
+const applyVariantOption = (
+  currentVariant: ExerciseVariant | null | undefined,
+  option: ExerciseVariantOption
+): ExerciseVariant | null => {
+  const next: ExerciseVariant = { ...(currentVariant ?? {}) };
+
+  if (!option.field || !option.value) {
+    const currentExtras = next.extras ?? [];
+    if (!currentExtras.includes(option.label)) {
+      next.extras = [...currentExtras, option.label];
+    }
+    return next;
+  }
+
+  next[option.field] = option.value;
+  return next;
+};
+
+const removeVariantOption = (
+  currentVariant: ExerciseVariant | null | undefined,
+  option: ExerciseVariantOption
+): ExerciseVariant | null => {
+  if (!currentVariant) {
+    return null;
+  }
+
+  const next: ExerciseVariant = { ...currentVariant };
+
+  if (!option.field || !option.value) {
+    const remainingExtras = (next.extras ?? []).filter((extra) => extra !== option.label);
+    if (remainingExtras.length > 0) {
+      next.extras = remainingExtras;
+    } else {
+      delete next.extras;
+    }
+  } else if (next[option.field] === option.value) {
+    delete next[option.field];
+  }
+
+  return Object.keys(next).length > 0 ? next : null;
+};
+
+const isVariantOptionSelected = (
+  variant: ExerciseVariant | null | undefined,
+  option: ExerciseVariantOption
+): boolean => {
+  if (!variant) {
+    return false;
+  }
+
+  if (!option.field || !option.value) {
+    return (variant.extras ?? []).includes(option.label);
+  }
+
+  return variant[option.field] === option.value;
+};
 
 /**
  * Normalizes a decimal string input for consistent storage.
@@ -120,6 +193,20 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
     },
     [onUpdate]
   );
+
+  const handleVariantToggle = useCallback(
+    (option: ExerciseVariantOption) => {
+      const isSelected = isVariantOptionSelected(exercise.variant, option);
+      const nextVariant = isSelected
+        ? removeVariantOption(exercise.variant, option)
+        : applyVariantOption(exercise.variant, option);
+      onUpdate('variant', nextVariant);
+    },
+    [exercise.variant, onUpdate]
+  );
+
+  const variantOptions = exercise.variantOptions ?? [];
+  const hasVariantOptions = variantOptions.length > 0;
   
   // Memoize the specific field handlers to provide stable references for the decimal input hooks
   const handleWeightChange = useCallback(
@@ -144,7 +231,7 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           </ThemedText>
         </View>
         <ThemedText className="font-bold text-lg flex-1">
-          {exercise.name}
+          {formatExerciseDisplayName(exercise.name, exercise.variant)}
         </ThemedText>
         {showRemove && onRemove && (
           <View
@@ -172,6 +259,56 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           ))}
         </View>
       </Collapsible>
+
+      {hasVariantOptions && (
+        <Collapsible title="Variants">
+          <View className="mt-2 gap-2">
+            {variantOptions.map((option) => {
+              const selected = isVariantOptionSelected(exercise.variant, option);
+              return (
+                <Pressable
+                  key={getVariantOptionKey(option)}
+                  onPress={() => handleVariantToggle(option)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={`Toggle ${getVariantOptionLabel(option)} variant`}
+                >
+                  {({ pressed }) => (
+                    <View
+                      className={`p-3 rounded-xl border flex-row items-center justify-between ${
+                        selected
+                          ? 'border-blue-500 bg-blue-100 dark:bg-blue-900'
+                          : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                      }`}
+                      style={pressed && !selected ? { opacity: 0.85 } : undefined}
+                    >
+                      <View className="flex-1 pr-3">
+                        <ThemedText className="font-semibold text-sm">
+                          {getVariantOptionLabel(option)}
+                        </ThemedText>
+                        {option.field && (
+                          <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {VARIANT_FIELD_LABELS[option.field]}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <View
+                        className={`w-6 h-6 rounded-full border-2 items-center justify-center ${
+                          selected
+                            ? 'bg-blue-500 border-blue-600'
+                            : 'bg-gray-50 dark:bg-gray-700 border-gray-400'
+                        }`}
+                      >
+                        {selected && <ThemedText className="text-white text-xs font-bold">✓</ThemedText>}
+                      </View>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Collapsible>
+      )}
 
       {/* Input Fields */}
       <View className="mt-3 gap-3">
