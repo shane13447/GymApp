@@ -384,6 +384,87 @@ describe('parseQueueFormatResponse', () => {
       expect(result![0].exercises[0].weight).toBe('100');
     });
 
+    it('should preserve hasCustomisedSets when known exercise metadata is rebuilt', () => {
+      const queue = [createQueueItem({
+        id: 'q-custom',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            hasCustomisedSets: true,
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|90|8|3';
+      const result = parseQueueFormatResponse(response, queue, 'change weight to 90', ['Barbell Bench Press']);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].weight).toBe('90');
+      expect(result![0].exercises[0].hasCustomisedSets).toBe(true);
+    });
+
+    it('should preserve hasCustomisedSets through repair for non-targeted exercise restoration', () => {
+      const queue = [createQueueItem({
+        id: 'q-custom-2',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            hasCustomisedSets: true,
+          }),
+          createExercise({
+            name: 'Dumbbell Flyes',
+            weight: '15',
+            reps: '10',
+            sets: '3',
+            hasCustomisedSets: false,
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|95|8|3,Dumbbell Flyes|20|10|3';
+      const result = parseQueueFormatResponse(response, queue, 'change Barbell Bench Press weight to 95', ['Barbell Bench Press']);
+
+      expect(result).not.toBeNull();
+      const [bench, flyes] = result![0].exercises;
+      expect(bench.weight).toBe('95');
+      expect(bench.hasCustomisedSets).toBe(true);
+      expect(flyes.weight).toBe('15');
+      expect(flyes.hasCustomisedSets).toBe(false);
+    });
+
+    it('should keep 4-column TOON parsing compatibility with custom metadata preservation', () => {
+      const queue = [createQueueItem({
+        id: 'q-custom-3',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Leg Extensions',
+            weight: '50',
+            reps: '12',
+            sets: '3',
+            hasCustomisedSets: true,
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Leg Extensions|55|15|4';
+      const result = parseQueueFormatResponse(response, queue, 'change Leg Extensions weight to 55 and reps to 15 and sets to 4', ['Leg Extensions']);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].weight).toBe('55');
+      expect(result![0].exercises[0].reps).toBe('15');
+      expect(result![0].exercises[0].sets).toBe('4');
+      expect(result![0].exercises[0].hasCustomisedSets).toBe(true);
+    });
+
     it('should return partial queue when response omits queue items', () => {
       const response = 'Q0:D1:Barbell Bench Press|90|8|3';
       const result = parseQueueFormatResponse(
