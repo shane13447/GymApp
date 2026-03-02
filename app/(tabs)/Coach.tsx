@@ -89,8 +89,26 @@ type CoachTestResult = {
 const COACH_API_TIMEOUT_MS = 60000;
 
 const getCoachProxyUrl = (): string => {
-  const extra = Constants.expoConfig?.extra as { coachProxyUrl?: unknown } | undefined;
-  return typeof extra?.coachProxyUrl === 'string' ? extra.coachProxyUrl.trim() : '';
+  const constantsWithManifests = Constants as typeof Constants & {
+    manifest?: { extra?: { coachProxyUrl?: unknown } };
+    manifest2?: { extra?: { expoClient?: { extra?: { coachProxyUrl?: unknown } } } };
+  };
+
+  const candidates: unknown[] = [
+    Constants.expoConfig?.extra?.coachProxyUrl,
+    constantsWithManifests.manifest?.extra?.coachProxyUrl,
+    constantsWithManifests.manifest2?.extra?.expoClient?.extra?.coachProxyUrl,
+    process.env.EXPO_PUBLIC_COACH_PROXY_URL,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+
+  return '';
 };
 
 const extractProxyResponseText = (rawBody: string): string => {
