@@ -19,10 +19,12 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
-import * as db from '@/services/database';
+import { formatExerciseDisplayName } from '@/lib/utils';
+import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';import * as db from '@/services/database';
 import type {
   Exercise,
+  ExerciseVariant,
+  ExerciseVariantOption,
   Program,
   ProgramExercise,
   WorkoutDay,
@@ -32,7 +34,104 @@ import { CreateProgramStep, ProgramViewMode } from '@/types';
 const cloneExercise = (exercise: ProgramExercise): ProgramExercise => ({
   ...exercise,
   muscle_groups_worked: [...exercise.muscle_groups_worked],
+  variant: exercise.variant
+    ? {
+        ...exercise.variant,
+        extras: exercise.variant.extras ? [...exercise.variant.extras] : undefined,
+      }
+    : null,
+  variantOptions: exercise.variantOptions
+    ? exercise.variantOptions.map((option) => ({
+        ...option,
+        aliases: option.aliases ? [...option.aliases] : undefined,
+      }))
+    : undefined,
+  aliases: exercise.aliases ? [...exercise.aliases] : undefined,
 });
+
+const VARIANT_FIELD_LABELS: Record<NonNullable<ExerciseVariantOption['field']>, string> = {
+  angle: 'Angle',
+  grip: 'Grip',
+  posture: 'Posture',
+  laterality: 'Laterality',
+};
+
+const parseVariantOption = (rawOption: unknown): ExerciseVariantOption | null => {
+  if (!rawOption || typeof rawOption !== 'object') {
+    return null;
+  }
+
+  const option = rawOption as Record<string, unknown>;
+  const label = typeof option.label === 'string' ? option.label.trim() : '';
+  if (!label) {
+    return null;
+  }
+
+  const field = option.field;
+  const normalisedField =
+    field === 'angle' || field === 'grip' || field === 'posture' || field === 'laterality'
+      ? field
+      : undefined;
+
+  const value = typeof option.value === 'string' ? option.value.trim() : undefined;
+  const aliases = Array.isArray(option.aliases)
+    ? option.aliases
+        .filter((alias): alias is string => typeof alias === 'string')
+        .map((alias) => alias.trim())
+        .filter(Boolean)
+    : undefined;
+
+  return {
+    label,
+    field: normalisedField,
+    value: value || undefined,
+    aliases: aliases && aliases.length > 0 ? aliases : undefined,
+  };
+};
+
+const parseVariantOptions = (rawOptions: unknown): ExerciseVariantOption[] | undefined => {
+  if (!Array.isArray(rawOptions)) {
+    return undefined;
+  }
+
+  const options = rawOptions.map(parseVariantOption).filter((option): option is ExerciseVariantOption => Boolean(option));
+  return options.length > 0 ? options : undefined;
+};
+
+const getDefaultVariantForExercise = (
+  variantOptions?: ExerciseVariantOption[]
+): ExerciseVariant | null => {
+  if (!variantOptions || variantOptions.length === 0) {
+    return null;
+  }
+
+  const defaultVariant: ExerciseVariant = {};
+
+  for (const option of variantOptions) {
+    if (!option.field || !option.value) {
+      continue;
+    }
+
+    if (defaultVariant[option.field]) {
+      continue;
+    }
+
+    defaultVariant[option.field] = option.value;
+  }
+
+  return Object.keys(defaultVariant).length > 0 ? defaultVariant : null;
+};
+
+const buildExerciseIdentity = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string =>
+  JSON.stringify({
+    name: exercise.name,
+    variant: exercise.variant ?? null,
+  });
+
+const areExercisesEquivalent = (
+  left: Pick<ProgramExercise, 'name' | 'variant'>,
+  right: Pick<ProgramExercise, 'name' | 'variant'>
+): boolean => buildExerciseIdentity(left) === buildExerciseIdentity(right);
 
 const cloneWorkoutDay = (day: WorkoutDay): WorkoutDay => ({
   ...day,
@@ -66,12 +165,27 @@ export default function ProgramsScreen() {
 
   // Load exercises from JSON
   const exercises: Exercise[] = useMemo(() => {
-    return exercisesData.map((ex) => ({
-      name: ex.name,
-      equipment: ex.equipment,
-      muscle_groups_worked: ex.muscle_groups_worked,
-      isCompound: ex.isCompound,
-    }));
+    return exercisesData.map((rawExercise) => {
+      const ex = rawExercise as Record<string, unknown>;
+      const variantOptions = parseVariantOptions(ex.variantOptions);
+      const aliases = Array.isArray(ex.aliases)
+        ? ex.aliases
+            .filter((alias): alias is string => typeof alias === 'string')
+            .map((alias) => alias.trim())
+            .filter(Boolean)
+        : undefined;
+
+      return {
+        name: typeof ex.name === 'string' ? ex.name : '',
+        equipment: typeof ex.equipment === 'string' ? ex.equipment : '',
+        muscle_groups_worked: Array.isArray(ex.muscle_groups_worked)
+          ? ex.muscle_groups_worked.filter((group): group is string => typeof group === 'string')
+          : [],
+        isCompound: Boolean(ex.isCompound),
+        variantOptions,
+        aliases: aliases && aliases.length > 0 ? aliases : undefined,
+      };
+    });
   }, []);
 
   // Load programs on mount
@@ -117,25 +231,32 @@ export default function ProgramsScreen() {
   };
 
   const toggleExercise = useCallback((exercise: Exercise) => {
+    const defaultVariant = getDefaultVariantForExercise(exercise.variantOptions);
     setSelectedExercises((prev) => {
-      const isSelected = prev.some((e) => e.name === exercise.name);
+      const isSelected = prev.some((e) =>
+        areExercisesEquivalent(e, { name: exercise.name, variant: defaultVariant })
+      );
       if (isSelected) {
-        return prev.filter((e) => e.name !== exercise.name);
-      } else {
-        return [...prev, createProgramExercise(exercise)];
+        return prev.filter(
+          (e) => !areExercisesEquivalent(e, { name: exercise.name, variant: defaultVariant })
+        );
       }
+
+      return [...prev, createProgramExercise(exercise, defaultVariant)];
     });
   }, []);
 
-  const removeExercise = useCallback((exerciseName: string) => {
-    setSelectedExercises((prev) => prev.filter((e) => e.name !== exerciseName));
+  const removeExercise = useCallback((exerciseToRemove: ProgramExercise) => {
+    setSelectedExercises((prev) =>
+      prev.filter((exercise) => !areExercisesEquivalent(exercise, exerciseToRemove))
+    );
   }, []);
 
   const updateExerciseField = useCallback(
     (
-      exerciseName: string,
+      exerciseIdentity: Pick<ProgramExercise, 'name' | 'variant'>,
       field: keyof ProgramExercise,
-      value: string | boolean,
+      value: string | boolean | ExerciseVariant | null,
       dayNumber?: number
     ) => {
       const numericFields: (keyof ProgramExercise)[] = [
@@ -149,6 +270,8 @@ export default function ProgramsScreen() {
       const finalValue: ProgramExercise[keyof ProgramExercise] =
         field === 'hasCustomisedSets'
           ? Boolean(value)
+          : field === 'variant'
+          ? (value as ExerciseVariant | null)
           : numericFields.includes(field)
           ? String(value)
           : String(value);
@@ -160,7 +283,9 @@ export default function ProgramsScreen() {
               ? {
                   ...day,
                   exercises: day.exercises.map((ex) =>
-                    ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
+                    areExercisesEquivalent(ex, exerciseIdentity)
+                      ? { ...ex, [field]: finalValue }
+                      : ex
                   ),
                 }
               : day
@@ -169,7 +294,9 @@ export default function ProgramsScreen() {
       } else {
         setSelectedExercises((prev) =>
           prev.map((ex) =>
-            ex.name === exerciseName ? { ...ex, [field]: finalValue } : ex
+            areExercisesEquivalent(ex, exerciseIdentity)
+              ? { ...ex, [field]: finalValue }
+              : ex
           )
         );
       }
@@ -765,11 +892,16 @@ export default function ProgramsScreen() {
               <View className="mt-2">
                 {day.exercises.map((exercise, index) => (
                   <ExerciseConfigCard
-                    key={`${day.dayNumber}-${exercise.name}`}
+                    key={`${day.dayNumber}-${buildExerciseIdentity(exercise)}`}
                     exercise={exercise}
                     index={index}
                     onUpdate={(field, value) =>
-                      updateExerciseField(exercise.name, field, value, day.dayNumber)
+                      updateExerciseField(
+                        { name: exercise.name, variant: exercise.variant ?? null },
+                        field,
+                        value,
+                        day.dayNumber
+                      )
                     }
                   />
                 ))}
@@ -895,7 +1027,7 @@ export default function ProgramsScreen() {
               <View className="mt-2 gap-3">
                 {day.exercises.map((exercise, index) => (
                   <View
-                    key={exercise.name}
+                    key={`${exercise.name}-${index}`}
                     className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600"
                   >
                     <View className="flex-row items-center gap-2 mb-2">
@@ -905,7 +1037,7 @@ export default function ProgramsScreen() {
                         </ThemedText>
                       </View>
                       <ThemedText className="font-bold text-base flex-1">
-                        {exercise.name}
+                        {formatExerciseDisplayName(exercise.name, exercise.variant)}
                       </ThemedText>
                     </View>
 
