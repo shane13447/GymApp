@@ -49,13 +49,6 @@ const cloneExercise = (exercise: ProgramExercise): ProgramExercise => ({
   aliases: exercise.aliases ? [...exercise.aliases] : undefined,
 });
 
-const VARIANT_FIELD_LABELS: Record<NonNullable<ExerciseVariantOption['field']>, string> = {
-  angle: 'Angle',
-  grip: 'Grip',
-  posture: 'Posture',
-  laterality: 'Laterality',
-};
-
 const parseVariantOption = (rawOption: unknown): ExerciseVariantOption | null => {
   if (!rawOption || typeof rawOption !== 'object') {
     return null;
