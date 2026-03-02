@@ -8,7 +8,7 @@ import { Pressable, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import type { Exercise, ProgramExercise } from '@/types';
+import type { Exercise, ExerciseVariant, ProgramExercise } from '@/types';
 import {
   EXERCISE_DEFAULTS,
   COMPOUND_CATEGORIES,
@@ -314,8 +314,12 @@ export const ExerciseSelector = memo(function ExerciseSelector({
 /**
  * Create a ProgramExercise from a base Exercise with defaults
  */
-export const createProgramExercise = (exercise: Exercise): ProgramExercise => ({
+export const createProgramExercise = (
+  exercise: Exercise,
+  variant: ExerciseVariant | null = null
+): ProgramExercise => ({
   ...exercise,
+  variant,
   weight: EXERCISE_DEFAULTS.weight,
   reps: EXERCISE_DEFAULTS.reps,
   sets: EXERCISE_DEFAULTS.sets,
