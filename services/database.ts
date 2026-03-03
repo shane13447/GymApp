@@ -1248,8 +1248,8 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
         const muscleGroups = exercise.muscle_groups_worked ?? [];
         await database.runAsync(
           `INSERT INTO queue_exercises
-           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.id,
             exercise.name ?? '',
@@ -1262,6 +1262,7 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
             parseInt(exercise.restTime, 10) || 180,
             parseFloat(exercise.progression) || 0,
             exercise.hasCustomisedSets ? 1 : 0,
+            serializeVariant(exercise.variant),
             j,
           ]
         );
@@ -1301,8 +1302,8 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises
-       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         exercise.name ?? '',
@@ -1315,6 +1316,7 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
         parseInt(exercise.restTime, 10) || 180,
         parseFloat(exercise.progression) || 0,
         exercise.hasCustomisedSets ? 1 : 0,
+        serializeVariant(exercise.variant),
         j,
       ]
     );
@@ -1370,8 +1372,8 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
     const muscleGroups = exercise.muscle_groups_worked ?? [];
     await database.runAsync(
       `INSERT INTO queue_exercises
-       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         exercise.name ?? '',
@@ -1384,6 +1386,7 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
         parseInt(exercise.restTime, 10) || 180,
         parseFloat(exercise.progression) || 0,
         exercise.hasCustomisedSets ? 1 : 0,
+        serializeVariant(exercise.variant),
         j,
       ]
     );
@@ -1420,7 +1423,7 @@ async function applyProgressionToExercises(
   const exercisesWithProgression: ProgramExercise[] = [];
 
   for (const exercise of exercises) {
-    const lastWeight = await getLastLoggedWeight(exercise.name, programId);
+    const lastWeight = await getLastLoggedWeight(exercise.name, programId, exercise.variant);
     const newWeight = calculateProgressedWeight(exercise, lastWeight);
 
     exercisesWithProgression.push({
