@@ -436,7 +436,7 @@ export default function ProfileScreen() {
         {/* App Info */}
         <ThemedView className="gap-2 mt-4 items-center">
           <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-            Shane's Gym App v1.0.0
+            Shane&apos;s Gym App v1.0.0
           </ThemedText>
           <ThemedText className="text-xs text-gray-400 dark:text-gray-500">
             Powered by on-device AI
