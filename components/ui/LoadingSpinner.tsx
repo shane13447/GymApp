@@ -19,7 +19,7 @@ export function LoadingSpinner({
   size = 'large',
   fullScreen = false,
   style,
-}: LoadingSpinnerProps) {
+}: LoadingSpinnerProps): React.JSX.Element {
   const content = (
     <View className="items-center gap-3" style={style}>
       <ActivityIndicator size={size} />
