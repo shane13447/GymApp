@@ -60,7 +60,7 @@ export default function ActiveWorkout() {
   // Load programs on mount
   useEffect(() => {
     loadPrograms();
-  }, []);
+  }, [loadPrograms]);
 
   // Reload queue when screen comes into focus
   useFocusEffect(
@@ -79,14 +79,14 @@ export default function ActiveWorkout() {
       setIsLoadedFromQueue(true);
       loadWorkoutFromQueue();
     }
-  }, [workoutQueue, programs]);
+  }, [workoutQueue, programs, loadWorkoutFromQueue]);
 
   // Initialize workout queue when program changes
   useEffect(() => {
     if (currentProgram && workoutQueue.length === 0 && !queueLoadedRef.current) {
       initializeWorkoutQueue(currentProgram);
     }
-  }, [currentProgram, workoutQueue.length]);
+  }, [currentProgram, workoutQueue.length, initializeWorkoutQueue]);
 
   // Initialize workout exercises when program or day changes
   useEffect(() => {
@@ -99,7 +99,14 @@ export default function ActiveWorkout() {
     ) {
       initializeWorkoutExercises();
     }
-  }, [currentProgram, selectedDayIndex, loadingFromQueue, isLoadedFromQueue, workoutQueue.length]);
+  }, [
+    currentProgram,
+    selectedDayIndex,
+    loadingFromQueue,
+    isLoadedFromQueue,
+    workoutQueue.length,
+    initializeWorkoutExercises,
+  ]);
 
   const reloadQueue = async () => {
     try {
@@ -122,7 +129,7 @@ export default function ActiveWorkout() {
     }
   };
 
-  const loadPrograms = async () => {
+  const loadPrograms = useCallback(async () => {
     try {
       setIsLoading(true);
       const loadedPrograms = await db.getAllPrograms();
@@ -152,9 +159,54 @@ export default function ActiveWorkout() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
-  const initializeWorkoutExercises = async () => {
+  const calculateAutoWeight = useCallback((lastWeight: number | null, progression: number): number => {
+    if (lastWeight === null) return 0;
+
+    // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
+    // Without this, "60" + "0" would give "600" instead of 60
+    const numLastWeight = Number(lastWeight);
+    const numProgression = Number(progression);
+
+    if (!numProgression || numProgression === 0) return numLastWeight;
+
+    try {
+      const newWeight = numLastWeight + numProgression;
+      return isNaN(newWeight) ? numLastWeight : newWeight;
+    } catch (error) {
+      console.error('Error calculating auto weight:', error);
+      return numLastWeight;
+    }
+  }, []);
+
+  const applyProgressionToExercises = useCallback(async (
+    exercises: ProgramExercise[],
+    programId: string
+  ): Promise<ProgramExercise[]> => {
+    try {
+      const progressedExercises: ProgramExercise[] = await Promise.all(
+        exercises.map(async (ex) => {
+          const lastWeight = await db.getLastLoggedWeight(ex.name, programId, ex.variant);
+          const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          // RUNTIME TYPE SAFETY: Ensure numeric fallback
+          const numExWeight = Number(ex.weight) || 0;
+
+          return {
+            ...ex,
+            weight: progressedWeight || numExWeight,
+          };
+        })
+      );
+
+      return progressedExercises;
+    } catch (error) {
+      console.error('Error applying progression to exercises:', error);
+      return exercises;
+    }
+  }, [calculateAutoWeight]);
+
+  const initializeWorkoutExercises = useCallback(async () => {
     if (!currentProgram || currentProgram.workoutDays.length === 0) return;
 
     const selectedDay = currentProgram.workoutDays[selectedDayIndex];
@@ -191,7 +243,7 @@ export default function ActiveWorkout() {
       if (dayLoadRequestRef.current !== thisRequestId) {
         return;
       }
-      
+
       console.error('Error initializing workout exercises:', error);
       const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
         ...ex,
@@ -202,67 +254,58 @@ export default function ActiveWorkout() {
       }));
       setWorkoutExercises(initialExercises);
     }
-  };
+  }, [currentProgram, selectedDayIndex, calculateAutoWeight]);
 
-  const getDayNumberAtIndex = useCallback(
-    (dayIndex: number) => currentProgram?.workoutDays[dayIndex]?.dayNumber ?? dayIndex + 1,
-    [currentProgram]
-  );
-
-  const buildExerciseInstanceKey = useCallback(
-    (exerciseName: string, exerciseIndex: number, dayNumber: number) => {
-      const programId = currentProgram?.id ?? 'no-program';
-      return `${programId}:d${dayNumber}:i${exerciseIndex}:${exerciseName}`;
-    },
-    [currentProgram?.id]
-  );
-
-  const calculateAutoWeight = (lastWeight: number | null, progression: number): number => {
-    if (lastWeight === null) return 0;
-
-    // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
-    // Without this, "60" + "0" would give "600" instead of 60
-    const numLastWeight = Number(lastWeight);
-    const numProgression = Number(progression);
-
-    if (!numProgression || numProgression === 0) return numLastWeight;
+  const initializeWorkoutExercisesFromQueue = useCallback(async (queueItem: WorkoutQueueItem) => {
+    // STALE LOAD FIX: Increment and capture request ID
+    // This can race with handleDayChange if user switches days immediately after queue load
+    dayLoadRequestRef.current += 1;
+    const thisRequestId = dayLoadRequestRef.current;
 
     try {
-      const newWeight = numLastWeight + numProgression;
-      return isNaN(newWeight) ? numLastWeight : newWeight;
-    } catch (error) {
-      console.error('Error calculating auto weight:', error);
-      return numLastWeight;
-    }
-  };
+      const initialExercises: WorkoutExercise[] = await Promise.all(
+        queueItem.exercises.map(async (ex) => {
+          let finalWeight = ex.weight || 0;
 
-  const applyProgressionToExercises = async (
-    exercises: ProgramExercise[],
-    programId: string
-  ): Promise<ProgramExercise[]> => {
-    try {
-      const progressedExercises: ProgramExercise[] = await Promise.all(
-        exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, programId, ex.variant);
-          const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
-          // RUNTIME TYPE SAFETY: Ensure numeric fallback
-          const numExWeight = Number(ex.weight) || 0;
+          if (!finalWeight) {
+            const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId, ex.variant);
+            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || 0;
+          }
 
           return {
             ...ex,
-            weight: progressedWeight || numExWeight,
+            loggedWeight: finalWeight,
+            loggedReps: 0,
+            loggedSetWeights: [],
+            loggedSetReps: [],
           };
         })
       );
 
-      return progressedExercises;
-    } catch (error) {
-      console.error('Error applying progression to exercises:', error);
-      return exercises;
-    }
-  };
+      // STALE LOAD FIX: Discard if a newer request has started
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
 
-  const loadWorkoutFromQueue = async () => {
+      setWorkoutExercises(initialExercises);
+    } catch (error) {
+      if (dayLoadRequestRef.current !== thisRequestId) {
+        return;
+      }
+
+      console.error('Error initializing workout exercises from queue:', error);
+      const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
+        ...ex,
+        loggedWeight: Number(ex.weight) || 0,
+        loggedReps: 0,
+        loggedSetWeights: [],
+        loggedSetReps: [],
+      }));
+      setWorkoutExercises(initialExercises);
+    }
+  }, [calculateAutoWeight]);
+
+  const loadWorkoutFromQueue = useCallback(async () => {
     try {
       if (workoutQueue.length === 0) {
         Alert.alert('No Workout Queue', 'No workouts in queue. Please create a program first.', [
@@ -301,7 +344,7 @@ export default function ActiveWorkout() {
 
       setCurrentProgram(program);
       setSelectedDayIndex(dayIndex);
-      
+
       // Only update the preference (don't regenerate queue since we're loading FROM it)
       // Use updateUserPreferences directly to avoid triggering generateWorkoutQueue
       await db.updateUserPreferences({ currentProgramId: program.id });
@@ -314,58 +357,22 @@ export default function ActiveWorkout() {
       setLoadingFromQueue(false);
       Alert.alert('Error', 'Failed to load workout from queue');
     }
-  };
+  }, [workoutQueue, programs, router, initializeWorkoutExercisesFromQueue]);
 
-  const initializeWorkoutExercisesFromQueue = async (queueItem: WorkoutQueueItem) => {
-    // STALE LOAD FIX: Increment and capture request ID
-    // This can race with handleDayChange if user switches days immediately after queue load
-    dayLoadRequestRef.current += 1;
-    const thisRequestId = dayLoadRequestRef.current;
+  const getDayNumberAtIndex = useCallback(
+    (dayIndex: number) => currentProgram?.workoutDays[dayIndex]?.dayNumber ?? dayIndex + 1,
+    [currentProgram]
+  );
 
-    try {
-      const initialExercises: WorkoutExercise[] = await Promise.all(
-        queueItem.exercises.map(async (ex) => {
-          let finalWeight = ex.weight || 0;
+  const buildExerciseInstanceKey = useCallback(
+    (exerciseName: string, exerciseIndex: number, dayNumber: number) => {
+      const programId = currentProgram?.id ?? 'no-program';
+      return `${programId}:d${dayNumber}:i${exerciseIndex}:${exerciseName}`;
+    },
+    [currentProgram?.id]
+  );
 
-          if (!finalWeight) {
-            const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId, ex.variant);
-            finalWeight = calculateAutoWeight(lastWeight, ex.progression) || 0;
-          }
-
-          return {
-            ...ex,
-            loggedWeight: finalWeight,
-            loggedReps: 0,
-            loggedSetWeights: [],
-            loggedSetReps: [],
-          };
-        })
-      );
-
-      // STALE LOAD FIX: Discard if a newer request has started
-      if (dayLoadRequestRef.current !== thisRequestId) {
-        return;
-      }
-
-      setWorkoutExercises(initialExercises);
-    } catch (error) {
-      if (dayLoadRequestRef.current !== thisRequestId) {
-        return;
-      }
-      
-      console.error('Error initializing workout exercises from queue:', error);
-      const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
-        ...ex,
-        loggedWeight: Number(ex.weight) || 0,
-        loggedReps: 0,
-        loggedSetWeights: [],
-        loggedSetReps: [],
-      }));
-      setWorkoutExercises(initialExercises);
-    }
-  };
-
-  const initializeWorkoutQueue = async (program: Program) => {
+  const initializeWorkoutQueue = useCallback(async (program: Program) => {
     try {
       const existingQueue = await db.getWorkoutQueue();
 
@@ -403,7 +410,7 @@ export default function ActiveWorkout() {
     } catch (error) {
       console.error('Error initializing workout queue:', error);
     }
-  };
+  }, [applyProgressionToExercises]);
 
   const updateLoggedValue = useCallback(
     (
@@ -602,7 +609,7 @@ export default function ActiveWorkout() {
       }));
       setWorkoutExercises(initialExercises);
     }
-  }, [currentProgram, getDayNumberAtIndex, selectedDayIndex]);
+  }, [currentProgram, getDayNumberAtIndex, selectedDayIndex, calculateAutoWeight]);
 
   const saveWorkout = async () => {
     if (!currentProgram) return;
