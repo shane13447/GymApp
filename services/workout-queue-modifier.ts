@@ -641,11 +641,11 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 </critical>
 
 <examples>
-IN: Q0:D2:A|10|8-10|3,B|5|12|4;Q1:D3:C|20|6|3
+IN: Q0:D2:A|10|8|3,B|5|12|4;Q1:D3:C|20|6|3
 REQ: change A weight to 25
-OUT: Q0:D2:A|25|8-10|3,B|5|12|4;Q1:D3:C|20|6|3
+OUT: Q0:D2:A|25|8|3,B|5|12|4;Q1:D3:C|20|6|3
 
-IN: Q0:D2:A|0|10-15|3,B|5|15|3
+IN: Q0:D2:A|0|10|3,B|5|15|3
 REQ: change A reps to 20
 OUT: Q0:D2:A|0|20|3,B|5|15|3
 
@@ -762,6 +762,11 @@ export const parseQueueFormatResponse = (
         const reps = parts[2]?.trim() || '8';
         const sets = parts[3]?.trim() || '3';
         const variantToken = parts[4]?.trim() || '';
+
+        if (!/^\d+$/.test(reps) || !/^\d+$/.test(sets)) {
+          console.warn(`[QUEUE FORMAT] Invalid reps/sets token for "${rawNameToken}": reps="${reps}", sets="${sets}"`);
+          return null;
+        }
 
         const { name: parsedName, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
         const variantLabel = variantToken || inlineVariantLabel || '';
