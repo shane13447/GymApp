@@ -20,7 +20,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatExerciseDisplayName } from '@/lib/utils';
-import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';import * as db from '@/services/database';
+import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import * as db from '@/services/database';
 import type {
   Exercise,
   ExerciseVariant,

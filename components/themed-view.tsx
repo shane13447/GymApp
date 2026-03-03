@@ -9,7 +9,13 @@ export type ThemedViewProps = ViewProps & {
   className?: string;
 };
 
-export function ThemedView({ style, lightColor, darkColor, className, ...otherProps }: ThemedViewProps) {
+export function ThemedView({
+  style,
+  lightColor,
+  darkColor,
+  className,
+  ...otherProps
+}: ThemedViewProps): JSX.Element {
   const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'background');
 
   return <View className={cn(className)} style={[{ backgroundColor }, style]} {...otherProps} />;
