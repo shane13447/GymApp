@@ -4,8 +4,9 @@
  */
 
 import exercisesData from '@/data/exerciseSelection.json';
+import { getExerciseVariantLabel } from '@/lib/utils';
 import * as db from '@/services/database';
-import type { ProgramExercise, WorkoutQueueItem } from '@/types';
+import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise, WorkoutQueueItem } from '@/types';
 
 // =============================================================================
 // EXERCISE DATABASE - Uses exerciseSelection.json
@@ -16,9 +17,185 @@ interface ExerciseData {
   equipment: string;
   muscle_groups_worked: string[];
   isCompound: boolean;
+  variantOptions?: ExerciseVariantOption[];
+  aliases?: string[];
 }
 
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
+
+const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
+  'angle',
+  'grip',
+  'posture',
+  'laterality',
+];
+
+const normaliseText = (value: string): string => value.trim().toLowerCase();
+
+const parseVariantLabel = (value: string): ExerciseVariant | null => {
+  const segments = value
+    .split(/[\/,]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const variant: ExerciseVariant = {};
+
+  for (const segment of segments) {
+    const lower = normaliseText(segment);
+    if (lower.includes('incline')) {
+      variant.angle = segment;
+      continue;
+    }
+    if (lower.includes('decline')) {
+      variant.angle = segment;
+      continue;
+    }
+    if (lower.includes('neutral') || lower.includes('supinated') || lower.includes('pronated') || lower.includes('reverse')) {
+      variant.grip = segment;
+      continue;
+    }
+    if (lower.includes('seated') || lower.includes('standing') || lower.includes('supported') || lower.includes('bent')) {
+      variant.posture = segment;
+      continue;
+    }
+    if (lower.includes('one-arm') || lower.includes('single arm') || lower.includes('one leg') || lower.includes('single leg')) {
+      variant.laterality = segment;
+      continue;
+    }
+
+    const extras = variant.extras ?? [];
+    extras.push(segment);
+    variant.extras = extras;
+  }
+
+  return Object.keys(variant).length > 0 ? variant : null;
+};
+
+const serialiseVariantForPrompt = (variant?: ExerciseVariant | null): string => {
+  const label = getExerciseVariantLabel(variant).trim();
+  if (!label) {
+    return '';
+  }
+
+  return label.replace(/,/g, '/');
+};
+
+const withVariantDisplayName = (exercise: ProgramExercise): string => {
+  const variantLabel = serialiseVariantForPrompt(exercise.variant);
+  return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
+};
+
+const parseVariantFromToken = (variantToken: string): ExerciseVariant | null => {
+  const value = variantToken.trim();
+  if (!value) {
+    return null;
+  }
+
+  return parseVariantLabel(value);
+};
+
+const variantValuesFromOptions = (exerciseData?: ExerciseData): Set<string> => {
+  const values = new Set<string>();
+  if (!exerciseData?.variantOptions) {
+    return values;
+  }
+
+  for (const option of exerciseData.variantOptions) {
+    if (option.value) {
+      values.add(normaliseText(option.value));
+    }
+    values.add(normaliseText(option.label));
+    for (const alias of option.aliases ?? []) {
+      values.add(normaliseText(alias));
+    }
+  }
+
+  return values;
+};
+
+const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> => {
+  const values: string[] = [];
+
+  for (const field of VARIANT_FIELD_ORDER) {
+    const fieldValue = variant?.[field];
+    if (fieldValue) {
+      values.push(normaliseText(fieldValue));
+    }
+  }
+
+  for (const extra of variant?.extras ?? []) {
+    values.push(normaliseText(extra));
+  }
+
+  return new Set(values.filter(Boolean));
+};
+
+const isVariantValidForExercise = (
+  exerciseData: ExerciseData | null,
+  variant?: ExerciseVariant | null
+): boolean => {
+  if (!variant) {
+    return true;
+  }
+
+  const allowedValues = variantValuesFromOptions(exerciseData ?? undefined);
+  if (allowedValues.size === 0) {
+    return false;
+  }
+
+  const variantValues = variantToComparableSet(variant);
+  if (variantValues.size === 0) {
+    return true;
+  }
+
+  for (const value of variantValues) {
+    if (!allowedValues.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const normaliseVariantAgainstOptions = (
+  exerciseData: ExerciseData | null,
+  variant?: ExerciseVariant | null,
+  fallback?: ExerciseVariant | null
+): ExerciseVariant | null => {
+  if (!variant) {
+    return null;
+  }
+
+  if (isVariantValidForExercise(exerciseData, variant)) {
+    return variant;
+  }
+
+  return fallback ?? null;
+};
+
+const getExerciseIdentity = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string =>
+  JSON.stringify({
+    name: exercise.name,
+    variant: exercise.variant ?? null,
+  });
+
+const splitNameAndInlineVariant = (
+  value: string
+): { name: string; variantLabel: string | null } => {
+  const match = value.trim().match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (!match) {
+    return { name: value.trim(), variantLabel: null };
+  }
+
+  return {
+    name: match[1].trim(),
+    variantLabel: match[2].trim(),
+  };
+};
 
 /**
  * Find exercise by name with fuzzy matching
@@ -448,8 +625,8 @@ IronLogic: Gym Queue Modifier. Output TOON only. No text.
 
 <format>
 QUEUE: Q0:D<day>:exercises;Q1:D<day>:exercises;Q2:D<day>:exercises
-EXERCISE: name|kg|reps|sets
-Columns: 1=name 2=kg 3=reps 4=sets
+EXERCISE: name|kg|reps|sets|variant
+Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 </format>
 
 <critical>
@@ -459,6 +636,7 @@ Columns: 1=name 2=kg 3=reps 4=sets
   * "weight" = column 2 (kg)
   * "reps" = column 3
   * "sets" = column 4
+  * "variant" = column 5
 - Preserve exact values in unchanged columns
 </critical>
 
@@ -493,8 +671,9 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
     .map((item, queueIndex) => {
       const exercises = item.exercises
         .map((ex) => {
-          // Use full exercise names
-          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}`;
+          // Use full exercise names and optional variant metadata
+          const variantLabel = serialiseVariantForPrompt(ex.variant);
+          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}|${variantLabel}`;
         })
         .join(',');
     return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
@@ -578,19 +757,25 @@ export const parseQueueFormatResponse = (
         const parts = exString.split(separator);
         if (parts.length < 4) continue;
 
-        const exerciseName = parts[0].trim();
+        const rawNameToken = parts[0]?.trim() || '';
         const weight = parts[1]?.trim() || '0';
         const reps = parts[2]?.trim() || '8';
         const sets = parts[3]?.trim() || '3';
+        const variantToken = parts[4]?.trim() || '';
+
+        const { name: parsedName, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
+        const variantLabel = variantToken || inlineVariantLabel || '';
+        const parsedVariant = parseVariantFromToken(variantLabel);
 
         const originalEx = originalItem.exercises.find((ex) => {
-          return ex.name.toLowerCase() === exerciseName.toLowerCase() ||
-                 ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
-                 exerciseName.toLowerCase().includes(ex.name.toLowerCase());
+          return ex.name.toLowerCase() === parsedName.toLowerCase() ||
+                 ex.name.toLowerCase().includes(parsedName.toLowerCase()) ||
+                 parsedName.toLowerCase().includes(ex.name.toLowerCase());
         });
 
         // Try to find the exercise by full name or fuzzy match
-        const exerciseData = findExerciseByName(exerciseName);
+        const exerciseData = findExerciseByName(parsedName);
+        const safeVariant = normaliseVariantAgainstOptions(exerciseData, parsedVariant, originalEx?.variant ?? null);
 
         if (exerciseData) {
           exercises.push({
@@ -598,6 +783,9 @@ export const parseQueueFormatResponse = (
             equipment: exerciseData.equipment,
             muscle_groups_worked: exerciseData.muscle_groups_worked,
             isCompound: exerciseData.isCompound,
+            variantOptions: exerciseData.variantOptions,
+            aliases: exerciseData.aliases,
+            variant: safeVariant,
             weight,
             reps,
             sets,
@@ -606,15 +794,22 @@ export const parseQueueFormatResponse = (
             hasCustomisedSets: originalEx?.hasCustomisedSets ?? false,
           });
         } else if (originalEx) {
-          exercises.push({ ...originalEx, weight, reps, sets });
+          exercises.push({
+            ...originalEx,
+            variant: safeVariant ?? originalEx.variant ?? null,
+            weight,
+            reps,
+            sets,
+          });
         } else {
           // Warn about unknown exercise name
-          console.warn(`[QUEUE FORMAT] Unknown exercise: "${exerciseName}" - using as-is. This may indicate an LLM hallucination.`);
+          console.warn(`[QUEUE FORMAT] Unknown exercise: "${parsedName}" - using as-is. This may indicate an LLM hallucination.`);
           exercises.push({
-            name: exerciseName,
+            name: parsedName,
             equipment: '',
             muscle_groups_worked: [],
             isCompound: false, // Default to isolation for unknown exercises
+            variant: parsedVariant,
             weight,
             reps,
             sets,
@@ -719,7 +914,16 @@ export const repairQueueWithIntent = (
   const mentionsReps = requestLower.includes('rep');
   const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
   const mentionsSets = requestLower.includes('set');
-  const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets;
+  const mentionsVariant =
+    requestLower.includes('variant') ||
+    requestLower.includes('grip') ||
+    requestLower.includes('incline') ||
+    requestLower.includes('decline') ||
+    requestLower.includes('seated') ||
+    requestLower.includes('standing') ||
+    requestLower.includes('one-arm') ||
+    requestLower.includes('single-arm');
+  const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets || mentionsVariant;
 
   const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
   const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
@@ -739,13 +943,17 @@ export const repairQueueWithIntent = (
       if (!originalEx) return finalEx;
 
       finalEx.hasCustomisedSets = originalEx.hasCustomisedSets;
+      finalEx.variant = originalEx.variant ?? null;
 
       // Check if this exercise was targeted
-      const isTargeted = targetedExerciseNames.some(targetName => 
+      const isTargeted = targetedExerciseNames.some(targetName =>
         targetName === originalEx.name ||
         getSimilarity(targetName, originalEx.name) > 0.8
       ) || requestLower.includes(ex.name.toLowerCase());
-      
+
+      const requestedVariant = parseVariantFromToken(userPrompt);
+      const expectedVariant = mentionsVariant ? requestedVariant : null;
+
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
       if (isTargeted) {
@@ -792,6 +1000,14 @@ export const repairQueueWithIntent = (
         } else if (hasExplicitColumnIntent && !mentionsSets && finalEx.sets !== originalEx.sets) {
           finalEx.sets = originalEx.sets;
         }
+
+        if (mentionsVariant) {
+          finalEx.variant = normaliseVariantAgainstOptions(
+            findExerciseByName(finalEx.name),
+            expectedVariant ?? finalEx.variant,
+            originalEx.variant ?? null
+          );
+        }
       } else {
         // Not targeted - restore any accidental changes
         // Always restore non-targeted exercises (prevents accidental global edits).
@@ -807,6 +1023,7 @@ export const repairQueueWithIntent = (
           console.log(`[REPAIR] Restoring sets for ${originalEx.name}: ${finalEx.sets} -> ${originalEx.sets}`);
           finalEx.sets = originalEx.sets;
         }
+        finalEx.variant = originalEx.variant ?? null;
       }
       
       return finalEx;
@@ -851,7 +1068,7 @@ export const repairQueueWithIntent = (
 /**
  * Detect what type of change was requested from user input
  */
-type ChangeType = 'weight' | 'reps' | 'sets' | 'remove' | 'add' | 'unknown';
+type ChangeType = 'weight' | 'reps' | 'sets' | 'variant' | 'remove' | 'add' | 'unknown';
 
 export const detectRequestedChangeType = (request: string): ChangeType[] => {
   const lowerRequest = request.toLowerCase();
@@ -865,6 +1082,9 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   }
   if (lowerRequest.includes('set')) {
     types.push('sets');
+  }
+  if (lowerRequest.includes('variant') || lowerRequest.includes('grip') || lowerRequest.includes('incline') || lowerRequest.includes('decline')) {
+    types.push('variant');
   }
   if (includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS)) {
     types.push('remove');
@@ -1285,6 +1505,14 @@ export const repairQueue = (
 // =============================================================================
 
 export interface ProposedChanges {
+  variantChanges: Array<{
+    queueItemId: string;
+    queueItemName: string;
+    dayNumber: number;
+    exerciseName: string;
+    oldVariant: string;
+    newVariant: string;
+  }>;
   weightChanges: Array<{
   queueItemId: string;
     queueItemName: string;
@@ -1341,7 +1569,7 @@ export interface ProposedChanges {
 // =============================================================================
 
 export interface QueueDifference {
-  type: 'weight_change' | 'reps_change' | 'sets_change' | 'removed' | 'added' | 'modified' | 'exercise_swap';
+  type: 'variant_change' | 'weight_change' | 'reps_change' | 'sets_change' | 'removed' | 'added' | 'modified' | 'exercise_swap';
   queueItemId: string;
   queueItemName: string;
   dayNumber: number;
@@ -1376,7 +1604,7 @@ export const compareWorkoutQueues = (
           queueItemId: oldItem.id,
           queueItemName: oldItem.programName,
           dayNumber: oldItem.dayNumber,
-          exerciseName: exercise.name,
+          exerciseName: withVariantDisplayName(exercise),
           oldExercise: exercise,
         });
       }
@@ -1384,27 +1612,28 @@ export const compareWorkoutQueues = (
     }
     
     const oldExercisesMap = new Map(
-      oldItem.exercises.map((ex, idx) => [ex.name, { exercise: ex, index: idx }])
+      oldItem.exercises.map((ex, idx) => [getExerciseIdentity(ex), { exercise: ex, index: idx }])
     );
     const newExercisesMap = new Map(
-      newItem.exercises.map((ex, idx) => [ex.name, { exercise: ex, index: idx }])
+      newItem.exercises.map((ex, idx) => [getExerciseIdentity(ex), { exercise: ex, index: idx }])
     );
 
-    for (const [exerciseName, { exercise: oldExercise }] of oldExercisesMap) {
-      if (!newExercisesMap.has(exerciseName)) {
+    for (const [exerciseIdentity, { exercise: oldExercise }] of oldExercisesMap) {
+      if (!newExercisesMap.has(exerciseIdentity)) {
         differences.push({
           type: 'removed',
           queueItemId: oldItem.id,
           queueItemName: oldItem.programName,
           dayNumber: oldItem.dayNumber,
-          exerciseName,
+          exerciseName: withVariantDisplayName(oldExercise),
           oldExercise,
         });
       }
     }
-    
-    for (const [exerciseName, { exercise: newExercise }] of newExercisesMap) {
-      const oldExerciseData = oldExercisesMap.get(exerciseName);
+
+    for (const [exerciseIdentity, { exercise: newExercise }] of newExercisesMap) {
+      const oldExerciseData = oldExercisesMap.get(exerciseIdentity);
+      const exerciseName = withVariantDisplayName(newExercise);
       
       if (!oldExerciseData) {
         differences.push({
@@ -1418,6 +1647,20 @@ export const compareWorkoutQueues = (
       } else {
         const oldExercise = oldExerciseData.exercise;
         
+        // Check for variant changes
+        if (getExerciseVariantLabel(oldExercise.variant) !== getExerciseVariantLabel(newExercise.variant)) {
+          differences.push({
+            type: 'variant_change',
+            queueItemId: oldItem.id,
+            queueItemName: oldItem.programName,
+            dayNumber: oldItem.dayNumber,
+            exerciseName,
+            oldExercise,
+            newExercise,
+            details: `${getExerciseVariantLabel(oldExercise.variant)} -> ${getExerciseVariantLabel(newExercise.variant)}`,
+          });
+        }
+
         // Check for weight changes
         if (oldExercise.weight !== newExercise.weight) {
           differences.push({
@@ -1474,7 +1717,7 @@ export const compareWorkoutQueues = (
           queueItemId: newItem.id,
           queueItemName: newItem.programName,
           dayNumber: newItem.dayNumber,
-          exerciseName: exercise.name,
+          exerciseName: withVariantDisplayName(exercise),
           newExercise: exercise,
         });
       }
@@ -1485,6 +1728,7 @@ export const compareWorkoutQueues = (
 };
 
 export const differencesToProposedChanges = (differences: QueueDifference[]): ProposedChanges => {
+  const variantChanges: ProposedChanges['variantChanges'] = [];
   const weightChanges: ProposedChanges['weightChanges'] = [];
   const repsChanges: ProposedChanges['repsChanges'] = [];
   const setsChanges: ProposedChanges['setsChanges'] = [];
@@ -1494,6 +1738,17 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
   
   for (const diff of differences) {
     switch (diff.type) {
+      case 'variant_change':
+        variantChanges.push({
+          queueItemId: diff.queueItemId,
+          queueItemName: diff.queueItemName,
+          dayNumber: diff.dayNumber,
+          exerciseName: diff.exerciseName || '',
+          oldVariant: getExerciseVariantLabel(diff.oldExercise?.variant),
+          newVariant: getExerciseVariantLabel(diff.newExercise?.variant),
+        });
+        break;
+
       case 'weight_change':
         weightChanges.push({
           queueItemId: diff.queueItemId,
@@ -1567,7 +1822,7 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
     }
   }
 
-  return { weightChanges, repsChanges, setsChanges, removals, additions, swaps };
+  return { variantChanges, weightChanges, repsChanges, setsChanges, removals, additions, swaps };
 };
 
 // =============================================================================
@@ -1668,6 +1923,22 @@ export const validateChanges = (
     }
   }
 
+  // Check for unexpected variant changes
+  const mentionsVariant =
+    requestLower.includes('variant') ||
+    requestLower.includes('grip') ||
+    requestLower.includes('incline') ||
+    requestLower.includes('decline') ||
+    requestLower.includes('seated') ||
+    requestLower.includes('standing');
+  if (!mentionsVariant) {
+    const variantChanges = differences.filter(d => d.type === 'variant_change');
+    if (variantChanges.length > 0) {
+      const variantNames = variantChanges.map(change => change.exerciseName).join(', ');
+      warnings.push(`Unexpected variant change(s): ${variantNames}. Variants were changed but you didn't request variant updates.`);
+    }
+  }
+
   // Check for unexpected additions (if user did not request add-like action)
   if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS)) {
     const additions = differences.filter(d => d.type === 'added');
@@ -1682,6 +1953,7 @@ export const validateChanges = (
     warnings,
   };
 };
+
 
 // =============================================================================
 // DATABASE OPERATIONS (using SQLite)

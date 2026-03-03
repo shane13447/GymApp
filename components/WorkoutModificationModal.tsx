@@ -19,6 +19,7 @@ export default function WorkoutModificationModal({
   if (!proposedChanges) return null;
 
   const hasChanges =
+    proposedChanges.variantChanges.length > 0 ||
     proposedChanges.weightChanges.length > 0 ||
     proposedChanges.repsChanges.length > 0 ||
     proposedChanges.setsChanges.length > 0 ||
@@ -51,6 +52,35 @@ export default function WorkoutModificationModal({
             </ThemedView>
           ) : (
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={true}>
+              {/* Variant Changes */}
+              {proposedChanges.variantChanges.length > 0 && (
+                <ThemedView style={styles.section}>
+                  <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    Variant Changes ({proposedChanges.variantChanges.length})
+                  </ThemedText>
+                  {proposedChanges.variantChanges.map((change, index) => (
+                    <ThemedView
+                      key={index}
+                      style={styles.changeItem}
+                      lightColor="#f3e5f5"
+                      darkColor="#4a148c"
+                    >
+                      <ThemedText style={styles.exerciseName}>{change.exerciseName}</ThemedText>
+                      <ThemedText style={styles.queueInfo}>
+                        {change.queueItemName} - Day {change.dayNumber}
+                      </ThemedText>
+                      <View style={styles.weightChangeRow}>
+                        <ThemedText style={styles.weightLabel}>Old:</ThemedText>
+                        <ThemedText style={styles.oldWeight}>{change.oldVariant || 'None'}</ThemedText>
+                        <ThemedText style={styles.arrow}>→</ThemedText>
+                        <ThemedText style={styles.weightLabel}>New:</ThemedText>
+                        <ThemedText style={styles.newWeight}>{change.newVariant || 'None'}</ThemedText>
+                      </View>
+                    </ThemedView>
+                  ))}
+                </ThemedView>
+              )}
+
               {/* Weight Changes */}
               {proposedChanges.weightChanges.length > 0 && (
                 <ThemedView style={styles.section}>
