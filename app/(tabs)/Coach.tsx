@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
 import {
   buildCompressedPrompt,
@@ -751,7 +752,7 @@ export default function CoachScreen() {
             darkColor="#2a2a2a"
           >
             <ThemedText className="font-semibold text-sm" numberOfLines={1}>
-              {exercise.name}
+              {formatExerciseDisplayName(exercise.name, exercise.variant)}
             </ThemedText>
             <View className="flex-row flex-wrap gap-3 mt-1">
               <ThemedText className="text-xs opacity-70">Sets: {exercise.sets || 'N/A'}</ThemedText>
