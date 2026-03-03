@@ -17,6 +17,7 @@ import {
   sanitizeRestTime,
   shouldNotifyTimerComplete
 } from '@/lib/timer-utils';
+import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
 import type { WorkoutExercise } from '@/types';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -49,6 +50,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
 }: ExerciseLogCardProps) {
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
+  const displayExerciseName = formatExerciseDisplayName(exercise.name, exercise.variant);
   
   // =============================================================================
   // HARDENED KEY FIX: Timer context for DB operations
@@ -532,7 +534,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         <View className="bg-blue-500 w-8 h-8 rounded-full items-center justify-center">
           <ThemedText className="text-white font-bold text-sm">{index + 1}</ThemedText>
         </View>
-        <ThemedText className="font-bold text-lg flex-1">{exercise.name}</ThemedText>
+        <ThemedText className="font-bold text-lg flex-1">{displayExerciseName}</ThemedText>
       </View>
 
       {/* Equipment & Muscles */}
@@ -610,7 +612,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                         onChangeText={(value) => onUpdateLoggedSetWeight(setIndex, value)}
                         keyboardType="decimal-pad"
                         style={{ color: textColor }}
-                        accessibilityLabel={`Log weight for ${exercise.name} set ${setNumber}`}
+                        accessibilityLabel={`Log weight for ${displayExerciseName} set ${setNumber}`}
                       />
                     </View>
                     <View className="flex-1 gap-1">
@@ -623,7 +625,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                         onChangeText={(value) => onUpdateLoggedSetReps(setIndex, value)}
                         keyboardType="numeric"
                         style={{ color: textColor }}
-                        accessibilityLabel={`Log reps for ${exercise.name} set ${setNumber}`}
+                        accessibilityLabel={`Log reps for ${displayExerciseName} set ${setNumber}`}
                       />
                     </View>
                   </View>
@@ -643,7 +645,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                 onChangeText={onUpdateLoggedWeight}
                 keyboardType="decimal-pad"
                 style={{ color: textColor }}
-                accessibilityLabel={`Log weight for ${exercise.name}`}
+                accessibilityLabel={`Log weight for ${displayExerciseName}`}
               />
             </ThemedView>
 
@@ -657,7 +659,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                 onChangeText={onUpdateLoggedReps}
                 keyboardType="numeric"
                 style={{ color: textColor }}
-                accessibilityLabel={`Log reps for ${exercise.name}`}
+                accessibilityLabel={`Log reps for ${displayExerciseName}`}
               />
             </ThemedView>
           </>
