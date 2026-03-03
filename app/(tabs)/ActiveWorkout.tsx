@@ -57,56 +57,6 @@ export default function ActiveWorkout() {
   // check if the counter still matches. If not, discard the stale result.
   const dayLoadRequestRef = useRef(0);
 
-  // Load programs on mount
-  useEffect(() => {
-    loadPrograms();
-  }, [loadPrograms]);
-
-  // Reload queue when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      queueLoadedRef.current = false;
-      originalQueueRef.current = null; // Reset original queue on focus
-      setIsLoadedFromQueue(false);
-      reloadQueue();
-    }, [])
-  );
-
-  // Load from workout queue if available
-  useEffect(() => {
-    if (workoutQueue.length > 0 && programs.length > 0 && !queueLoadedRef.current) {
-      queueLoadedRef.current = true;
-      setIsLoadedFromQueue(true);
-      loadWorkoutFromQueue();
-    }
-  }, [workoutQueue, programs, loadWorkoutFromQueue]);
-
-  // Initialize workout queue when program changes
-  useEffect(() => {
-    if (currentProgram && workoutQueue.length === 0 && !queueLoadedRef.current) {
-      initializeWorkoutQueue(currentProgram);
-    }
-  }, [currentProgram, workoutQueue.length, initializeWorkoutQueue]);
-
-  // Initialize workout exercises when program or day changes
-  useEffect(() => {
-    if (
-      currentProgram &&
-      currentProgram.workoutDays.length > 0 &&
-      !loadingFromQueue &&
-      workoutQueue.length === 0 &&
-      !isLoadedFromQueue
-    ) {
-      initializeWorkoutExercises();
-    }
-  }, [
-    currentProgram,
-    selectedDayIndex,
-    loadingFromQueue,
-    isLoadedFromQueue,
-    workoutQueue.length,
-    initializeWorkoutExercises,
-  ]);
 
   const reloadQueue = async () => {
     try {
@@ -411,6 +361,57 @@ export default function ActiveWorkout() {
       console.error('Error initializing workout queue:', error);
     }
   }, [applyProgressionToExercises]);
+
+  // Load programs on mount
+  useEffect(() => {
+    loadPrograms();
+  }, [loadPrograms]);
+
+  // Reload queue when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      queueLoadedRef.current = false;
+      originalQueueRef.current = null; // Reset original queue on focus
+      setIsLoadedFromQueue(false);
+      reloadQueue();
+    }, [])
+  );
+
+  // Load from workout queue if available
+  useEffect(() => {
+    if (workoutQueue.length > 0 && programs.length > 0 && !queueLoadedRef.current) {
+      queueLoadedRef.current = true;
+      setIsLoadedFromQueue(true);
+      loadWorkoutFromQueue();
+    }
+  }, [workoutQueue, programs, loadWorkoutFromQueue]);
+
+  // Initialize workout queue when program changes
+  useEffect(() => {
+    if (currentProgram && workoutQueue.length === 0 && !queueLoadedRef.current) {
+      initializeWorkoutQueue(currentProgram);
+    }
+  }, [currentProgram, workoutQueue.length, initializeWorkoutQueue]);
+
+  // Initialize workout exercises when program or day changes
+  useEffect(() => {
+    if (
+      currentProgram &&
+      currentProgram.workoutDays.length > 0 &&
+      !loadingFromQueue &&
+      workoutQueue.length === 0 &&
+      !isLoadedFromQueue
+    ) {
+      initializeWorkoutExercises();
+    }
+  }, [
+    currentProgram,
+    selectedDayIndex,
+    loadingFromQueue,
+    isLoadedFromQueue,
+    workoutQueue.length,
+    initializeWorkoutExercises,
+  ]);
 
   const updateLoggedValue = useCallback(
     (
