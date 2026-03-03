@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
 import {
@@ -147,16 +148,26 @@ const extractProxyResponseText = (rawBody: string): string => {
   }
 };
 
-const callCoachProxy = async (proxyUrl: string, messages: CoachProxyMessage[]): Promise<string> => {
+const callCoachProxy = async (
+  proxyUrl: string,
+  messages: CoachProxyMessage[],
+  accessToken?: string | null
+): Promise<string> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), COACH_API_TIMEOUT_MS);
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (accessToken?.trim()) {
+      headers.Authorization = `Bearer ${accessToken.trim()}`;
+    }
+
     const response = await fetch(proxyUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ messages }),
       signal: controller.signal,
     });
@@ -444,6 +455,8 @@ export default function CoachScreen() {
     lastProcessedResponseRef.current = '';
 
     try {
+      const accessToken = await getSupabaseAccessToken();
+
       if (mode === CoachMode.ModifyWorkout) {
         if (workoutQueue.length === 0) {
           setError('No workout queue found. Please create a program and start a workout first.');
@@ -499,7 +512,7 @@ export default function CoachScreen() {
           { role: 'user', content: userPrompt },
         ];
 
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
         if (activeRequestIdRef.current !== requestId) {
           return;
         }
@@ -514,7 +527,7 @@ export default function CoachScreen() {
           { role: 'user', content: trimmedInput },
         ];
 
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
         if (activeRequestIdRef.current !== requestId) {
           return;
         }
@@ -582,6 +595,8 @@ export default function CoachScreen() {
       setIsGenerating(true);
 
       try {
+        const accessToken = await getSupabaseAccessToken();
+
         const {
           processedRequest,
           wasProcessed,
@@ -636,7 +651,7 @@ export default function CoachScreen() {
           { role: 'user', content: userPrompt },
         ];
 
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages);
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
         setProxyResponse(generatedText);
       } catch (err) {
         console.log(`[TEST ${index + 1}/${TEST_PROMPTS.length}] ${test.type}: ERROR - ${err}`);
