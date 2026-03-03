@@ -7,7 +7,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   TextInput,
   View,
@@ -15,7 +14,6 @@ import {
 import { SafeAreaView as SafeAreaContextView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { validatePositiveInteger } from '@/lib/validation';
 import type { MuscleGroupTarget } from '@/types';
@@ -58,7 +56,6 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
 
   // State for all muscle group inputs
   const [inputs, setInputs] = useState<Record<string, MuscleGroupInputState>>({});
-  const [hasChanges, setHasChanges] = useState(false);
 
   // Initialize inputs when modal opens or initialTargets change
   useEffect(() => {
@@ -74,7 +71,6 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
       });
       
       setInputs(initialInputs);
-      setHasChanges(false);
     }
   }, [visible, initialTargets, muscleGroups]);
 
@@ -86,7 +82,6 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
         error: null,
       },
     }));
-    setHasChanges(true);
   }, []);
 
   const handleInputBlur = useCallback((muscleGroup: string) => {
@@ -177,7 +172,6 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
       clearedInputs[group] = { value: '', error: null };
     });
     setInputs(clearedInputs);
-    setHasChanges(true);
   }, [muscleGroups]);
 
   return (
