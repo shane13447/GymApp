@@ -1,6 +1,13 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { corsHeadersForRequest, jsonResponse } from '../_shared/cors.ts';
+import {
+  evaluateAuthMode,
+  getBearerToken,
+  isValidToonResponse,
+  parseAuthModeFromValue,
+  type AuthMode,
+} from './logic.ts';
 
 type CoachProxyMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -16,9 +23,7 @@ type DeepSeekResponse = {
   }>;
 };
 
-type AuthMode = 'off' | 'optional' | 'required';
-
-const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-chat';
 const REQUEST_TIMEOUT_MS = 60000;
 
@@ -29,30 +34,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
 };
 
-const parseAuthMode = (): AuthMode => {
-  const modeRaw = Deno.env.get('COACH_PROXY_AUTH_MODE')?.trim().toLowerCase();
-  if (modeRaw === 'off' || modeRaw === 'optional' || modeRaw === 'required') {
-    return modeRaw;
-  }
-  return 'off';
-};
-
-const getBearerToken = (request: Request): string | null => {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
-    return null;
-  }
-
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return null;
-  }
-
-  const token = match[1].trim();
-  return token.length > 0 ? token : null;
-};
-
-const verifyAccessToken = async (token: string): Promise<boolean> => {
+export const verifyAccessToken = async (token: string): Promise<boolean> => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
 
@@ -77,23 +59,13 @@ const verifyAccessToken = async (token: string): Promise<boolean> => {
   }
 };
 
-const enforceAuthMode = async (request: Request, mode: AuthMode): Promise<Response | null> => {
-  if (mode === 'off') {
-    return null;
-  }
-
+export const enforceAuthMode = async (request: Request, mode: AuthMode): Promise<Response | null> => {
   const token = getBearerToken(request);
+  const tokenIsValid = token ? await verifyAccessToken(token) : null;
+  const decision = evaluateAuthMode(mode, token, tokenIsValid);
 
-  if (!token) {
-    if (mode === 'required') {
-      return jsonResponse({ error: 'Authorization token is required.' }, 401, request);
-    }
-    return null;
-  }
-
-  const isValid = await verifyAccessToken(token);
-  if (!isValid) {
-    return jsonResponse({ error: 'Invalid authorization token.' }, 401, request);
+  if (!decision.allow) {
+    return jsonResponse({ error: decision.error }, decision.status, request);
   }
 
   return null;
@@ -172,57 +144,6 @@ const isModifyWorkoutMode = (messages: CoachProxyMessage[]): boolean => {
   return userText.includes('queue:') && userText.includes('request:');
 };
 
-const isValidToonResponse = (text: string): boolean => {
-  const trimmed = text.trim();
-  const queueItems = trimmed.match(/Q\d+:D\d+:[^;]+(?:;Q\d+:D\d+:[^;]+)*/)?.[0];
-
-  if (!queueItems || queueItems !== trimmed) {
-    return false;
-  }
-
-  const items = queueItems.split(';').filter(Boolean);
-  if (items.length === 0) {
-    return false;
-  }
-
-  for (const item of items) {
-    const match = item.match(/^Q\d+:D\d+:(.+)$/);
-    if (!match) {
-      return false;
-    }
-
-    const exercises = match[1].split(',').map((exercise) => exercise.trim()).filter(Boolean);
-    if (exercises.length === 0) {
-      return false;
-    }
-
-    for (const exercise of exercises) {
-      const fields = exercise.split('|');
-      if (fields.length !== 4 && fields.length !== 5) {
-        return false;
-      }
-
-      if (fields[0].trim().length === 0) {
-        return false;
-      }
-
-      if (fields.slice(1, 4).some((field) => field.trim().length === 0)) {
-        return false;
-      }
-
-      if (!/^\d+$/.test(fields[2].trim()) || !/^\d+$/.test(fields[3].trim())) {
-        return false;
-      }
-
-      if (fields.length === 5 && fields[4].trim().length === 0) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-};
-
 const callDeepSeek = async (
   apiKey: string,
   messages: CoachProxyMessage[],
@@ -274,7 +195,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   try {
-    const authMode = parseAuthMode();
+    const authMode = parseAuthModeFromValue(Deno.env.get('COACH_PROXY_AUTH_MODE'));
     const authFailure = await enforceAuthMode(request, authMode);
     if (authFailure) {
       return authFailure;
