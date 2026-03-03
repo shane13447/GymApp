@@ -49,10 +49,7 @@ export function showConfirmDialog({
 /**
  * Show a delete confirmation dialog
  */
-export function showDeleteConfirmation(
-  itemName: string,
-  onConfirm: () => void
-): void {
+export function showDeleteConfirmation(itemName: string, onConfirm: () => void): void {
   showConfirmDialog({
     title: 'Delete Confirmation',
     message: `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
