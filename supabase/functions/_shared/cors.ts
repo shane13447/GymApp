@@ -1,8 +1,21 @@
 const ALLOWED_HEADERS = 'authorization, x-client-info, apikey, content-type';
 const ALLOWED_METHODS = 'POST, OPTIONS';
 
+const getEnvValue = (key: string): string => {
+  const denoGlobal = (globalThis as { Deno?: { env?: { get: (name: string) => string | undefined } } }).Deno;
+  if (denoGlobal?.env) {
+    return denoGlobal.env.get(key) ?? '';
+  }
+
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key] ?? '';
+  }
+
+  return '';
+};
+
 const parseAllowedOrigins = (): Set<string> => {
-  const raw = Deno.env.get('COACH_PROXY_ALLOWED_ORIGINS') ?? '';
+  const raw = getEnvValue('COACH_PROXY_ALLOWED_ORIGINS');
   return new Set(
     raw
       .split(',')

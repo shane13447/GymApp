@@ -465,6 +465,29 @@ describe('parseQueueFormatResponse', () => {
       expect(result![0].exercises[0].hasCustomisedSets).toBe(true);
     });
 
+    it('should parse 5-column TOON with variant token', () => {
+      const queue = [createQueueItem({
+        id: 'q-variant',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            variant: { angle: 'Incline' },
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|82.5|8|3|Incline';
+      const result = parseQueueFormatResponse(response, queue, 'change incline bench press weight to 82.5', ['Barbell Bench Press']);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].weight).toBe('82.5');
+      expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
+    });
+
     it('should return partial queue when response omits queue items', () => {
       const response = 'Q0:D1:Barbell Bench Press|90|8|3';
       const result = parseQueueFormatResponse(
@@ -489,6 +512,30 @@ describe('parseQueueFormatResponse', () => {
 
     it('should return null for empty response', () => {
       const result = parseQueueFormatResponse('', originalQueue);
+      expect(result).toBeNull();
+    });
+
+    it('should reject reps range tokens', () => {
+      const response = 'Q0:D1:Barbell Bench Press|80|8-10|3';
+      const result = parseQueueFormatResponse(response, [originalQueue[0]]);
+      expect(result).toBeNull();
+    });
+
+    it('should reject sets range tokens', () => {
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3-5';
+      const result = parseQueueFormatResponse(response, [originalQueue[0]]);
+      expect(result).toBeNull();
+    });
+
+    it('should reject decimal reps tokens', () => {
+      const response = 'Q0:D1:Barbell Bench Press|80|8.5|3';
+      const result = parseQueueFormatResponse(response, [originalQueue[0]]);
+      expect(result).toBeNull();
+    });
+
+    it('should reject non-numeric sets tokens', () => {
+      const response = 'Q0:D1:Barbell Bench Press|80|8|three';
+      const result = parseQueueFormatResponse(response, [originalQueue[0]]);
       expect(result).toBeNull();
     });
   });
