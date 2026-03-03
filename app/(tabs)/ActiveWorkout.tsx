@@ -168,7 +168,7 @@ export default function ActiveWorkout() {
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
+          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id, ex.variant);
           const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
 
           return {
@@ -243,7 +243,7 @@ export default function ActiveWorkout() {
     try {
       const progressedExercises: ProgramExercise[] = await Promise.all(
         exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, programId);
+          const lastWeight = await db.getLastLoggedWeight(ex.name, programId, ex.variant);
           const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
           // RUNTIME TYPE SAFETY: Ensure numeric fallback
           const numExWeight = Number(ex.weight) || 0;
@@ -328,7 +328,7 @@ export default function ActiveWorkout() {
           let finalWeight = ex.weight || 0;
 
           if (!finalWeight) {
-            const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId);
+            const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId, ex.variant);
             finalWeight = calculateAutoWeight(lastWeight, ex.progression) || 0;
           }
 
@@ -566,7 +566,7 @@ export default function ActiveWorkout() {
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id);
+          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id, ex.variant);
           const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
 
           return {
