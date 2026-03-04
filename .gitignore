@@ -40,6 +40,7 @@ yarn-error.*
 
 # Project documents (local only)
 Documents/
+docs/
 
 # typescript
 *.tsbuildinfo
