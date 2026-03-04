@@ -221,6 +221,42 @@ describe('preprocessMuscleGroupRequest', () => {
       );
       expect(result.muscleGroupDetected).toBe('leg');
     });
+
+    it('should treat back as alias for lats and traps', () => {
+      const backQueue = [
+        createQueueItem({
+          id: 'q-back',
+          dayNumber: 4,
+          position: 3,
+          exercises: [
+            createExercise({
+              name: 'Lat Pulldowns',
+              muscle_groups_worked: ['lats', 'biceps'],
+              weight: '60',
+            }),
+            createExercise({
+              name: 'Barbell Shrugs',
+              muscle_groups_worked: ['traps', 'forearms'],
+              weight: '80',
+            }),
+            createExercise({
+              name: 'Barbell Bench Press',
+              muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
+              weight: '80',
+            }),
+          ],
+        }),
+      ];
+
+      const result = preprocessMuscleGroupRequest('reduce all back exercises by 10%', backQueue);
+
+      expect(result.wasProcessed).toBe(true);
+      expect(result.muscleGroupDetected).toBe('back');
+      expect(result.matchedExercises).toEqual(expect.arrayContaining(['Lat Pulldowns', 'Barbell Shrugs']));
+      expect(result.matchedExercises).not.toContain('Barbell Bench Press');
+      expect(result.processedRequest).toContain('Lat Pulldowns weight to 54');
+      expect(result.processedRequest).toContain('Barbell Shrugs weight to 72');
+    });
   });
 
   describe('no muscle group detected', () => {
