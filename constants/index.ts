@@ -55,7 +55,6 @@ export const LIST_ITEM_HEIGHT = 80;
 
 export const MUSCLE_GROUPS = [
   'chest',
-  'back',
   'shoulders',
   'biceps',
   'triceps',
