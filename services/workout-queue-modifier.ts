@@ -441,7 +441,6 @@ const findExercisesInQueueByMuscleGroup = (
   targetMuscles: string[]
 ): { name: string; weight: number }[] => {
   const matchingExercises: { name: string; weight: number }[] = [];
-  const seenNames = new Set<string>();
   
   for (const queueItem of queue) {
     for (const exercise of queueItem.exercises) {
@@ -450,10 +449,9 @@ const findExercisesInQueueByMuscleGroup = (
         targetMuscles.includes(muscle.toLowerCase())
       );
       
-      if (isMatch && !seenNames.has(exercise.name)) {
-        seenNames.add(exercise.name);
+      if (isMatch) {
         matchingExercises.push({ 
-          name: exercise.name, 
+          name: withVariantDisplayName(exercise), 
           weight:
             typeof exercise.weight === 'number'
               ? exercise.weight
