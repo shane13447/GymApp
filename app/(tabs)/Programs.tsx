@@ -462,11 +462,19 @@ export default function ProgramsScreen() {
       };
 
       await db.updateProgram(updatedProgram);
+      if (currentProgramId === updatedProgram.id) {
+        await db.generateWorkoutQueue(updatedProgram.id);
+      }
       await loadPrograms();
       clearForm();
       setViewMode(ProgramViewMode.List);
       setSelectedProgramId(null);
-      Alert.alert('Success', 'Program updated successfully!');
+      Alert.alert(
+        'Success',
+        currentProgramId === updatedProgram.id
+          ? 'Program updated and workout queue refreshed successfully!'
+          : 'Program updated successfully!'
+      );
     } catch (error) {
       console.error('Error updating program:', error);
       Alert.alert('Error', 'Failed to update program');
