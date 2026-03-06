@@ -306,10 +306,10 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   'lats': ['Lat Pulldowns'],
   
   // Press variations
-  'shoulder press': ['Dumbbell Shoulder Press', 'Overhead Barbell Press (Military Press)'],
-  'overhead press': ['Overhead Barbell Press (Military Press)'],
-  'military press': ['Overhead Barbell Press (Military Press)'],
-  'ohp': ['Overhead Barbell Press (Military Press)'],
+  'shoulder press': ['Dumbbell Shoulder Press', 'Overhead Barbell Press'],
+  'overhead press': ['Overhead Barbell Press'],
+  'military press': ['Overhead Barbell Press'],
+  'ohp': ['Overhead Barbell Press'],
   'arnold press': ['Dumbbell Arnold Press'],
   'arnold': ['Dumbbell Arnold Press'],
   
@@ -418,6 +418,19 @@ const REMOVE_REQUEST_KEYWORDS = [
 ] as const;
 
 const ADD_REQUEST_KEYWORDS = ['add', 'insert', 'put', 'include'] as const;
+const GENERIC_EXERCISE_WORDS = new Set([
+  'press',
+  'row',
+  'rows',
+  'curl',
+  'curls',
+  'fly',
+  'flyes',
+  'raise',
+  'raises',
+  'extension',
+  'extensions',
+]);
 
 function includesAnyKeyword(requestLower: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => requestLower.includes(keyword));
@@ -1173,10 +1186,12 @@ export const extractTargetExercises = (
     if (addedNames.has(name.toLowerCase())) continue;
 
     const lowerName = name.toLowerCase();
-    const words = lowerName.split(/\s+/).filter(w => w.length > 2);
+    const words = lowerName
+      .split(/\s+/)
+      .filter((word) => word.length > 2 && !GENERIC_EXERCISE_WORDS.has(word));
     
-    // Skip if too few significant words
-    if (words.length < 1) continue;
+    // Skip if too few distinctive words remain after dropping generic exercise terms.
+    if (words.length < 2) continue;
 
     // Check if the distinctive words appear in the request
     // "Decline Crunches" -> matches if "decline" AND "crunches" appear
@@ -1187,8 +1202,9 @@ export const extractTargetExercises = (
       return lowerRequest.includes(word);
     });
 
-    // Require at least 50% of significant words to match (minimum 1)
-    const threshold = Math.max(1, Math.ceil(words.length * 0.5));
+    // Require stronger overlap so generic requests like "shoulder press" do not
+    // accidentally target unrelated exercises such as "Chest Press".
+    const threshold = Math.max(2, Math.ceil(words.length * 0.75));
     if (matchingWords.length >= threshold) {
       addExercise(name);
     }
