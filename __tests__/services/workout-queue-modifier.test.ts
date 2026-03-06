@@ -257,6 +257,41 @@ describe('preprocessMuscleGroupRequest', () => {
       expect(result.processedRequest).toContain('Lat Pulldowns weight to 54');
       expect(result.processedRequest).toContain('Barbell Shrugs weight to 72');
     });
+
+    it('should preserve repeated muscle group matches with variant labels', () => {
+      const duplicateChestQueue = [
+        createQueueItem({
+          id: 'q-chest',
+          exercises: [
+            createExercise({
+              name: 'Barbell Bench Press',
+              muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
+              weight: '80',
+              variant: { angle: 'Incline' },
+            }),
+            createExercise({
+              name: 'Barbell Bench Press',
+              muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
+              weight: '70',
+              variant: { angle: 'Decline' },
+            }),
+          ],
+        }),
+      ];
+
+      const result = preprocessMuscleGroupRequest(
+        'increase all chest exercises by 10%',
+        duplicateChestQueue
+      );
+
+      expect(result.wasProcessed).toBe(true);
+      expect(result.matchedExercises).toEqual([
+        'Barbell Bench Press (Incline)',
+        'Barbell Bench Press (Decline)',
+      ]);
+      expect(result.processedRequest).toContain('Barbell Bench Press (Incline) weight to 88');
+      expect(result.processedRequest).toContain('Barbell Bench Press (Decline) weight to 77');
+    });
   });
 
   describe('no muscle group detected', () => {
