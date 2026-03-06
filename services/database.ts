@@ -524,6 +524,11 @@ export const getCurrentProgramId = async (): Promise<string | null> => {
  * Set current program ID and generate workout queue
  */
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
+  // Invalidate any in-flight queue generation before preferences/queue change.
+  // This prevents stale generations from restoring an old queue after the user
+  // clears or switches the current program.
+  currentQueueGenerationId += 1;
+
   await updateUserPreferences({ currentProgramId: programId });
   
   // Generate workout queue if a program is set
@@ -1574,9 +1579,6 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
     console.log(`Aborting stale queue generation for program: ${program.name}`);
     return;
   }
-
-  // Clear existing queue
-  await clearWorkoutQueue();
 
   const queueItems: WorkoutQueueItem[] = [];
   const numDays = program.workoutDays.length;
