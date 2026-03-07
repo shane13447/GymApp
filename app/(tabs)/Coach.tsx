@@ -21,9 +21,10 @@ import {
   compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
   differencesToProposedChanges,
-  extractTargetExercises,
+  extractTargetExerciseRefs,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
+  type TargetedExerciseRef,
   validateChanges,
   validateQueueStructure,
   type ProposedChanges,
@@ -202,7 +203,7 @@ export default function CoachScreen() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [proxyResponse, setProxyResponse] = useState('');
   const [proxyError, setProxyError] = useState('');
-  const targetedExercisesRef = useRef<string[]>([]); // Sync ref for race condition fix
+  const targetedExercisesRef = useRef<TargetedExerciseRef[]>([]); // Sync ref for race condition fix
   const lastProcessedResponseRef = useRef<string>('');
   const coachProxyUrl = useRef(getCoachProxyUrl());
   const requestCounterRef = useRef(0);
@@ -470,6 +471,7 @@ export default function CoachScreen() {
           processedRequest,
           wasProcessed,
           matchedExercises,
+          matchedExerciseRefs,
           muscleGroupDetected,
           noMatchesFound,
         } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
@@ -478,10 +480,13 @@ export default function CoachScreen() {
         // For muscle group requests, use matchedExercises from preprocessor
         // For other requests, extract from the original request
         const exercisesToStore =
-          wasProcessed && matchedExercises.length > 0
-            ? matchedExercises
-            : extractTargetExercises(trimmedInput, workoutQueue);
-        console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
+          wasProcessed && matchedExerciseRefs.length > 0
+            ? matchedExerciseRefs
+            : extractTargetExerciseRefs(trimmedInput, workoutQueue);
+        console.log(
+          '[TARGETED] Setting targetedExercises:',
+          exercisesToStore.map((exercise) => exercise.displayName)
+        );
         targetedExercisesRef.current = exercisesToStore; // Sync update for immediate use
         
         // Check if user mentioned a muscle group but no matching exercises exist in queue
@@ -601,6 +606,7 @@ export default function CoachScreen() {
           processedRequest,
           wasProcessed,
           matchedExercises,
+          matchedExerciseRefs,
           muscleGroupDetected,
           noMatchesFound,
         } = preprocessMuscleGroupRequest(test.prompt, workoutQueue);
@@ -634,10 +640,13 @@ export default function CoachScreen() {
 
         // Store matched exercises for use in repair system (same as sendToCoach)
         const exercisesToStore =
-          wasProcessed && matchedExercises.length > 0
-            ? matchedExercises
-            : extractTargetExercises(test.prompt, workoutQueue);
-        console.log('[TARGETED] Setting targetedExercises:', exercisesToStore);
+          wasProcessed && matchedExerciseRefs.length > 0
+            ? matchedExerciseRefs
+            : extractTargetExerciseRefs(test.prompt, workoutQueue);
+        console.log(
+          '[TARGETED] Setting targetedExercises:',
+          exercisesToStore.map((exercise) => exercise.displayName)
+        );
         targetedExercisesRef.current = exercisesToStore;
         
         const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
