@@ -18,6 +18,7 @@ import {
     differencesToProposedChanges,
     encodeQueueForLLM,
     enforceColumnChanges,
+    extractTargetExerciseRefs,
     extractTargetExercises,
     findExerciseByName,
     fuzzyMatchExerciseName,
@@ -572,6 +573,49 @@ describe('parseQueueFormatResponse', () => {
       expect(result).toHaveLength(1);
       expect(result?.[0].id).toBe('q0');
     });
+
+    it('should preserve duplicate instance ids when repairing targeted duplicates', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '70',
+            exerciseInstanceId: 'q0:e1',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3,Barbell Bench Press|75|8|3';
+      const targeted = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        },
+      ];
+
+      const result = parseQueueFormatResponse(
+        response,
+        queue,
+        'change the second barbell bench press weight to 75',
+        targeted
+      );
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].weight).toBe('80');
+      expect(result![0].exercises[1].weight).toBe('75');
+      expect(result![0].exercises[0].exerciseInstanceId).toBe('q0:e0');
+      expect(result![0].exercises[1].exerciseInstanceId).toBe('q0:e1');
+    });
   });
 
   describe('invalid data', () => {
@@ -763,6 +807,20 @@ describe('extractTargetExercises', () => {
       })];
       const result = extractTargetExercises('change crunches reps', queueWithCrunches);
       expect(result).toContain('Decline Crunches');
+    });
+
+    it('should keep duplicate matches distinct when queue exercises have unique instance ids', () => {
+      const duplicateQueue = [createQueueItem({
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e1', weight: '70' }),
+        ],
+      })];
+
+      const result = extractTargetExerciseRefs('change barbell bench press weight', duplicateQueue);
+
+      expect(result).toHaveLength(2);
+      expect(result.map((exercise) => exercise.exerciseInstanceId)).toEqual(['q0:e0', 'q0:e1']);
     });
   });
 
@@ -1039,6 +1097,28 @@ describe('compareWorkoutQueues', () => {
       
       const differences = compareWorkoutQueues(oldQueue, newQueue);
       expect(differences.some(d => d.type === 'added')).toBe(true);
+    });
+
+    it('should compare duplicate exercises by instance id instead of collapsing them', () => {
+      const oldQueue = [createQueueItem({
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '80', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Barbell Bench Press', weight: '70', exerciseInstanceId: 'q0:e1' }),
+        ],
+      })];
+      const newQueue = [createQueueItem({
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '80', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Barbell Bench Press', weight: '75', exerciseInstanceId: 'q0:e1' }),
+        ],
+      })];
+
+      const differences = compareWorkoutQueues(oldQueue, newQueue);
+
+      expect(differences).toHaveLength(1);
+      expect(differences[0].type).toBe('weight_change');
+      expect(differences[0].oldWeight).toBe('70');
+      expect(differences[0].newWeight).toBe('75');
     });
   });
 
