@@ -699,7 +699,7 @@ export const preprocessMuscleGroupRequest = (
 
     const weightChanges = matchingExercises.map((exercise) => {
       const newWeight = Math.round(exercise.weight * multiplier * 10) / 10;
-      return `${exercise.name} weight to ${newWeight}`;
+      return `${exercise.displayName} weight to ${newWeight}`;
     });
 
     const processedRequest = `change ${weightChanges.join(', ')}`;
