@@ -1202,6 +1202,7 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
       scheduledDate: item.scheduled_date ?? undefined,
       position: item.position,
       exercises: exercises.map((ex) => ({
+        exerciseInstanceId: `${item.id}:e${ex.position}`,
         name: ex.name,
         equipment: ex.equipment,
         muscle_groups_worked: JSON.parse(ex.muscle_groups),
