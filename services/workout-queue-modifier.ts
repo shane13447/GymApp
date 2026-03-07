@@ -21,6 +21,17 @@ interface ExerciseData {
   aliases?: string[];
 }
 
+export interface TargetedExerciseRef {
+  queueItemId: string;
+  dayNumber: number;
+  exerciseIndex: number;
+  exerciseInstanceId?: string;
+  name: string;
+  displayName: string;
+}
+
+type TargetedExerciseMatcher = string | TargetedExerciseRef;
+
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
 
 const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
@@ -177,11 +188,126 @@ const normaliseVariantAgainstOptions = (
   return fallback ?? null;
 };
 
-const getExerciseIdentity = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string =>
+const getExerciseIdentity = (
+  exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>
+): string =>
   JSON.stringify({
+    exerciseInstanceId: exercise.exerciseInstanceId ?? null,
     name: exercise.name,
     variant: exercise.variant ?? null,
   });
+
+const getDisplayName = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string => {
+  const variantLabel = serialiseVariantForPrompt(exercise.variant);
+  return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
+};
+
+const buildTargetedExerciseRef = (
+  item: WorkoutQueueItem,
+  exercise: ProgramExercise,
+  exerciseIndex: number
+): TargetedExerciseRef => ({
+  queueItemId: item.id,
+  dayNumber: item.dayNumber,
+  exerciseIndex,
+  exerciseInstanceId: exercise.exerciseInstanceId,
+  name: exercise.name,
+  displayName: getDisplayName(exercise),
+});
+
+const isTargetedExerciseRef = (
+  value: TargetedExerciseMatcher
+): value is TargetedExerciseRef => typeof value !== 'string';
+
+const getComparableExerciseLabels = (
+  exercise: Pick<ProgramExercise, 'name' | 'variant'>
+): string[] => {
+  return [exercise.name, getDisplayName(exercise)]
+    .map(normaliseText)
+    .filter(Boolean);
+};
+
+const doesExerciseTextMatch = (
+  exercise: Pick<ProgramExercise, 'name' | 'variant'>,
+  text: string
+): boolean => {
+  const normalisedTarget = normaliseText(text);
+  if (!normalisedTarget) {
+    return false;
+  }
+
+  return getComparableExerciseLabels(exercise).some((label) => {
+    return (
+      label === normalisedTarget ||
+      label.includes(normalisedTarget) ||
+      normalisedTarget.includes(label) ||
+      getSimilarity(label, normalisedTarget) > 0.8
+    );
+  });
+};
+
+const findBestOriginalExerciseMatch = (
+  originalExercises: ProgramExercise[],
+  parsedExercise: Pick<ProgramExercise, 'name' | 'variant'>,
+  parsedIndex: number,
+  usedIndices: Set<number>
+): { exercise: ProgramExercise; index: number } | null => {
+  const parsedDisplayName = normaliseText(getDisplayName(parsedExercise));
+  const parsedName = normaliseText(parsedExercise.name);
+  const parsedVariantLabel = normaliseText(getExerciseVariantLabel(parsedExercise.variant));
+
+  const candidates = originalExercises
+    .map((exercise, index) => ({ exercise, index }))
+    .filter(({ index }) => !usedIndices.has(index))
+    .filter(({ exercise }) => {
+      const exerciseDisplayName = normaliseText(getDisplayName(exercise));
+      const exerciseName = normaliseText(exercise.name);
+
+      return (
+        exerciseDisplayName === parsedDisplayName ||
+        exerciseName === parsedName ||
+        exerciseDisplayName.includes(parsedDisplayName) ||
+        parsedDisplayName.includes(exerciseDisplayName) ||
+        exerciseName.includes(parsedName) ||
+        parsedName.includes(exerciseName) ||
+        getSimilarity(exerciseDisplayName, parsedDisplayName) > 0.8 ||
+        getSimilarity(exerciseName, parsedName) > 0.8
+      );
+    })
+    .sort((left, right) => {
+      const scoreCandidate = (candidate: { exercise: ProgramExercise; index: number }): number => {
+        const candidateDisplayName = normaliseText(getDisplayName(candidate.exercise));
+        const candidateName = normaliseText(candidate.exercise.name);
+        const candidateVariantLabel = normaliseText(getExerciseVariantLabel(candidate.exercise.variant));
+        let score = 0;
+
+        if (candidateDisplayName === parsedDisplayName) score += 100;
+        if (candidateName === parsedName) score += 60;
+        if (candidateVariantLabel && candidateVariantLabel === parsedVariantLabel) score += 25;
+        score -= Math.abs(candidate.index - parsedIndex);
+
+        return score;
+      };
+
+      return scoreCandidate(right) - scoreCandidate(left);
+    });
+
+  return candidates[0] ?? null;
+};
+
+const buildExerciseIdentityMap = (exercises: ProgramExercise[]) => {
+  const seenCounts = new Map<string, number>();
+
+  return new Map(
+    exercises.map((exercise, index) => {
+      const baseIdentity = getExerciseIdentity(exercise);
+      const occurrence = seenCounts.get(baseIdentity) ?? 0;
+      seenCounts.set(baseIdentity, occurrence + 1);
+
+      return [`${baseIdentity}::${occurrence}`, { exercise, index }] as const;
+    })
+  );
+};
 
 const splitNameAndInlineVariant = (
   value: string
@@ -439,11 +565,11 @@ function includesAnyKeyword(requestLower: string, keywords: readonly string[]): 
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
   targetMuscles: string[]
-): { name: string; weight: number }[] => {
-  const matchingExercises: { name: string; weight: number }[] = [];
+): Array<TargetedExerciseRef & { weight: number }> => {
+  const matchingExercises: Array<TargetedExerciseRef & { weight: number }> = [];
   
   for (const queueItem of queue) {
-    for (const exercise of queueItem.exercises) {
+    for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
       const exerciseMuscles = exercise.muscle_groups_worked || [];
       const isMatch = exerciseMuscles.some((muscle) =>
         targetMuscles.includes(muscle.toLowerCase())
@@ -451,7 +577,7 @@ const findExercisesInQueueByMuscleGroup = (
       
       if (isMatch) {
         matchingExercises.push({ 
-          name: withVariantDisplayName(exercise), 
+          ...buildTargetedExerciseRef(queueItem, exercise, exerciseIndex),
           weight:
             typeof exercise.weight === 'number'
               ? exercise.weight
@@ -531,6 +657,7 @@ export const preprocessMuscleGroupRequest = (
   processedRequest: string; 
   wasProcessed: boolean; 
   matchedExercises: string[];
+  matchedExerciseRefs: TargetedExerciseRef[];
   muscleGroupDetected: string | null;
   noMatchesFound: boolean;
 } => {
@@ -541,6 +668,7 @@ export const preprocessMuscleGroupRequest = (
       processedRequest: request, 
       wasProcessed: false, 
       matchedExercises: [],
+      matchedExerciseRefs: [],
       muscleGroupDetected: null,
       noMatchesFound: false,
     };
@@ -554,12 +682,14 @@ export const preprocessMuscleGroupRequest = (
       processedRequest: request, 
       wasProcessed: false, 
       matchedExercises: [],
+      matchedExerciseRefs: [],
       muscleGroupDetected: detected.keyword,
       noMatchesFound: true,
     };
   }
 
-  const exerciseNames = matchingExercises.map((e) => e.name);
+  const matchedExerciseRefs = matchingExercises.map(({ weight: _weight, ...exercise }) => exercise);
+  const exerciseNames = matchedExerciseRefs.map((exercise) => exercise.displayName);
   const percentChange = detectPercentageChange(request);
   
   if (percentChange) {
@@ -577,6 +707,7 @@ export const preprocessMuscleGroupRequest = (
       processedRequest, 
       wasProcessed: true, 
       matchedExercises: exerciseNames,
+      matchedExerciseRefs,
       muscleGroupDetected: detected.keyword,
       noMatchesFound: false,
     };
@@ -605,6 +736,7 @@ export const preprocessMuscleGroupRequest = (
         processedRequest, 
         wasProcessed: true, 
         matchedExercises: exerciseNames,
+        matchedExerciseRefs,
         muscleGroupDetected: detected.keyword,
         noMatchesFound: false,
       };
@@ -615,6 +747,7 @@ export const preprocessMuscleGroupRequest = (
     processedRequest: request, 
     wasProcessed: false, 
     matchedExercises: [],
+    matchedExerciseRefs: [],
     muscleGroupDetected: detected.keyword,
     noMatchesFound: false,
   };
@@ -730,7 +863,7 @@ export const parseQueueFormatResponse = (
   response: string,
   originalQueue: WorkoutQueueItem[],
   userRequest: string = '',
-  matchedExercises: string[] = []
+  matchedExercises: TargetedExerciseMatcher[] = []
 ): WorkoutQueueItem[] | null => {
   try {
     // Preprocess to fix common LLM errors
@@ -761,8 +894,9 @@ export const parseQueueFormatResponse = (
       
       const exerciseStrings = exercisesString.split(',').filter((s) => s.trim().length > 0);
       const exercises: ProgramExercise[] = [];
+      const usedOriginalExerciseIndices = new Set<number>();
 
-      for (const exString of exerciseStrings) {
+      for (const [exerciseIndex, exString] of exerciseStrings.entries()) {
         // Support both pipe (|) and slash (/) separators for compatibility
         const separator = exString.includes('|') ? '|' : '/';
         const parts = exString.split(separator);
@@ -782,12 +916,16 @@ export const parseQueueFormatResponse = (
         const { name: parsedName, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
         const variantLabel = variantToken || inlineVariantLabel || '';
         const parsedVariant = parseVariantFromToken(variantLabel);
-
-        const originalEx = originalItem.exercises.find((ex) => {
-          return ex.name.toLowerCase() === parsedName.toLowerCase() ||
-                 ex.name.toLowerCase().includes(parsedName.toLowerCase()) ||
-                 parsedName.toLowerCase().includes(ex.name.toLowerCase());
-        });
+        const originalMatch = findBestOriginalExerciseMatch(
+          originalItem.exercises,
+          { name: parsedName, variant: parsedVariant },
+          exerciseIndex,
+          usedOriginalExerciseIndices
+        );
+        const originalEx = originalMatch?.exercise;
+        if (originalMatch) {
+          usedOriginalExerciseIndices.add(originalMatch.index);
+        }
 
         // Try to find the exercise by full name or fuzzy match
         const exerciseData = findExerciseByName(parsedName);
@@ -801,6 +939,7 @@ export const parseQueueFormatResponse = (
             isCompound: exerciseData.isCompound,
             variantOptions: exerciseData.variantOptions,
             aliases: exerciseData.aliases,
+            exerciseInstanceId: originalEx?.exerciseInstanceId,
             variant: safeVariant,
             weight,
             reps,
@@ -903,7 +1042,7 @@ export const repairQueueWithIntent = (
   originalQueue: WorkoutQueueItem[],
   parsedQueue: WorkoutQueueItem[],
   userPrompt: string,
-  targetedExerciseNames: string[] = []
+  targetedExerciseNames: TargetedExerciseMatcher[] = []
 ): WorkoutQueueItem[] => {
   console.log('[REPAIR] Starting queue repair...');
   console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
@@ -944,28 +1083,63 @@ export const repairQueueWithIntent = (
   const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
   const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
   const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
+
+  const isExerciseTargeted = (
+    originalItem: WorkoutQueueItem,
+    originalExercise: ProgramExercise,
+    originalIndex: number,
+    candidateExerciseName: string
+  ): boolean => {
+    return targetedExerciseNames.some((target) => {
+      if (isTargetedExerciseRef(target)) {
+        if (
+          target.exerciseInstanceId &&
+          originalExercise.exerciseInstanceId &&
+          target.exerciseInstanceId === originalExercise.exerciseInstanceId
+        ) {
+          return true;
+        }
+
+        return (
+          target.queueItemId === originalItem.id &&
+          target.exerciseIndex === originalIndex &&
+          doesExerciseTextMatch(originalExercise, target.displayName)
+        );
+      }
+
+      return doesExerciseTextMatch(originalExercise, target);
+    }) || (targetedExerciseNames.length === 0 && requestLower.includes(candidateExerciseName.toLowerCase()));
+  };
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
     const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
     if (!originalItem) return qItem;
+    const usedOriginalIndices = new Set<number>();
     
-    const healedExercises = qItem.exercises.map(ex => {
+    const healedExercises = qItem.exercises.map((ex, exerciseIndex) => {
       const finalEx = { ...ex };
-      const originalEx = originalItem.exercises.find(oe => 
-        oe.name === ex.name ||
-        getSimilarity(oe.name, ex.name) > 0.8
+      const originalMatch = findBestOriginalExerciseMatch(
+        originalItem.exercises,
+        ex,
+        exerciseIndex,
+        usedOriginalIndices
       );
+      const originalEx = originalMatch?.exercise;
       
       if (!originalEx) return finalEx;
+      usedOriginalIndices.add(originalMatch.index);
 
       finalEx.hasCustomisedSets = originalEx.hasCustomisedSets;
+      finalEx.exerciseInstanceId = originalEx.exerciseInstanceId;
       finalEx.variant = originalEx.variant ?? null;
 
       // Check if this exercise was targeted
-      const isTargeted = targetedExerciseNames.some(targetName =>
-        targetName === originalEx.name ||
-        getSimilarity(targetName, originalEx.name) > 0.8
-      ) || requestLower.includes(ex.name.toLowerCase());
+      const isTargeted = isExerciseTargeted(
+        originalItem,
+        originalEx,
+        originalMatch.index,
+        ex.name
+      );
 
       const requestedVariant = parseVariantFromToken(userPrompt);
       const expectedVariant = mentionsVariant ? requestedVariant : null;
@@ -1047,17 +1221,14 @@ export const repairQueueWithIntent = (
     
     // --- OVER-PROTECTIVE FIX (Test 10 & 14) ---
     // Check for dropped exercises
-    for (const origEx of originalItem.exercises) {
-      // Check if this exercise exists in the healed queue (fuzzy match)
-      const existsInNew = healedExercises.some(he =>
-        he.name === origEx.name || getSimilarity(he.name, origEx.name) > 0.8
-      );
-      
-      if (!existsInNew) {
+    for (const [originalIndex, origEx] of originalItem.exercises.entries()) {
+      if (!usedOriginalIndices.has(originalIndex)) {
         // Was this exercise targeted by the user?
-        const isTargeted = targetedExerciseNames.some(targetName =>
-          targetName === origEx.name ||
-          getSimilarity(targetName, origEx.name) > 0.8
+        const isTargeted = isExerciseTargeted(
+          originalItem,
+          origEx,
+          originalIndex,
+          origEx.name
         );
         
         console.log(`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`);
@@ -1121,25 +1292,31 @@ export const extractTargetExercises = (
   request: string,
   queue: WorkoutQueueItem[]
 ): string[] => {
-  const lowerRequest = request.toLowerCase().trim();
-  const targetNames: string[] = [];
-  const addedNames = new Set<string>();
+  const targetRefs = extractTargetExerciseRefs(request, queue);
+  const targetNames = targetRefs.map((target) => target.displayName);
+  console.log(`[EXTRACT] Found ${targetNames.length} target exercises:`, targetNames);
+  return targetNames;
+};
 
-  // Get all exercise names from the queue
-  const allExercises: string[] = [];
-  for (const item of queue) {
-    for (const ex of item.exercises) {
-      if (!allExercises.includes(ex.name)) {
-        allExercises.push(ex.name);
-      }
-    }
-  }
+export const extractTargetExerciseRefs = (
+  request: string,
+  queue: WorkoutQueueItem[]
+): TargetedExerciseRef[] => {
+  const lowerRequest = request.toLowerCase().trim();
+  const targetExercises: TargetedExerciseRef[] = [];
+  const addedExerciseKeys = new Set<string>();
+  const allExercises = queue.flatMap((item) =>
+    item.exercises.map((exercise, exerciseIndex) =>
+      buildTargetedExerciseRef(item, exercise, exerciseIndex)
+    )
+  );
 
   // Helper to add exercise if not already added
-  const addExercise = (name: string) => {
-    if (!addedNames.has(name.toLowerCase())) {
-      addedNames.add(name.toLowerCase());
-      targetNames.push(name);
+  const addExercise = (exercise: TargetedExerciseRef) => {
+    const key = exercise.exerciseInstanceId ?? `${exercise.queueItemId}:${exercise.exerciseIndex}:${normaliseText(exercise.displayName)}`;
+    if (!addedExerciseKeys.has(key)) {
+      addedExerciseKeys.add(key);
+      targetExercises.push(exercise);
     }
   };
 
@@ -1151,39 +1328,36 @@ export const extractTargetExercises = (
     if (aliasRegex.test(lowerRequest)) {
       // Find which of the possible matches exist in the queue
       for (const possibleMatch of possibleMatches) {
-        const matchInQueue = allExercises.find(
-          qe => qe.toLowerCase() === possibleMatch.toLowerCase()
+        const matchingExercises = allExercises.filter(
+          (exercise) => exercise.name.toLowerCase() === possibleMatch.toLowerCase()
         );
-        if (matchInQueue) {
-          addExercise(matchInQueue);
+        for (const exercise of matchingExercises) {
+          addExercise(exercise);
         }
       }
     }
   }
 
   // --- PASS 2: Direct matching against queue exercises ---
-  for (const name of allExercises) {
-    const lowerName = name.toLowerCase();
-    const noSpaceName = lowerName.replace(/\s+/g, '');
+  for (const exercise of allExercises) {
+    const comparableLabels = [exercise.name, exercise.displayName];
+    const isDirectMatch = comparableLabels.some((label) => {
+      const lowerLabel = label.toLowerCase();
+      const noSpaceLabel = lowerLabel.replace(/\s+/g, '');
+      return lowerRequest.includes(lowerLabel) || lowerRequest.includes(noSpaceLabel);
+    });
 
-    // Exact match
-    if (lowerRequest.includes(lowerName)) {
-      addExercise(name);
-      continue;
-    }
-
-    // No-space match (e.g., "legextensions" -> "Leg Extensions")
-    if (lowerRequest.includes(noSpaceName)) {
-      addExercise(name);
-      continue;
+    if (isDirectMatch) {
+      addExercise(exercise);
     }
   }
 
   // --- PASS 3: Partial word matching (for exercises with multiple words) ---
-  for (const name of allExercises) {
-    if (addedNames.has(name.toLowerCase())) continue;
+  for (const exercise of allExercises) {
+    const key = exercise.exerciseInstanceId ?? `${exercise.queueItemId}:${exercise.exerciseIndex}:${normaliseText(exercise.displayName)}`;
+    if (addedExerciseKeys.has(key)) continue;
 
-    const lowerName = name.toLowerCase();
+    const lowerName = exercise.displayName.toLowerCase();
     const words = lowerName
       .split(/\s+/)
       .filter((word) => word.length > 2 && !GENERIC_EXERCISE_WORDS.has(word));
@@ -1204,13 +1378,14 @@ export const extractTargetExercises = (
     // accidentally target unrelated exercises such as "Chest Press".
     const threshold = Math.max(2, Math.ceil(words.length * 0.75));
     if (matchingWords.length >= threshold) {
-      addExercise(name);
+      addExercise(exercise);
     }
   }
 
   // --- PASS 4: Fuzzy similarity matching for remaining exercises ---
-  for (const name of allExercises) {
-    if (addedNames.has(name.toLowerCase())) continue;
+  for (const exercise of allExercises) {
+    const key = exercise.exerciseInstanceId ?? `${exercise.queueItemId}:${exercise.exerciseIndex}:${normaliseText(exercise.displayName)}`;
+    if (addedExerciseKeys.has(key)) continue;
 
     // Extract potential exercise references from request
     // Split by common delimiters and check each chunk
@@ -1219,16 +1394,15 @@ export const extractTargetExercises = (
     for (const chunk of chunks) {
       if (chunk.length < 3) continue;
       
-      const similarity = getSimilarity(chunk, name.toLowerCase());
+      const similarity = getSimilarity(chunk, exercise.displayName.toLowerCase());
       if (similarity > 0.6) {
-        addExercise(name);
+        addExercise(exercise);
         break;
       }
     }
   }
 
-  console.log(`[EXTRACT] Found ${targetNames.length} target exercises:`, targetNames);
-  return targetNames;
+  return targetExercises;
 };
 
 /**
@@ -1630,12 +1804,8 @@ export const compareWorkoutQueues = (
       continue;
     }
     
-    const oldExercisesMap = new Map(
-      oldItem.exercises.map((ex, idx) => [getExerciseIdentity(ex), { exercise: ex, index: idx }])
-    );
-    const newExercisesMap = new Map(
-      newItem.exercises.map((ex, idx) => [getExerciseIdentity(ex), { exercise: ex, index: idx }])
-    );
+    const oldExercisesMap = buildExerciseIdentityMap(oldItem.exercises);
+    const newExercisesMap = buildExerciseIdentityMap(newItem.exercises);
 
     for (const [exerciseIdentity, { exercise: oldExercise }] of oldExercisesMap) {
       if (!newExercisesMap.has(exerciseIdentity)) {
