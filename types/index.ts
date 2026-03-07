@@ -39,6 +39,7 @@ export interface Exercise {
  * Exercise with program-specific data (sets, reps, weight, etc.)
  */
 export interface ProgramExercise extends Exercise {
+  exerciseInstanceId?: string;
   variant?: ExerciseVariant | null;
   weight: string;
   reps: string;
