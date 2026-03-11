@@ -2729,6 +2729,248 @@ export const analyzeTestPromptQueueCoverage = (
   };
 };
 
+const NUMERIC_CHANGE_DIFF_TYPES: QueueDifference['type'][] = [
+  'weight_change',
+  'reps_change',
+  'sets_change',
+];
+
+const getExerciseFromTargetRef = (
+  queue: WorkoutQueueItem[],
+  targetRef: TargetedExerciseRef
+): ProgramExercise | undefined => {
+  const queueItem = queue.find((item) => item.id === targetRef.queueItemId);
+  return (
+    (targetRef.exerciseInstanceId
+      ? queue
+          .flatMap((item) => item.exercises)
+          .find((exercise) => exercise.exerciseInstanceId === targetRef.exerciseInstanceId)
+      : undefined) ?? (queueItem ? queueItem.exercises[targetRef.exerciseIndex] : undefined)
+  );
+};
+
+type NumericAttribute = 'weight' | 'reps' | 'sets';
+
+type TargetNumericIntent = Partial<Record<NumericAttribute, string>>;
+
+const inferTargetedNumericIntent = (
+  request: string,
+  targetedExerciseRefs: TargetedExerciseRef[],
+  changeTypes: ChangeType[]
+): Map<string, TargetNumericIntent> => {
+  const intentMap = new Map<string, TargetNumericIntent>();
+  const loweredRequest = normaliseText(request);
+  const requestHasSingleAttribute =
+    (changeTypes.includes('weight') ? 1 : 0) +
+      (changeTypes.includes('reps') ? 1 : 0) +
+      (changeTypes.includes('sets') ? 1 : 0) ===
+    1;
+
+  const getTargetKey = (targetRef: TargetedExerciseRef): string =>
+    targetRef.exerciseInstanceId ?? `${targetRef.queueItemId}:${targetRef.exerciseIndex}:${normaliseText(targetRef.name)}`;
+
+  const genericWords = new Set(['barbell', 'dumbbell', 'machine', 'cable', 'exercise', 'exercises']);
+  const clauses = loweredRequest.split(/(?:,|\band\b|\bbut\b|\balso\b)/i).map((part) => part.trim());
+
+  for (const clause of clauses) {
+    const numericMatch = clause.match(/(\d+(?:\.\d+)?)/);
+    if (!numericMatch) continue;
+
+    const hasWeightSignal = /\b(?:kg|weight|kilos?)\b/.test(clause);
+    const hasRepsSignal = /\breps?\b/.test(clause);
+    const hasSetsSignal = /\bsets?\b/.test(clause);
+
+    const inferredAttribute: NumericAttribute | null = hasWeightSignal
+      ? 'weight'
+      : hasRepsSignal
+        ? 'reps'
+        : hasSetsSignal
+          ? 'sets'
+          : requestHasSingleAttribute
+            ? (changeTypes.includes('weight')
+                ? 'weight'
+                : changeTypes.includes('reps')
+                  ? 'reps'
+                  : changeTypes.includes('sets')
+                    ? 'sets'
+                    : null)
+            : null;
+
+    if (!inferredAttribute) continue;
+
+    for (const targetRef of targetedExerciseRefs) {
+      const fullName = normaliseText(targetRef.name);
+      const displayName = normaliseText(targetRef.displayName);
+      const significantWords = displayName
+        .split(/\s+/)
+        .filter((word) => word.length > 2 && !genericWords.has(word));
+
+      const matchesClause =
+        clause.includes(fullName) ||
+        clause.includes(displayName) ||
+        significantWords.some((word) => clause.includes(word));
+
+      if (!matchesClause) continue;
+
+      const targetKey = getTargetKey(targetRef);
+      const existingIntent = intentMap.get(targetKey) ?? {};
+      intentMap.set(targetKey, {
+        ...existingIntent,
+        [inferredAttribute]: numericMatch[1],
+      });
+    }
+  }
+
+  return intentMap;
+};
+
+export const evaluatePromptIntentOutcome = (
+  request: string,
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  targetedExerciseRefs: TargetedExerciseRef[]
+): SemanticEvaluationResult => {
+  const changeTypes = detectRequestedChangeType(request);
+  const differences = compareWorkoutQueues(originalQueue, parsedQueue);
+  const shouldRequireDuplicateAdd =
+    changeTypes.includes('add') && /\b(?:again|another|duplicate|extra)\b/i.test(request);
+
+  if (differences.length === 0) {
+    return {
+      passed: false,
+      reason: shouldRequireDuplicateAdd
+        ? 'Intent semantic failed: add request did not create a duplicate targeted exercise.'
+        : 'Intent semantic failed: no queue differences detected for requested change.',
+    };
+  }
+
+  if (targetedExerciseRefs.length === 0) {
+    return {
+      passed: false,
+      reason: 'Intent semantic failed: no targeted exercises found for request.',
+    };
+  }
+
+  const numericChangeRequested =
+    changeTypes.includes('weight') || changeTypes.includes('reps') || changeTypes.includes('sets');
+
+  const targetKeys = new Set(
+    targetedExerciseRefs.map((targetRef) =>
+      targetRef.exerciseInstanceId ?? `${targetRef.queueItemId}:${targetRef.exerciseIndex}:${normaliseText(targetRef.name)}`
+    )
+  );
+
+  const toExerciseKey = (
+    queueItemId: string,
+    exercise: ProgramExercise | undefined,
+    fallbackName: string | undefined
+  ): string | null => {
+    if (exercise?.exerciseInstanceId) return exercise.exerciseInstanceId;
+    const baseName = exercise?.name ?? fallbackName;
+    if (!baseName) return null;
+    return `${queueItemId}:-1:${normaliseText(baseName)}`;
+  };
+
+  if (numericChangeRequested) {
+    const numericIntents = inferTargetedNumericIntent(request, targetedExerciseRefs, changeTypes);
+
+    for (const targetRef of targetedExerciseRefs) {
+      const targetKey =
+        targetRef.exerciseInstanceId ?? `${targetRef.queueItemId}:${targetRef.exerciseIndex}:${normaliseText(targetRef.name)}`;
+      const originalExercise = getExerciseFromTargetRef(originalQueue, targetRef);
+      const parsedExercise = getExerciseFromTargetRef(parsedQueue, targetRef);
+
+      if (!originalExercise || !parsedExercise) {
+        return {
+          passed: false,
+          reason: `Intent semantic failed: missing targeted exercise ${targetRef.displayName} after parse.`,
+        };
+      }
+
+      const requestedIntent = numericIntents.get(targetKey);
+
+      const ensureAttribute = (attribute: NumericAttribute, label: string): SemanticEvaluationResult | null => {
+        const expected = requestedIntent?.[attribute];
+        if (expected) {
+          if (parsedExercise[attribute] !== expected) {
+            return {
+              passed: false,
+              reason: `Intent semantic failed: ${targetRef.displayName} ${label} expected ${expected} but got ${parsedExercise[attribute]}.`,
+            };
+          }
+          return null;
+        }
+
+        if (changeTypes.includes(attribute) && parsedExercise[attribute] === originalExercise[attribute]) {
+          return {
+            passed: false,
+            reason: `Intent semantic failed: ${targetRef.displayName} ${label} did not change for requested update.`,
+          };
+        }
+
+        return null;
+      };
+
+      const weightCheck = ensureAttribute('weight', 'weight');
+      if (weightCheck) return weightCheck;
+      const repsCheck = ensureAttribute('reps', 'reps');
+      if (repsCheck) return repsCheck;
+      const setsCheck = ensureAttribute('sets', 'sets');
+      if (setsCheck) return setsCheck;
+    }
+
+    const unrelatedNumericDiff = differences.find((difference) => {
+      if (!NUMERIC_CHANGE_DIFF_TYPES.includes(difference.type)) return false;
+      const diffKey =
+        toExerciseKey(difference.queueItemId, difference.oldExercise, difference.exerciseName) ??
+        toExerciseKey(difference.queueItemId, difference.newExercise, difference.exerciseName);
+      if (!diffKey) return false;
+      if (targetKeys.has(diffKey)) return false;
+
+      if (difference.oldExercise || difference.newExercise) {
+        const normalisedName = normaliseText(
+          difference.oldExercise?.name ?? difference.newExercise?.name ?? difference.exerciseName ?? ''
+        );
+        return !targetedExerciseRefs.some(
+          (targetRef) =>
+            targetRef.queueItemId === difference.queueItemId &&
+            normaliseText(targetRef.name) === normalisedName
+        );
+      }
+
+      return true;
+    });
+
+    if (unrelatedNumericDiff) {
+      return {
+        passed: false,
+        reason: `Intent semantic failed: unrelated numeric overwrite detected on ${unrelatedNumericDiff.exerciseName ?? 'unknown exercise'}.`,
+      };
+    }
+  }
+
+  if (shouldRequireDuplicateAdd) {
+    for (const targetRef of targetedExerciseRefs) {
+      const normalisedName = normaliseText(targetRef.name);
+      const originalCount = originalQueue
+        .flatMap((item) => item.exercises)
+        .filter((exercise) => normaliseText(exercise.name) === normalisedName).length;
+      const parsedCount = parsedQueue
+        .flatMap((item) => item.exercises)
+        .filter((exercise) => normaliseText(exercise.name) === normalisedName).length;
+
+      if (parsedCount <= originalCount) {
+        return {
+          passed: false,
+          reason: `Intent semantic failed: add request did not increase count for ${targetRef.displayName}.`,
+        };
+      }
+    }
+  }
+
+  return { passed: true };
+};
+
 export const evaluateVariantSemanticOutcome = (
   _request: string,
   _originalQueue: WorkoutQueueItem[],
