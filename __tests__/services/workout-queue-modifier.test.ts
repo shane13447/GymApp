@@ -1967,6 +1967,64 @@ describe('analyzeTestPromptQueueCoverage', () => {
     expect(report.results[0].status).toBe('covered');
   });
 
+  it('should report missing variant capability when queue metadata has variant options that do not support requested variant', () => {
+    const queue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variantOptions: [
+              { label: 'Incline', field: 'angle', value: 'incline', aliases: ['inclined'] },
+              { label: 'Decline', field: 'angle', value: 'decline', aliases: ['declined'] },
+            ],
+          }),
+        ],
+      }),
+    ];
+
+    const report = analyzeTestPromptQueueCoverage(
+      [{ type: 'Variant - Single', prompt: 'switch my barbell bench press to close grip today' }],
+      queue
+    );
+
+    expect(report.allCovered).toBe(false);
+    expect(report.results[0].status).toBe('missing_variant_capability');
+  });
+
+  it('should preserve original variant when requested variant is unsupported by available queue metadata options', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variant: { angle: 'Incline' },
+            variantOptions: [
+              { label: 'Incline', field: 'angle', value: 'incline', aliases: ['inclined'] },
+              { label: 'Decline', field: 'angle', value: 'decline', aliases: ['declined'] },
+            ],
+          }),
+        ],
+      }),
+    ];
+
+    const response = 'Q0:D1:Barbell Bench Press|80|8|3|Close Grip';
+
+    const parsed = parseQueueFormatResponse(
+      response,
+      originalQueue,
+      'change barbell bench press variant to close grip',
+      ['Barbell Bench Press']
+    );
+
+    expect(parsed).not.toBeNull();
+    expect(parsed![0].exercises[0].variant).toEqual({ angle: 'Incline' });
+  });
+
   it('should mark prompt as covered when a direct target match exists for non-variant tests', () => {
     const queue: WorkoutQueueItem[] = [
       createQueueItem({

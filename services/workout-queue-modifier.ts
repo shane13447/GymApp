@@ -145,6 +145,8 @@ const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> =
   return new Set(values.filter(Boolean));
 };
 
+// Validates a parsed variant against known exercise variant options.
+// If no options metadata exists, we treat the variant as viable and allow intent to pass through.
 const isVariantValidForExercise = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null
@@ -172,6 +174,8 @@ const isVariantValidForExercise = (
   return true;
 };
 
+// Normalizes a requested variant using available option metadata.
+// If requested variant is unsupported, falls back to the provided safe variant (usually the original variant).
 const normaliseVariantAgainstOptions = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null,
@@ -186,6 +190,30 @@ const normaliseVariantAgainstOptions = (
   }
 
   return fallback ?? null;
+};
+
+// Chooses the best source of variant metadata for validation.
+// Prefer catalog metadata when present; otherwise use queue/original exercise metadata if available.
+const getVariantValidationSource = (
+  exerciseData: ExerciseData | null,
+  originalEx?: ProgramExercise
+): ExerciseData | null => {
+  if (exerciseData?.variantOptions?.length) {
+    return exerciseData;
+  }
+
+  if (originalEx?.variantOptions?.length) {
+    return {
+      name: originalEx.name,
+      equipment: originalEx.equipment,
+      muscle_groups_worked: originalEx.muscle_groups_worked,
+      isCompound: originalEx.isCompound,
+      variantOptions: originalEx.variantOptions,
+      aliases: originalEx.aliases,
+    };
+  }
+
+  return exerciseData;
 };
 
 const getExerciseIdentity = (
@@ -1022,8 +1050,9 @@ export const parseQueueFormatResponse = (
 
         // Try to find the exercise by full name or fuzzy match
         const exerciseData = findExerciseByName(parsedName);
-        const safeVariant = exerciseData?.variantOptions?.length
-          ? normaliseVariantAgainstOptions(exerciseData, parsedVariant, originalEx?.variant ?? null)
+        const variantValidationSource = getVariantValidationSource(exerciseData, originalEx);
+        const safeVariant = variantValidationSource?.variantOptions?.length
+          ? normaliseVariantAgainstOptions(variantValidationSource, parsedVariant, originalEx?.variant ?? null)
           : (parsedVariant ?? originalEx?.variant ?? null);
 
         if (exerciseData) {
@@ -2374,8 +2403,18 @@ export const analyzeTestPromptQueueCoverage = (
         const missingVariantTargets: string[] = [];
 
         for (const targetRef of targetedRefs) {
+          const queueItem = queue.find((item) => item.id === targetRef.queueItemId);
+          const queueExercise =
+            (targetRef.exerciseInstanceId
+              ? queue
+                  .flatMap((item) => item.exercises)
+                  .find((exercise) => exercise.exerciseInstanceId === targetRef.exerciseInstanceId)
+              : undefined) ??
+            (queueItem ? queueItem.exercises[targetRef.exerciseIndex] : undefined);
           const exerciseData = findExerciseByName(targetRef.name);
-          if (!isVariantValidForExercise(exerciseData, parsedRequestedVariant)) {
+          const variantValidationSource = getVariantValidationSource(exerciseData, queueExercise);
+
+          if (!isVariantValidForExercise(variantValidationSource, parsedRequestedVariant)) {
             missingVariantTargets.push(targetRef.displayName);
           }
         }
