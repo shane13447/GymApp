@@ -3,6 +3,8 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeadersForRequest, jsonResponse } from '../_shared/cors.ts';
 import {
   evaluateAuthMode,
+  extractStrictToonCandidate,
+  formatProxyDebugLog,
   getBearerToken,
   isValidToonResponse,
   parseAuthModeFromValue,
@@ -231,14 +233,20 @@ Deno.serve(async (request: Request): Promise<Response> => {
       modelOutput = await callDeepSeek(apiKey, retriedMessages);
 
       if (!isValidToonResponse(modelOutput)) {
-        return jsonResponse(
-          { error: 'Model returned invalid TOON output after retry.' },
-          422,
-          request,
-        );
+        const candidate = extractStrictToonCandidate(modelOutput);
+        if (!candidate || !isValidToonResponse(candidate)) {
+          return jsonResponse(
+            { error: 'Model returned invalid TOON output after retry.' },
+            422,
+            request,
+          );
+        }
+
+        modelOutput = candidate;
       }
     }
 
+    console.log(formatProxyDebugLog(messages, modelOutput));
     return jsonResponse({ response: modelOutput }, 200, request);
   } catch (error) {
     if (error instanceof SyntaxError) {
