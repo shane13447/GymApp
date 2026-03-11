@@ -262,12 +262,15 @@ const getVariantValidationSource = (
 const getExerciseIdentity = (
   exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>,
   options: { includeInstanceId: boolean }
-): string =>
-  JSON.stringify({
+): string => {
+  const canonical = normaliseExerciseForIdentity(exercise);
+
+  return JSON.stringify({
     exerciseInstanceId: options.includeInstanceId ? (exercise.exerciseInstanceId ?? null) : null,
-    name: exercise.name,
-    variant: exercise.variant ?? null,
+    name: canonical.name,
+    variant: canonical.variant,
   });
+};
 
 const getDisplayName = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string => {
   const variantLabel = serialiseVariantForPrompt(exercise.variant);
@@ -324,16 +327,18 @@ const findBestOriginalExerciseMatch = (
   parsedIndex: number,
   usedIndices: Set<number>
 ): { exercise: ProgramExercise; index: number } | null => {
-  const parsedDisplayName = normaliseText(getDisplayName(parsedExercise));
-  const parsedName = normaliseText(parsedExercise.name);
-  const parsedVariantLabel = normaliseText(getExerciseVariantLabel(parsedExercise.variant));
+  const parsedCanonical = normaliseExerciseForIdentity(parsedExercise);
+  const parsedDisplayName = normaliseText(getDisplayName(parsedCanonical));
+  const parsedName = normaliseText(parsedCanonical.name);
+  const parsedVariantLabel = normaliseText(getExerciseVariantLabel(parsedCanonical.variant));
 
   const candidates = originalExercises
     .map((exercise, index) => ({ exercise, index }))
     .filter(({ index }) => !usedIndices.has(index))
     .filter(({ exercise }) => {
-      const exerciseDisplayName = normaliseText(getDisplayName(exercise));
-      const exerciseName = normaliseText(exercise.name);
+      const canonicalExercise = normaliseExerciseForIdentity(exercise);
+      const exerciseDisplayName = normaliseText(getDisplayName(canonicalExercise));
+      const exerciseName = normaliseText(canonicalExercise.name);
 
       return (
         exerciseDisplayName === parsedDisplayName ||
@@ -348,9 +353,10 @@ const findBestOriginalExerciseMatch = (
     })
     .sort((left, right) => {
       const scoreCandidate = (candidate: { exercise: ProgramExercise; index: number }): number => {
-        const candidateDisplayName = normaliseText(getDisplayName(candidate.exercise));
-        const candidateName = normaliseText(candidate.exercise.name);
-        const candidateVariantLabel = normaliseText(getExerciseVariantLabel(candidate.exercise.variant));
+        const canonicalCandidate = normaliseExerciseForIdentity(candidate.exercise);
+        const candidateDisplayName = normaliseText(getDisplayName(canonicalCandidate));
+        const candidateName = normaliseText(canonicalCandidate.name);
+        const candidateVariantLabel = normaliseText(getExerciseVariantLabel(canonicalCandidate.variant));
         let score = 0;
 
         if (candidateDisplayName === parsedDisplayName) score += 100;
@@ -408,6 +414,48 @@ const splitNameAndInlineVariant = (
   return {
     name: match[1].trim(),
     variantLabel: match[2].trim(),
+  };
+};
+
+const normalizeExerciseNameAndVariant = (
+  nameToken: string,
+  variantToken?: string | null
+): { name: string; variantLabel: string } => {
+  const trimmedName = nameToken.trim();
+  const trimmedVariant = (variantToken ?? '').trim();
+  const lowerName = normaliseText(trimmedName);
+
+  if (['decline crunches', 'crunches', 'crunch'].includes(lowerName)) {
+    if (lowerName === 'decline crunches') {
+      return {
+        name: 'Crunches',
+        variantLabel: trimmedVariant || 'Decline',
+      };
+    }
+
+    return {
+      name: 'Crunches',
+      variantLabel: trimmedVariant,
+    };
+  }
+
+  return {
+    name: trimmedName,
+    variantLabel: trimmedVariant,
+  };
+};
+
+const normaliseExerciseForIdentity = (
+  exercise: Pick<ProgramExercise, 'name' | 'variant'>
+): { name: string; variant: ExerciseVariant | null } => {
+  const { name, variantLabel } = normalizeExerciseNameAndVariant(
+    exercise.name,
+    getExerciseVariantLabel(exercise.variant)
+  );
+
+  return {
+    name,
+    variant: parseVariantFromToken(variantLabel),
   };
 };
 
@@ -1077,8 +1125,10 @@ export const parseQueueFormatResponse = (
           return null;
         }
 
-        const { name: parsedName, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
-        const variantLabel = variantToken || inlineVariantLabel || '';
+        const { name: parsedNameToken, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
+        const normalized = normalizeExerciseNameAndVariant(parsedNameToken, variantToken || inlineVariantLabel || '');
+        const parsedName = normalized.name;
+        const variantLabel = normalized.variantLabel;
         const parsedVariant = parseVariantFromToken(variantLabel);
         const originalMatch = findBestOriginalExerciseMatch(
           originalItem.exercises,
