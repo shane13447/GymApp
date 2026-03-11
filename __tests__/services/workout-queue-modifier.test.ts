@@ -811,6 +811,159 @@ describe('parseQueueFormatResponse', () => {
       expect(result).not.toBeNull();
       expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
     });
+
+    it('Task 1 regression - Decline Crunches name+variant leakage should avoid remove/add churn', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Decline Crunches',
+            weight: '0',
+            reps: '12',
+            sets: '3',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Crunches (Decline)|0|15|3';
+      const parsed = parseQueueFormatResponse(response, queue, 'change decline crunches reps to 15', [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]);
+
+      expect(parsed).not.toBeNull();
+      const differences = compareWorkoutQueues(queue, parsed ?? []);
+      expect(differences.some((difference) => difference.type === 'removed')).toBe(false);
+      expect(differences.some((difference) => difference.type === 'added')).toBe(false);
+      expect(differences.some((difference) => difference.type === 'reps_change')).toBe(true);
+      expect(parsed?.[0].exercises[0].exerciseInstanceId).toBe('q0:e0');
+    });
+
+    it('Task 1 regression - multi-reps intent should preserve calf 20 and leg extensions 6 through repair', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Calf Press', reps: '12', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Leg Extensions', reps: '12', sets: '3', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Leg Press', reps: '10', sets: '3', exerciseInstanceId: 'q0:e2' }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Calf Press|80|20|3,Leg Extensions|50|6|3,Leg Press|140|10|3';
+      const parsed = parseQueueFormatResponse(
+        response,
+        queue,
+        'set calf press to 20 reps and leg extensions to 6 reps',
+        [
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 0,
+            exerciseInstanceId: 'q0:e0',
+            name: 'Calf Press',
+            displayName: 'Calf Press',
+          },
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 1,
+            exerciseInstanceId: 'q0:e1',
+            name: 'Leg Extensions',
+            displayName: 'Leg Extensions',
+          },
+        ]
+      );
+
+      expect(parsed).not.toBeNull();
+      const calf = parsed?.[0].exercises.find((exercise) => exercise.name === 'Calf Press');
+      const extensions = parsed?.[0].exercises.find((exercise) => exercise.name === 'Leg Extensions');
+      expect(calf?.reps).toBe('20');
+      expect(extensions?.reps).toBe('6');
+    });
+
+    it('Task 1 regression - multi-sets intent should preserve pulldowns 4 and triangle rows 5 through repair', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Lat Pulldowns', sets: '3', reps: '10', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Triangle Rows', sets: '3', reps: '10', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Face Pulls', sets: '3', reps: '12', exerciseInstanceId: 'q0:e2' }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Lat Pulldowns|55|10|4,Triangle Rows|50|10|5,Face Pulls|25|12|3';
+      const parsed = parseQueueFormatResponse(
+        response,
+        queue,
+        'set lat pulldowns to 4 sets and triangle rows to 5 sets',
+        [
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 0,
+            exerciseInstanceId: 'q0:e0',
+            name: 'Lat Pulldowns',
+            displayName: 'Lat Pulldowns',
+          },
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 1,
+            exerciseInstanceId: 'q0:e1',
+            name: 'Triangle Rows',
+            displayName: 'Triangle Rows',
+          },
+        ]
+      );
+
+      expect(parsed).not.toBeNull();
+      const pulldowns = parsed?.[0].exercises.find((exercise) => exercise.name === 'Lat Pulldowns');
+      const rows = parsed?.[0].exercises.find((exercise) => exercise.name === 'Triangle Rows');
+      expect(pulldowns?.sets).toBe('4');
+      expect(rows?.sets).toBe('5');
+    });
+
+    it('Task 1 regression - variant-heavy name(variant) leakage should still parse strict TOON rows', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Lat Pulldowns',
+            reps: '10',
+            sets: '3',
+            variant: { grip: 'Wide' },
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Lat Pulldowns (Close Grip)|55|10|3';
+      const parsed = parseQueueFormatResponse(response, queue, 'switch lat pulldowns to close grip', [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Lat Pulldowns',
+          displayName: 'Lat Pulldowns',
+        },
+      ]);
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.[0].exercises[0].name).toBe('Lat Pulldowns');
+      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
+    });
   });
 
   describe('invalid data', () => {
@@ -1016,6 +1169,52 @@ describe('extractTargetExercises', () => {
 
       expect(result).toHaveLength(2);
       expect(result.map((exercise) => exercise.exerciseInstanceId)).toEqual(['q0:e0', 'q0:e1']);
+    });
+
+    it('Task 1 regression - forearm targeting should not be empty for remove-all forearm prompt', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        exercises: [
+          createExercise({
+            name: 'Wrist Curls',
+            muscle_groups_worked: ['forearms', 'biceps'],
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Barbell Bench Press',
+            muscle_groups_worked: ['chest', 'triceps'],
+            exerciseInstanceId: 'q0:e1',
+          }),
+        ],
+      })];
+
+      const targeted = extractTargetExerciseRefs('take out all the forearm stuff', queue);
+
+      expect(targeted.length).toBeGreaterThan(0);
+      expect(targeted.map((item) => item.name)).toContain('Wrist Curls');
+    });
+
+    it('Task 1 regression - injury targeting fallback should produce non-empty refs for wrist injury prompt', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        exercises: [
+          createExercise({
+            name: 'Wrist Curls',
+            muscle_groups_worked: ['forearms', 'biceps'],
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Reverse Wrist Curls',
+            muscle_groups_worked: ['forearms'],
+            exerciseInstanceId: 'q0:e1',
+          }),
+        ],
+      })];
+
+      const targeted = extractTargetExerciseRefs('moderate wrist injury make this safer today', queue);
+
+      expect(targeted.length).toBeGreaterThan(0);
+      expect(targeted.map((item) => item.name)).toEqual(expect.arrayContaining(['Wrist Curls', 'Reverse Wrist Curls']));
     });
   });
 
@@ -2095,6 +2294,7 @@ describe('analyzeTestPromptQueueCoverage', () => {
     expect(report.results[0].status).toBe('covered');
     expect(report.results[0].targetedExercises).toContain('Barbell Bench Press');
   });
+
 });
 
 describe('validateChanges', () => {
