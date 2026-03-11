@@ -174,6 +174,45 @@ const isVariantValidForExercise = (
   return true;
 };
 
+// Builds a canonical variant object from option metadata.
+// It converts user-entered casing/aliases to option labels (e.g., "inclined" -> "Incline").
+const canonicaliseVariantFromOptions = (
+  exerciseData: ExerciseData,
+  variant: ExerciseVariant
+): ExerciseVariant | null => {
+  const variantValues = variantToComparableSet(variant);
+  if (variantValues.size === 0) {
+    return null;
+  }
+
+  const canonical: ExerciseVariant = {};
+  const extras: string[] = [];
+
+  for (const option of exerciseData.variantOptions ?? []) {
+    const optionValues = [option.value, option.label, ...(option.aliases ?? [])]
+      .map((value) => normaliseText(value ?? ''))
+      .filter(Boolean);
+
+    const matched = optionValues.some((value) => variantValues.has(value));
+    if (!matched) {
+      continue;
+    }
+
+    const canonicalLabel = option.label.trim();
+    if (option.field) {
+      canonical[option.field] = canonicalLabel;
+    } else {
+      extras.push(canonicalLabel);
+    }
+  }
+
+  if (extras.length > 0) {
+    canonical.extras = extras;
+  }
+
+  return Object.keys(canonical).length > 0 ? canonical : null;
+};
+
 // Normalizes a requested variant using available option metadata.
 // If requested variant is unsupported, falls back to the provided safe variant (usually the original variant).
 const normaliseVariantAgainstOptions = (
@@ -185,11 +224,15 @@ const normaliseVariantAgainstOptions = (
     return null;
   }
 
-  if (isVariantValidForExercise(exerciseData, variant)) {
+  if (!isVariantValidForExercise(exerciseData, variant)) {
+    return fallback ?? null;
+  }
+
+  if (!exerciseData?.variantOptions?.length) {
     return variant;
   }
 
-  return fallback ?? null;
+  return canonicaliseVariantFromOptions(exerciseData, variant) ?? fallback ?? null;
 };
 
 // Chooses the best source of variant metadata for validation.
