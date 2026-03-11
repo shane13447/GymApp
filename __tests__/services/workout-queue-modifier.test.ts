@@ -1299,9 +1299,19 @@ describe('extractTargetExercises', () => {
             exerciseInstanceId: 'q0:e1',
           }),
           createExercise({
+            name: 'Cable Chest Flyes',
+            muscle_groups_worked: ['chest', 'shoulders'],
+            exerciseInstanceId: 'q0:e2',
+          }),
+          createExercise({
+            name: 'Tricep Pushdowns',
+            muscle_groups_worked: ['triceps'],
+            exerciseInstanceId: 'q0:e3',
+          }),
+          createExercise({
             name: 'Barbell Back Squat',
             muscle_groups_worked: ['quads', 'glutes'],
-            exerciseInstanceId: 'q0:e2',
+            exerciseInstanceId: 'q0:e4',
           }),
         ],
       })];
@@ -1309,12 +1319,15 @@ describe('extractTargetExercises', () => {
       const request = 'my shoulder is sore, go easier on pressing today';
       const firstPass = extractTargetExerciseRefs(request, queue);
       const secondPass = extractTargetExerciseRefs(request, queue);
+      const names = firstPass.map((item) => item.name);
 
       expect(firstPass.length).toBeGreaterThan(0);
-      expect(firstPass.map((item) => item.name)).toEqual(
+      expect(names).toEqual(
         expect.arrayContaining(['Barbell Bench Press', 'Incline Dumbbell Press'])
       );
-      expect(firstPass.map((item) => item.name)).not.toContain('Barbell Back Squat');
+      expect(names).not.toContain('Cable Chest Flyes');
+      expect(names).not.toContain('Tricep Pushdowns');
+      expect(names).not.toContain('Barbell Back Squat');
       expect(firstPass.map((item) => item.exerciseInstanceId)).toEqual(secondPass.map((item) => item.exerciseInstanceId));
     });
   });

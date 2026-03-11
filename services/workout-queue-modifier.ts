@@ -1580,8 +1580,12 @@ export const extractTargetExerciseRefs = (
   };
 
   // --- PASS 0: Prefer preprocess muscle-group matches as deterministic seed targets ---
+  const hasInjuryMovementFamilyKeyword =
+    injuryIntent.hasInjuryContext &&
+    Object.keys(INJURY_MOVEMENT_FAMILY_KEYWORDS).some((keyword) => lowerRequest.includes(keyword));
+
   const preprocessed = preprocessMuscleGroupRequest(request, queue);
-  if (preprocessed.matchedExerciseRefs.length > 0) {
+  if (!hasInjuryMovementFamilyKeyword && preprocessed.matchedExerciseRefs.length > 0) {
     for (const matched of preprocessed.matchedExerciseRefs) {
       addExercise(matched);
     }
@@ -1693,8 +1697,12 @@ export const extractTargetExerciseRefs = (
     }
   }
 
-  // --- PASS 6: General muscle-group fallback for removal/global wording or injury body-part context ---
-  if (targetExercises.length === 0 || injuryIntent.hasInjuryContext || includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS)) {
+  // --- PASS 6: General muscle-group fallback (true fallback unless request is explicit global/remove) ---
+  const hasExplicitGlobalScope = /\b(?:all|everything|every)\b/.test(lowerRequest);
+  const hasExplicitRemoveScope = includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS);
+  const allowFallbackExpansion = targetExercises.length === 0 || hasExplicitGlobalScope || hasExplicitRemoveScope;
+
+  if (allowFallbackExpansion) {
     const fallbackMuscles = new Set<string>();
 
     const detectedGroup = detectMuscleGroupInRequest(request);
