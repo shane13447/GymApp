@@ -189,10 +189,11 @@ const normaliseVariantAgainstOptions = (
 };
 
 const getExerciseIdentity = (
-  exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>
+  exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>,
+  options: { includeInstanceId: boolean }
 ): string =>
   JSON.stringify({
-    exerciseInstanceId: exercise.exerciseInstanceId ?? null,
+    exerciseInstanceId: options.includeInstanceId ? (exercise.exerciseInstanceId ?? null) : null,
     name: exercise.name,
     variant: exercise.variant ?? null,
   });
@@ -295,16 +296,32 @@ const findBestOriginalExerciseMatch = (
   return candidates[0] ?? null;
 };
 
-const buildExerciseIdentityMap = (exercises: ProgramExercise[]) => {
+const buildExerciseIdentityMap = (
+  exercises: ProgramExercise[],
+  options: { includeInstanceId: boolean }
+) => {
   const seenCounts = new Map<string, number>();
 
   return new Map(
     exercises.map((exercise, index) => {
-      const baseIdentity = getExerciseIdentity(exercise);
+      const baseIdentity = getExerciseIdentity(exercise, options);
       const occurrence = seenCounts.get(baseIdentity) ?? 0;
       seenCounts.set(baseIdentity, occurrence + 1);
 
       return [`${baseIdentity}::${occurrence}`, { exercise, index }] as const;
+    })
+  );
+};
+
+const buildQueueItemIdentityMap = (queue: WorkoutQueueItem[]) => {
+  const seenCounts = new Map<string, number>();
+
+  return new Map(
+    queue.map((item) => {
+      const occurrence = seenCounts.get(item.id) ?? 0;
+      seenCounts.set(item.id, occurrence + 1);
+
+      return [`${item.id}::${occurrence}`, item] as const;
     })
   );
 };
@@ -544,6 +561,16 @@ const REMOVE_REQUEST_KEYWORDS = [
 ] as const;
 
 const ADD_REQUEST_KEYWORDS = ['add', 'insert', 'put', 'include'] as const;
+const INJURY_CONTEXT_KEYWORDS = [
+  'injury',
+  'hurt',
+  'pain',
+  'painful',
+  'sore',
+  'soreness',
+  'strain',
+  'irritation',
+] as const;
 const GENERIC_EXERCISE_WORDS = new Set([
   'press',
   'row',
@@ -561,6 +588,63 @@ const GENERIC_EXERCISE_WORDS = new Set([
 function includesAnyKeyword(requestLower: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => requestLower.includes(keyword));
 }
+
+const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null } => {
+  const severity = requestLower.includes('severe')
+    ? 'severe'
+    : requestLower.includes('moderate')
+      ? 'moderate'
+      : requestLower.includes('mild')
+        ? 'mild'
+        : null;
+
+  return {
+    hasInjuryContext: includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS) || severity !== null,
+    severity,
+  };
+};
+
+const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
+  press: ['bench', 'press', 'chest press', 'overhead press', 'shoulder press'],
+  pressing: ['bench', 'press', 'chest press', 'overhead press', 'shoulder press'],
+  squat: ['squat', 'leg press', 'split squat', 'lunge', 'hack squat'],
+  squatting: ['squat', 'leg press', 'split squat', 'lunge', 'hack squat'],
+  deadlift: ['deadlift', 'rdl', 'romanian deadlift', 'hinge', 'good morning'],
+  deadlifting: ['deadlift', 'rdl', 'romanian deadlift', 'hinge', 'good morning'],
+};
+
+const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
+  const candidateTokens = [
+    'neutral grip',
+    'close grip',
+    'wide grip',
+    'incline',
+    'decline',
+    'high bar',
+    'low bar',
+    'seated',
+    'standing',
+    'supinated',
+    'pronated',
+    'reverse',
+    'one-arm',
+    'single-arm',
+    'single arm',
+  ];
+
+  for (const token of candidateTokens) {
+    if (!requestLower.includes(token)) {
+      continue;
+    }
+
+    const parsed = parseVariantFromToken(token);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
 
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
@@ -784,6 +868,14 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 - Preserve exact values in unchanged columns
 </critical>
 
+<injury_policy>
+- mild: lighten all affected exercises across the entire current queue using a weight-first rule (reduce kg first, then reps/sets if needed)
+- moderate: swap all affected exercises across the entire current queue to safer similar alternatives or remove them
+- severe: same swap-or-remove rule across the entire current queue, with removal as fallback when no suitable safer alternative exists
+- infer severity from user language when unspecified
+- avoid positional assumptions; evaluate and modify the entire current queue
+</injury_policy>
+
 <examples>
 IN: Q0:D2:A|10|8|3,B|5|12|4;Q1:D3:C|20|6|3
 REQ: change A weight to 25
@@ -817,7 +909,8 @@ export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
         .map((ex) => {
           // Use full exercise names and optional variant metadata
           const variantLabel = serialiseVariantForPrompt(ex.variant);
-          return `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}|${variantLabel}`;
+          const base = `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}`;
+          return variantLabel ? `${base}|${variantLabel}` : base;
         })
         .join(',');
     return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
@@ -929,7 +1022,9 @@ export const parseQueueFormatResponse = (
 
         // Try to find the exercise by full name or fuzzy match
         const exerciseData = findExerciseByName(parsedName);
-        const safeVariant = normaliseVariantAgainstOptions(exerciseData, parsedVariant, originalEx?.variant ?? null);
+        const safeVariant = exerciseData?.variantOptions?.length
+          ? normaliseVariantAgainstOptions(exerciseData, parsedVariant, originalEx?.variant ?? null)
+          : (parsedVariant ?? originalEx?.variant ?? null);
 
         if (exerciseData) {
           exercises.push({
@@ -1049,6 +1144,10 @@ export const repairQueueWithIntent = (
   
   const requestLower = userPrompt.toLowerCase();
   const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS);
+  const injuryIntent = inferInjuryIntent(requestLower);
+  const injuryAllowsRemoval =
+    injuryIntent.hasInjuryContext &&
+    (injuryIntent.severity === 'moderate' || injuryIntent.severity === 'severe');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
   // Extract target values from request
@@ -1068,7 +1167,7 @@ export const repairQueueWithIntent = (
   // Normalize "expected" values for each column (supports concurrent attribute prompts)
   const mentionsReps = requestLower.includes('rep');
   const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
-  const mentionsSets = requestLower.includes('set');
+  const mentionsSets = /\bsets\b/.test(requestLower);
   const mentionsVariant =
     requestLower.includes('variant') ||
     requestLower.includes('grip') ||
@@ -1112,7 +1211,10 @@ export const repairQueueWithIntent = (
   };
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
-    const originalItem = originalQueue.find(oq => oq.dayNumber === qItem.dayNumber) || originalQueue[qIndex];
+    const originalItem =
+      originalQueue.find((oq) => oq.id === qItem.id) ||
+      originalQueue[qIndex] ||
+      originalQueue.find((oq) => oq.dayNumber === qItem.dayNumber);
     if (!originalItem) return qItem;
     const usedOriginalIndices = new Set<number>();
     
@@ -1131,7 +1233,6 @@ export const repairQueueWithIntent = (
 
       finalEx.hasCustomisedSets = originalEx.hasCustomisedSets;
       finalEx.exerciseInstanceId = originalEx.exerciseInstanceId;
-      finalEx.variant = originalEx.variant ?? null;
 
       // Check if this exercise was targeted
       const isTargeted = isExerciseTargeted(
@@ -1141,8 +1242,8 @@ export const repairQueueWithIntent = (
         ex.name
       );
 
-      const requestedVariant = parseVariantFromToken(userPrompt);
-      const expectedVariant = mentionsVariant ? requestedVariant : null;
+      const requestedVariant = inferRequestedVariantForRepair(requestLower);
+      const expectedVariant = mentionsVariant && requestedVariant ? requestedVariant : null;
 
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
@@ -1192,11 +1293,21 @@ export const repairQueueWithIntent = (
         }
 
         if (mentionsVariant) {
-          finalEx.variant = normaliseVariantAgainstOptions(
-            findExerciseByName(finalEx.name),
-            expectedVariant ?? finalEx.variant,
-            originalEx.variant ?? null
-          );
+          const exerciseData = findExerciseByName(finalEx.name);
+          if (!exerciseData?.variantOptions?.length) {
+            finalEx.variant = finalEx.variant ?? expectedVariant ?? originalEx.variant ?? null;
+          } else {
+            const normalisedExistingVariant = normaliseVariantAgainstOptions(
+              exerciseData,
+              finalEx.variant,
+              null
+            );
+            finalEx.variant = normaliseVariantAgainstOptions(
+              exerciseData,
+              normalisedExistingVariant ?? expectedVariant,
+              normalisedExistingVariant
+            );
+          }
         }
       } else {
         // Not targeted - restore any accidental changes
@@ -1233,8 +1344,8 @@ export const repairQueueWithIntent = (
         
         console.log(`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`);
         
-        // If user said REMOVE and this exercise was TARGETED, let it die.
-        if (isRemoveRequest && isTargeted) {
+        // Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.
+        if ((isRemoveRequest && isTargeted) || (injuryAllowsRemoval && isTargeted)) {
           console.log(`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`);
           continue;
         }
@@ -1267,7 +1378,7 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if (lowerRequest.includes('rep')) {
     types.push('reps');
   }
-  if (lowerRequest.includes('set')) {
+  if (/\bsets\b/.test(lowerRequest)) {
     types.push('sets');
   }
   if (lowerRequest.includes('variant') || lowerRequest.includes('grip') || lowerRequest.includes('incline') || lowerRequest.includes('decline')) {
@@ -1303,6 +1414,7 @@ export const extractTargetExerciseRefs = (
   queue: WorkoutQueueItem[]
 ): TargetedExerciseRef[] => {
   const lowerRequest = request.toLowerCase().trim();
+  const injuryIntent = inferInjuryIntent(lowerRequest);
   const targetExercises: TargetedExerciseRef[] = [];
   const addedExerciseKeys = new Set<string>();
   const allExercises = queue.flatMap((item) =>
@@ -1390,14 +1502,38 @@ export const extractTargetExerciseRefs = (
     // Extract potential exercise references from request
     // Split by common delimiters and check each chunk
     const chunks = lowerRequest.split(/[,;]|\band\b|\bto\b|\bfor\b/).map(s => s.trim());
-    
+
     for (const chunk of chunks) {
       if (chunk.length < 3) continue;
-      
+
       const similarity = getSimilarity(chunk, exercise.displayName.toLowerCase());
       if (similarity > 0.6) {
         addExercise(exercise);
         break;
+      }
+    }
+  }
+
+  // --- PASS 5: Injury movement-family fallback (narrow and additive) ---
+  if (injuryIntent.hasInjuryContext) {
+    for (const [keyword, familyTerms] of Object.entries(INJURY_MOVEMENT_FAMILY_KEYWORDS)) {
+      if (!lowerRequest.includes(keyword)) {
+        continue;
+      }
+
+      for (const exercise of allExercises) {
+        const key = exercise.exerciseInstanceId ?? `${exercise.queueItemId}:${exercise.exerciseIndex}:${normaliseText(exercise.displayName)}`;
+        if (addedExerciseKeys.has(key)) continue;
+
+        const exerciseLabel = normaliseText(exercise.displayName);
+        const isFamilyMatch = familyTerms.some((term) => {
+          const normalisedTerm = normaliseText(term);
+          return exerciseLabel.includes(normalisedTerm) || getSimilarity(exerciseLabel, normalisedTerm) > 0.65;
+        });
+
+        if (isFamilyMatch) {
+          addExercise(exercise);
+        }
       }
     }
   }
@@ -1784,12 +1920,12 @@ export const compareWorkoutQueues = (
   newQueue: WorkoutQueueItem[]
 ): QueueDifference[] => {
   const differences: QueueDifference[] = [];
-  const oldQueueMap = new Map(oldQueue.map((item) => [item.id, item]));
-  const newQueueMap = new Map(newQueue.map((item) => [item.id, item]));
-  
-  for (const oldItem of oldQueue) {
-    const newItem = newQueueMap.get(oldItem.id);
-    
+  const oldQueueMap = buildQueueItemIdentityMap(oldQueue);
+  const newQueueMap = buildQueueItemIdentityMap(newQueue);
+
+  for (const [queueItemIdentity, oldItem] of oldQueueMap) {
+    const newItem = newQueueMap.get(queueItemIdentity);
+
     if (!newItem) {
       for (const exercise of oldItem.exercises) {
         differences.push({
@@ -1803,9 +1939,14 @@ export const compareWorkoutQueues = (
       }
       continue;
     }
-    
-    const oldExercisesMap = buildExerciseIdentityMap(oldItem.exercises);
-    const newExercisesMap = buildExerciseIdentityMap(newItem.exercises);
+
+    const newQueueHasMissingInstanceIds = newItem.exercises.some((exercise) => !exercise.exerciseInstanceId);
+    const oldExercisesMap = buildExerciseIdentityMap(oldItem.exercises, {
+      includeInstanceId: !newQueueHasMissingInstanceIds,
+    });
+    const newExercisesMap = buildExerciseIdentityMap(newItem.exercises, {
+      includeInstanceId: !newQueueHasMissingInstanceIds,
+    });
 
     for (const [exerciseIdentity, { exercise: oldExercise }] of oldExercisesMap) {
       if (!newExercisesMap.has(exerciseIdentity)) {
@@ -1823,7 +1964,7 @@ export const compareWorkoutQueues = (
     for (const [exerciseIdentity, { exercise: newExercise }] of newExercisesMap) {
       const oldExerciseData = oldExercisesMap.get(exerciseIdentity);
       const exerciseName = withVariantDisplayName(newExercise);
-      
+
       if (!oldExerciseData) {
         differences.push({
           type: 'added',
@@ -1835,8 +1976,7 @@ export const compareWorkoutQueues = (
         });
       } else {
         const oldExercise = oldExerciseData.exercise;
-        
-        // Check for variant changes
+
         if (getExerciseVariantLabel(oldExercise.variant) !== getExerciseVariantLabel(newExercise.variant)) {
           differences.push({
             type: 'variant_change',
@@ -1850,7 +1990,6 @@ export const compareWorkoutQueues = (
           });
         }
 
-        // Check for weight changes
         if (oldExercise.weight !== newExercise.weight) {
           differences.push({
             type: 'weight_change',
@@ -1865,7 +2004,6 @@ export const compareWorkoutQueues = (
           });
         }
 
-        // Check for reps changes
         if (oldExercise.reps !== newExercise.reps) {
           differences.push({
             type: 'reps_change',
@@ -1880,7 +2018,6 @@ export const compareWorkoutQueues = (
           });
         }
 
-        // Check for sets changes
         if (oldExercise.sets !== newExercise.sets) {
           differences.push({
             type: 'sets_change',
@@ -1897,9 +2034,9 @@ export const compareWorkoutQueues = (
       }
     }
   }
-  
-  for (const newItem of newQueue) {
-    if (!oldQueueMap.has(newItem.id)) {
+
+  for (const [queueItemIdentity, newItem] of newQueueMap) {
+    if (!oldQueueMap.has(queueItemIdentity)) {
       for (const exercise of newItem.exercises) {
         differences.push({
           type: 'added',
@@ -1912,7 +2049,7 @@ export const compareWorkoutQueues = (
       }
     }
   }
-  
+
   return differences;
 };
 
@@ -2136,11 +2273,339 @@ export const validateChanges = (
       warnings.push(`Unexpected addition(s): ${addedNames}. These exercises were added but you didn't request addition.`);
     }
   }
-  
+
   return {
     valid: warnings.length === 0,
     warnings,
   };
+};
+
+export interface SemanticEvaluationResult {
+  passed: boolean;
+  reason?: string;
+}
+
+export interface TestPromptCoverageInput {
+  type: string;
+  prompt: string;
+}
+
+export type TestPromptCoverageStatus =
+  | 'covered'
+  | 'missing_targets'
+  | 'missing_variant_capability';
+
+export interface TestPromptCoverageResult {
+  type: string;
+  prompt: string;
+  status: TestPromptCoverageStatus;
+  targetedExercises: string[];
+  missingTargets?: string[];
+  missingVariantTargets?: string[];
+}
+
+export interface TestPromptCoverageReport {
+  allCovered: boolean;
+  results: TestPromptCoverageResult[];
+}
+
+const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
+  const lowerPrompt = prompt.toLowerCase();
+
+  const explicitVariants = [
+    'neutral grip',
+    'close grip',
+    'wide grip',
+    'incline',
+    'decline',
+    'high bar',
+    'low bar',
+  ];
+
+  for (const variant of explicitVariants) {
+    if (lowerPrompt.includes(variant)) {
+      return variant;
+    }
+  }
+
+  if (lowerPrompt.includes('wrist-friendly')) {
+    return 'neutral grip';
+  }
+
+  return null;
+};
+
+export const analyzeTestPromptQueueCoverage = (
+  prompts: TestPromptCoverageInput[],
+  queue: WorkoutQueueItem[]
+): TestPromptCoverageReport => {
+  const results: TestPromptCoverageResult[] = [];
+
+  for (const promptCase of prompts) {
+    const targetedRefs = extractTargetExerciseRefs(promptCase.prompt, queue);
+    const targetedExercises = targetedRefs.map((ref) => ref.displayName);
+
+    if (targetedRefs.length === 0) {
+      results.push({
+        type: promptCase.type,
+        prompt: promptCase.prompt,
+        status: 'missing_targets',
+        targetedExercises,
+        missingTargets: [promptCase.prompt],
+      });
+      continue;
+    }
+
+    const lowerType = promptCase.type.toLowerCase();
+    const lowerPrompt = promptCase.prompt.toLowerCase();
+    const isVariantPrompt =
+      lowerType.includes('variant') ||
+      lowerPrompt.includes('variant') ||
+      lowerPrompt.includes('grip') ||
+      lowerPrompt.includes('incline') ||
+      lowerPrompt.includes('decline') ||
+      lowerPrompt.includes('wrist-friendly');
+
+    if (isVariantPrompt) {
+      const requestedVariant = inferRequestedVariantFromPrompt(promptCase.prompt);
+      const parsedRequestedVariant = requestedVariant ? parseVariantLabel(requestedVariant) : null;
+
+      if (parsedRequestedVariant) {
+        const missingVariantTargets: string[] = [];
+
+        for (const targetRef of targetedRefs) {
+          const exerciseData = findExerciseByName(targetRef.name);
+          if (!isVariantValidForExercise(exerciseData, parsedRequestedVariant)) {
+            missingVariantTargets.push(targetRef.displayName);
+          }
+        }
+
+        if (missingVariantTargets.length > 0) {
+          results.push({
+            type: promptCase.type,
+            prompt: promptCase.prompt,
+            status: 'missing_variant_capability',
+            targetedExercises,
+            missingVariantTargets,
+          });
+          continue;
+        }
+      }
+    }
+
+    results.push({
+      type: promptCase.type,
+      prompt: promptCase.prompt,
+      status: 'covered',
+      targetedExercises,
+    });
+  }
+
+  return {
+    allCovered: results.every((result) => result.status === 'covered'),
+    results,
+  };
+};
+
+export const evaluateVariantSemanticOutcome = (
+  _request: string,
+  _originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  targetedExerciseRefs: TargetedExerciseRef[],
+  requestedVariant: string
+): SemanticEvaluationResult => {
+  const expectedVariant = normaliseText(requestedVariant);
+
+  if (!expectedVariant) {
+    return {
+      passed: false,
+      reason: 'Variant semantic failed: missing requested target variant.',
+    };
+  }
+
+  if (targetedExerciseRefs.length === 0) {
+    return {
+      passed: false,
+      reason: `Variant semantic failed: no targeted exercises provided for variant "${requestedVariant}".`,
+    };
+  }
+
+  for (const targetRef of targetedExerciseRefs) {
+    const queueItem = parsedQueue.find((item) => item.id === targetRef.queueItemId);
+    const parsedExercise =
+      (targetRef.exerciseInstanceId
+        ? parsedQueue
+            .flatMap((item) => item.exercises)
+            .find((exercise) => exercise.exerciseInstanceId === targetRef.exerciseInstanceId)
+        : undefined) ??
+      (queueItem ? queueItem.exercises[targetRef.exerciseIndex] : undefined);
+
+    if (!parsedExercise) {
+      return {
+        passed: false,
+        reason: `Variant semantic failed: missing targeted exercise at index ${targetRef.exerciseIndex} in ${targetRef.queueItemId}.`,
+      };
+    }
+
+    const appliedVariant = normaliseText(getExerciseVariantLabel(parsedExercise.variant));
+    if (!appliedVariant.includes(expectedVariant)) {
+      return {
+        passed: false,
+        reason: `Variant semantic failed: requested variant "${requestedVariant}" not applied to ${targetRef.displayName}.`,
+      };
+    }
+  }
+
+  return { passed: true };
+};
+
+export const evaluateInjurySemanticOutcome = (
+  request: string,
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[],
+  affectedExerciseNames: string[]
+): SemanticEvaluationResult => {
+  const requestLower = normaliseText(request);
+
+  const inferSeverity = (): 'mild' | 'moderate' | 'severe' | null => {
+    if (requestLower.includes('severe')) return 'severe';
+    if (requestLower.includes('moderate')) return 'moderate';
+    if (requestLower.includes('mild')) return 'mild';
+    return null;
+  };
+
+  const severity = inferSeverity();
+  if (!severity) {
+    return { passed: true };
+  }
+
+  const normaliseAffectedName = (name: string): string => {
+    const withoutVariantSuffix = name.replace(/\s*\([^)]*\)\s*$/, '');
+    return normaliseText(withoutVariantSuffix);
+  };
+
+  const affectedNameSet = new Set(
+    affectedExerciseNames
+      .map((name) => normaliseAffectedName(name))
+      .filter(Boolean)
+  );
+
+  if (affectedNameSet.size === 0) {
+    return {
+      passed: false,
+      reason: `Injury semantic failed: ${severity} request missing affected exercise targets.`,
+    };
+  }
+
+  const parseNumber = (value: string | undefined): number | null => {
+    if (!value) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const originalAffected = originalQueue
+    .flatMap((item) => item.exercises)
+    .filter((exercise) => affectedNameSet.has(normaliseText(exercise.name)));
+
+  const parsedAffected = parsedQueue
+    .flatMap((item) => item.exercises)
+    .filter((exercise) => affectedNameSet.has(normaliseText(exercise.name)));
+
+  const allParsedExercises = parsedQueue.flatMap((item) => item.exercises);
+
+  const remainingAffected = allParsedExercises.filter((exercise) =>
+    affectedNameSet.has(normaliseText(exercise.name))
+  );
+
+  if (severity === 'severe' || severity === 'moderate') {
+    if (remainingAffected.length > 0) {
+      const remainingList = remainingAffected.map((exercise) => exercise.name).join(', ');
+      return {
+        passed: false,
+        reason: `Injury semantic failed: ${severity} injuries require swap-or-remove coverage for all affected exercises across the entire current queue (remaining: ${remainingList}).`,
+      };
+    }
+
+    return { passed: true };
+  }
+
+  const getParsedMatch = (() => {
+    const consumed = new Set<number>();
+    return (originalExercise: ProgramExercise): ProgramExercise | undefined => {
+      if (originalExercise.exerciseInstanceId) {
+        const byInstance = allParsedExercises.find(
+          (exercise) => exercise.exerciseInstanceId === originalExercise.exerciseInstanceId
+        );
+        if (byInstance) {
+          return byInstance;
+        }
+      }
+
+      const originalName = normaliseText(originalExercise.name);
+      const index = allParsedExercises.findIndex(
+        (exercise, i) => !consumed.has(i) && normaliseText(exercise.name) === originalName
+      );
+
+      if (index === -1) {
+        return undefined;
+      }
+
+      consumed.add(index);
+      return allParsedExercises[index];
+    };
+  })();
+
+  const isLightenedWeightFirst = (originalExercise: ProgramExercise, parsedExercise: ProgramExercise): boolean => {
+    const originalWeight = parseNumber(originalExercise.weight);
+    const parsedWeight = parseNumber(parsedExercise.weight);
+
+    if (originalWeight !== null && parsedWeight !== null) {
+      if (parsedWeight < originalWeight) {
+        return true;
+      }
+
+      if (parsedWeight > originalWeight) {
+        return false;
+      }
+    }
+
+    const originalReps = parseNumber(originalExercise.reps);
+    const parsedReps = parseNumber(parsedExercise.reps);
+    if (originalReps !== null && parsedReps !== null && parsedReps < originalReps) {
+      return true;
+    }
+
+    const originalSets = parseNumber(originalExercise.sets);
+    const parsedSets = parseNumber(parsedExercise.sets);
+    if (originalSets !== null && parsedSets !== null && parsedSets < originalSets) {
+      return true;
+    }
+
+    return false;
+  };
+
+  if (severity === 'mild') {
+    if (originalAffected.length === 0 || parsedAffected.length === 0) {
+      return {
+        passed: false,
+        reason: 'Injury semantic failed: mild injuries require all affected exercises in the entire current queue to be lightened.',
+      };
+    }
+
+    for (const originalExercise of originalAffected) {
+      const parsedMatch = getParsedMatch(originalExercise);
+      if (!parsedMatch || !isLightenedWeightFirst(originalExercise, parsedMatch)) {
+        return {
+          passed: false,
+          reason: 'Injury semantic failed: mild injuries require all affected exercises in the entire current queue to be lightened using a weight-first rule.',
+        };
+      }
+    }
+
+    return { passed: true };
+  }
+
+  return { passed: true };
 };
 
 

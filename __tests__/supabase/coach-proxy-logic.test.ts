@@ -1,5 +1,7 @@
 import {
   evaluateAuthMode,
+  extractStrictToonCandidate,
+  formatProxyDebugLog,
   getBearerToken,
   isValidToonResponse,
   parseAuthModeFromValue,
@@ -15,6 +17,29 @@ describe('coach proxy logic', () => {
     it('accepts 5-field TOON rows with variant', () => {
       const response = 'Q0:D1:Bench Press|80|8|3|Incline';
       expect(isValidToonResponse(response)).toBe(true);
+    });
+
+    it('extracts valid strict TOON candidate from wrapped output', () => {
+      const wrapped = [
+        'Here is your updated queue:',
+        '```',
+        'Q0:D1:Bench Press|70|8|3;Q1:D2:Back Squat|100|5|5',
+        '```',
+      ].join('\n');
+
+      expect(extractStrictToonCandidate(wrapped)).toBe('Q0:D1:Bench Press|70|8|3;Q1:D2:Back Squat|100|5|5');
+    });
+
+    it('returns null when wrapped output does not contain valid strict TOON candidate', () => {
+      const wrappedInvalid = [
+        'Queue update:',
+        '```',
+        'Q0:D1:Bench Press|70|8-10|3',
+        '```',
+      ].join('\n');
+
+      expect(extractStrictToonCandidate(wrappedInvalid)).toBeNull();
+      expect(isValidToonResponse(wrappedInvalid)).toBe(false);
     });
 
     it('rejects non-integer reps and sets', () => {
@@ -83,6 +108,23 @@ describe('coach proxy logic', () => {
 
       expect(getBearerToken(missing)).toBeNull();
       expect(getBearerToken(malformed)).toBeNull();
+    });
+  });
+
+  describe('proxy debug logging', () => {
+    it('formats a log line that includes both input and output', () => {
+      const logLine = formatProxyDebugLog(
+        [
+          { role: 'system', content: 'Output TOON only' },
+          { role: 'user', content: 'Queue: Q0:D1:Bench|80|8|3 Request: lower weight' },
+        ],
+        'Q0:D1:Bench|70|8|3'
+      );
+
+      expect(logLine).toContain('input=');
+      expect(logLine).toContain('output=');
+      expect(logLine).toContain('Queue: Q0:D1:Bench|80|8|3');
+      expect(logLine).toContain('Q0:D1:Bench|70|8|3');
     });
   });
 });

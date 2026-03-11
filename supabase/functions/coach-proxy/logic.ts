@@ -1,5 +1,18 @@
 export type AuthMode = 'off' | 'optional' | 'required';
 
+type CoachProxyMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+export const formatProxyDebugLog = (
+  messages: CoachProxyMessage[],
+  output: string
+): string => {
+  const input = messages.map((message) => `${message.role}:${message.content}`).join(' | ');
+  return `[coach-proxy] input=${input} output=${output}`;
+};
+
 export const parseAuthModeFromValue = (modeRaw?: string | null): AuthMode => {
   const normalised = modeRaw?.trim().toLowerCase();
   if (normalised === 'off' || normalised === 'optional' || normalised === 'required') {
@@ -50,14 +63,9 @@ export const evaluateAuthMode = (
   return { allow: true };
 };
 
-export const isValidToonResponse = (text: string): boolean => {
-  const trimmed = text.trim();
-  const queueItems = trimmed.match(/Q\d+:D\d+:[^;]+(?:;Q\d+:D\d+:[^;]+)*/)?.[0];
+const STRICT_TOON_PATTERN = /Q\d+:D\d+:[^;\n`]+(?:;Q\d+:D\d+:[^;\n`]+)*/;
 
-  if (!queueItems || queueItems !== trimmed) {
-    return false;
-  }
-
+const isValidStrictToonQueue = (queueItems: string): boolean => {
   const items = queueItems.split(';').filter(Boolean);
   if (items.length === 0) {
     return false;
@@ -99,4 +107,34 @@ export const isValidToonResponse = (text: string): boolean => {
   }
 
   return true;
+};
+
+export const extractStrictToonCandidate = (text: string): string | null => {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const exactMatch = trimmed.match(STRICT_TOON_PATTERN)?.[0];
+  if (exactMatch && exactMatch === trimmed) {
+    return isValidStrictToonQueue(exactMatch) ? exactMatch : null;
+  }
+
+  const embeddedMatch = text.match(STRICT_TOON_PATTERN)?.[0]?.trim();
+  if (!embeddedMatch || embeddedMatch.length === 0) {
+    return null;
+  }
+
+  return isValidStrictToonQueue(embeddedMatch) ? embeddedMatch : null;
+};
+
+export const isValidToonResponse = (text: string): boolean => {
+  const trimmed = text.trim();
+  const queueItems = extractStrictToonCandidate(trimmed);
+
+  if (!queueItems || queueItems !== trimmed) {
+    return false;
+  }
+
+  return isValidStrictToonQueue(queueItems);
 };
