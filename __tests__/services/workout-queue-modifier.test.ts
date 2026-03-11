@@ -618,6 +618,74 @@ describe('parseQueueFormatResponse', () => {
       expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
     });
 
+    it('should enforce destination reps for single-target from-to phrasing', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3';
+      const result = parseQueueFormatResponse(
+        response,
+        queue,
+        'set barbell bench press reps from 8 to 12',
+        [{
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        }]
+      );
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].reps).toBe('12');
+    });
+
+    it('should enforce destination weight for single-target from-to phrasing', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3';
+      const result = parseQueueFormatResponse(
+        response,
+        queue,
+        'set barbell bench press weight from 80 to 90',
+        [{
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        }]
+      );
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].weight).toBe('90');
+    });
+
     it('should return partial queue when response omits queue items', () => {
       const response = 'Q0:D1:Barbell Bench Press|90|8|3';
       const result = parseQueueFormatResponse(
