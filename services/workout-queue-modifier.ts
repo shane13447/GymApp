@@ -732,6 +732,13 @@ const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
   deadlifting: ['deadlift', 'rdl', 'romanian deadlift', 'hinge', 'good morning'],
 };
 
+const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, string[]> = {
+  wrist: ['forearms'],
+  shoulder: ['shoulders', 'chest', 'triceps'],
+  elbow: ['forearms', 'biceps', 'triceps'],
+  knee: ['quads', 'hamstrings', 'glutes', 'calves'],
+};
+
 const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
   const candidateTokens = [
     'neutral grip',
@@ -826,6 +833,8 @@ const detectMuscleGroupInRequest = (
   const sortedKeywords = Object.keys(MUSCLE_GROUP_KEYWORDS).sort(
     (a, b) => b.length - a.length
   );
+  const hasNumericModifier = /\b\d+(?:\.\d+)?\s*(?:reps?|sets?|kg|kgs|lb|lbs|%|percent)\b/.test(lowerRequest);
+  const hasGlobalScopeTerms = /\b(?:all|everything|every|today)\b/.test(lowerRequest);
 
   for (const keyword of sortedKeywords) {
     const patterns = [
@@ -844,6 +853,11 @@ const detectMuscleGroupInRequest = (
       if (lowerRequest.includes(pattern)) {
         return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
       }
+    }
+
+    const keywordRegex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
+    if (keywordRegex.test(lowerRequest) && hasNumericModifier && hasGlobalScopeTerms) {
+      return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
     }
   }
 
@@ -946,11 +960,11 @@ export const preprocessMuscleGroupRequest = (
     }
   }
 
-  return { 
-    processedRequest: request, 
-    wasProcessed: false, 
-    matchedExercises: [],
-    matchedExerciseRefs: [],
+  return {
+    processedRequest: request,
+    wasProcessed: false,
+    matchedExercises: exerciseNames,
+    matchedExerciseRefs,
     muscleGroupDetected: detected.keyword,
     noMatchesFound: false,
   };
@@ -1565,6 +1579,14 @@ export const extractTargetExerciseRefs = (
     }
   };
 
+  // --- PASS 0: Prefer preprocess muscle-group matches as deterministic seed targets ---
+  const preprocessed = preprocessMuscleGroupRequest(request, queue);
+  if (preprocessed.matchedExerciseRefs.length > 0) {
+    for (const matched of preprocessed.matchedExerciseRefs) {
+      addExercise(matched);
+    }
+  }
+
   // --- PASS 1: Check alias dictionary first ---
   // This catches common slang like "crunches" -> "Decline Crunches"
   for (const [alias, possibleMatches] of Object.entries(EXERCISE_ALIASES)) {
@@ -1666,6 +1688,43 @@ export const extractTargetExerciseRefs = (
 
         if (isFamilyMatch) {
           addExercise(exercise);
+        }
+      }
+    }
+  }
+
+  // --- PASS 6: General muscle-group fallback for removal/global wording or injury body-part context ---
+  if (targetExercises.length === 0 || injuryIntent.hasInjuryContext || includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS)) {
+    const fallbackMuscles = new Set<string>();
+
+    const detectedGroup = detectMuscleGroupInRequest(request);
+    if (detectedGroup) {
+      for (const muscle of detectedGroup.muscles) {
+        fallbackMuscles.add(muscle.toLowerCase());
+      }
+    }
+
+    if (injuryIntent.hasInjuryContext) {
+      for (const [bodyPartKeyword, muscleTargets] of Object.entries(INJURY_BODY_PART_MUSCLE_KEYWORDS)) {
+        if (!lowerRequest.includes(bodyPartKeyword)) {
+          continue;
+        }
+
+        for (const muscle of muscleTargets) {
+          fallbackMuscles.add(muscle.toLowerCase());
+        }
+      }
+    }
+
+    if (fallbackMuscles.size > 0) {
+      for (const queueItem of queue) {
+        for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
+          const exerciseMuscles = (exercise.muscle_groups_worked ?? []).map((muscle) => muscle.toLowerCase());
+          const isMatch = exerciseMuscles.some((muscle) => fallbackMuscles.has(muscle));
+
+          if (isMatch) {
+            addExercise(buildTargetedExerciseRef(queueItem, exercise, exerciseIndex));
+          }
         }
       }
     }
