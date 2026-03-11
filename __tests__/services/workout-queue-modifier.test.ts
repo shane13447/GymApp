@@ -759,6 +759,58 @@ describe('parseQueueFormatResponse', () => {
       expect(result).not.toBeNull();
       expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
     });
+
+    it('should normalize case and trim for supported variants using queue metadata options', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            variant: { angle: 'Flat' },
+            variantOptions: [
+              { label: 'Incline', field: 'angle', value: 'incline', aliases: ['inclined'] },
+              { label: 'Decline', field: 'angle', value: 'decline', aliases: ['declined'] },
+            ],
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3|   InClInE   ';
+      const result = parseQueueFormatResponse(response, queue, 'make bench incline', ['Barbell Bench Press']);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
+    });
+
+    it('should map supported variant aliases to canonical option labels', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            variant: { angle: 'Flat' },
+            variantOptions: [
+              { label: 'Incline', field: 'angle', value: 'incline', aliases: ['inclined'] },
+              { label: 'Decline', field: 'angle', value: 'decline', aliases: ['declined'] },
+            ],
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3|inclined';
+      const result = parseQueueFormatResponse(response, queue, 'make bench incline', ['Barbell Bench Press']);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
+    });
   });
 
   describe('invalid data', () => {
