@@ -227,6 +227,39 @@ describe('preprocessMuscleGroupRequest', () => {
       expect(result.muscleGroupDetected).toBe('leg');
     });
 
+    it('Task 3 regression - should detect bare muscle keyword with global numeric reps phrasing', () => {
+      const queue = [
+        createQueueItem({
+          id: 'q-legs',
+          exercises: [
+            createExercise({
+              name: 'Barbell Back Squat',
+              muscle_groups_worked: ['quads', 'glutes', 'hamstrings'],
+              exerciseInstanceId: 'q-legs:e0',
+            }),
+            createExercise({
+              name: 'Leg Extensions',
+              muscle_groups_worked: ['quads'],
+              exerciseInstanceId: 'q-legs:e1',
+            }),
+            createExercise({
+              name: 'Barbell Bench Press',
+              muscle_groups_worked: ['chest', 'triceps'],
+              exerciseInstanceId: 'q-legs:e2',
+            }),
+          ],
+        }),
+      ];
+
+      const result = preprocessMuscleGroupRequest('high volume legs today so set everything to 20 reps', queue);
+
+      expect(result.muscleGroupDetected).toBe('legs');
+      expect(result.matchedExerciseRefs.map((item) => item.name)).toEqual(
+        expect.arrayContaining(['Barbell Back Squat', 'Leg Extensions'])
+      );
+      expect(result.matchedExerciseRefs.map((item) => item.name)).not.toContain('Barbell Bench Press');
+    });
+
     it('should treat back as alias for lats and traps', () => {
       const backQueue = [
         createQueueItem({
@@ -1249,6 +1282,40 @@ describe('extractTargetExercises', () => {
 
       expect(targeted.length).toBeGreaterThan(0);
       expect(targeted.map((item) => item.name)).toEqual(expect.arrayContaining(['Wrist Curls', 'Reverse Wrist Curls']));
+    });
+
+    it('Task 3 regression - injury movement-family phrasing should target pressing exercises deterministically', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            muscle_groups_worked: ['chest', 'triceps', 'shoulders'],
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Incline Dumbbell Press',
+            muscle_groups_worked: ['chest', 'shoulders', 'triceps'],
+            exerciseInstanceId: 'q0:e1',
+          }),
+          createExercise({
+            name: 'Barbell Back Squat',
+            muscle_groups_worked: ['quads', 'glutes'],
+            exerciseInstanceId: 'q0:e2',
+          }),
+        ],
+      })];
+
+      const request = 'my shoulder is sore, go easier on pressing today';
+      const firstPass = extractTargetExerciseRefs(request, queue);
+      const secondPass = extractTargetExerciseRefs(request, queue);
+
+      expect(firstPass.length).toBeGreaterThan(0);
+      expect(firstPass.map((item) => item.name)).toEqual(
+        expect.arrayContaining(['Barbell Bench Press', 'Incline Dumbbell Press'])
+      );
+      expect(firstPass.map((item) => item.name)).not.toContain('Barbell Back Squat');
+      expect(firstPass.map((item) => item.exerciseInstanceId)).toEqual(secondPass.map((item) => item.exerciseInstanceId));
     });
   });
 
