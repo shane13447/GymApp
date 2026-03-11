@@ -1290,7 +1290,15 @@ export const repairQueueWithIntent = (
   const mentionsReps = requestLower.includes('rep');
   const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
   const mentionsSets = /\bsets\b/.test(requestLower);
-  const mentionsVariant =
+  const requestedVariant = inferRequestedVariantForRepair(requestLower);
+  const requestedVariantLabel = normaliseText(getExerciseVariantLabel(requestedVariant));
+  const variantAppearsInTargetName = requestedVariantLabel.length > 0 && targetedExerciseNames.some((target) => {
+    const rawName = isTargetedExerciseRef(target)
+      ? `${target.name} ${target.displayName}`
+      : target;
+    return normaliseText(rawName).includes(requestedVariantLabel);
+  });
+  const mentionsVariantBase =
     requestLower.includes('variant') ||
     requestLower.includes('grip') ||
     requestLower.includes('incline') ||
@@ -1299,6 +1307,8 @@ export const repairQueueWithIntent = (
     requestLower.includes('standing') ||
     requestLower.includes('one-arm') ||
     requestLower.includes('single-arm');
+  const mentionsVariant =
+    mentionsVariantBase && !(variantAppearsInTargetName && (mentionsReps || mentionsWeight || mentionsSets));
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets || mentionsVariant;
 
   const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
@@ -1364,7 +1374,6 @@ export const repairQueueWithIntent = (
         ex.name
       );
 
-      const requestedVariant = inferRequestedVariantForRepair(requestLower);
       const expectedVariant = mentionsVariant && requestedVariant ? requestedVariant : null;
 
       // --- LOGIC GAP FIX (Test 12) ---
@@ -1430,6 +1439,8 @@ export const repairQueueWithIntent = (
               normalisedExistingVariant
             );
           }
+        } else {
+          finalEx.variant = originalEx.variant ?? null;
         }
       } else {
         // Not targeted - restore any accidental changes
