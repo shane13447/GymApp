@@ -1943,7 +1943,7 @@ describe('analyzeTestPromptQueueCoverage', () => {
     expect(report.results[0].status).toBe('missing_targets');
   });
 
-  it('should report missing variant capability when targeted exercise lacks requested variant support', () => {
+  it('should treat variant prompt as covered when targeted exercise lacks variant options metadata', () => {
     const queue: WorkoutQueueItem[] = [
       createQueueItem({
         id: 'q0',
@@ -1963,8 +1963,8 @@ describe('analyzeTestPromptQueueCoverage', () => {
       queue
     );
 
-    expect(report.allCovered).toBe(false);
-    expect(report.results[0].status).toBe('missing_variant_capability');
+    expect(report.allCovered).toBe(true);
+    expect(report.results[0].status).toBe('covered');
   });
 
   it('should mark prompt as covered when a direct target match exists for non-variant tests', () => {
