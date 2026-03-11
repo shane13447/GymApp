@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
 import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
@@ -417,9 +418,11 @@ export default function CoachScreen() {
                 : { passed: true };
 
             const hasWarnings = !validation.valid;
-            const success = hasWarnings
-              ? false
-              : semanticResult.passed && deterministicIntentResult.passed;
+            const success = classifyCoachTestSuccess({
+              hasWarnings,
+              semanticPassed: semanticResult.passed,
+              deterministicIntentPassed: deterministicIntentResult.passed,
+            });
 
             console.log(
               `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${success ? 'SUCCESS' : 'FAILED'}`
@@ -491,8 +494,9 @@ export default function CoachScreen() {
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
             console.log(
-              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO CHANGES DETECTED`
+              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO_CHANGES`
             );
+            console.log(`[TEST][NO_CHANGES]`, 'No changes detected');
             setTestResults((prev) => [
               ...prev,
               { type: currentTest.type, success: false, error: 'No changes detected' },
@@ -517,7 +521,8 @@ export default function CoachScreen() {
 
         if (isTestMode) {
           const currentTest = TEST_PROMPTS[testIndex];
-          console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: PARSE FAILED`);
+          console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: FAILED_PARSE`);
+          console.log(`[TEST][FAILED_PARSE]`, 'Parse failed');
           setTestResults((prev) => [
             ...prev,
             { type: currentTest.type, success: false, error: 'Parse failed' },
