@@ -12,12 +12,16 @@ jest.mock('@/services/database', () => ({
 }));
 
 import {
+    analyzeTestPromptQueueCoverage,
     buildCompressedPrompt,
+    COMPRESSED_SYSTEM_PROMPT,
     compareWorkoutQueues,
     detectRequestedChangeType,
     differencesToProposedChanges,
     encodeQueueForLLM,
     enforceColumnChanges,
+    evaluateInjurySemanticOutcome,
+    evaluateVariantSemanticOutcome,
     extractTargetExerciseRefs,
     extractTargetExercises,
     findExerciseByName,
@@ -371,6 +375,15 @@ describe('encodeQueueForLLM', () => {
       const result = encodeQueueForLLM(queue);
       expect(result).toMatch(/Test\|80\|10\|3/);
     });
+
+    it('should omit trailing variant delimiter when variant is empty', () => {
+      const queue = [createQueueItem({
+        exercises: [createExercise({ name: 'Test', weight: '80', reps: '10', sets: '3', variant: null })],
+      })];
+      const result = encodeQueueForLLM(queue);
+      expect(result).toContain('Test|80|10|3');
+      expect(result).not.toContain('Test|80|10|3|');
+    });
   });
 
   describe('edge cases', () => {
@@ -424,6 +437,18 @@ describe('buildCompressedPrompt', () => {
       expect(result).toContain('Queue:');
       expect(result).toContain('Request:test request');
     });
+  });
+});
+
+describe('COMPRESSED_SYSTEM_PROMPT injury policy', () => {
+  it('includes mild/moderate/severe guidance with entire-queue, weight-first, and swap-or-remove defaults', () => {
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/mild/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/moderate/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/severe/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/entire current queue/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/weight-first/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/swap/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/remove/i);
   });
 });
 
@@ -574,6 +599,47 @@ describe('parseQueueFormatResponse', () => {
       expect(result?.[0].id).toBe('q0');
     });
 
+    it('should preserve queue-item-specific exercises when multiple queue items share the same day number', () => {
+      const queue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          position: 0,
+          dayNumber: 1,
+          exercises: [createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e0' })],
+        }),
+        createQueueItem({
+          id: 'q1',
+          position: 1,
+          dayNumber: 1,
+          exercises: [createExercise({ name: 'Barbell Back Squat', exerciseInstanceId: 'q1:e0' })],
+        }),
+        createQueueItem({
+          id: 'q2',
+          position: 2,
+          dayNumber: 1,
+          exercises: [createExercise({ name: 'Barbell Deadlift', exerciseInstanceId: 'q2:e0' })],
+        }),
+      ];
+
+      const response =
+        'Q0:D1:Barbell Bench Press|80|8|3;Q1:D1:Barbell Back Squat|100|8|3;Q2:D1:Barbell Deadlift|120|8|3';
+      const parsed = parseQueueFormatResponse(response, queue, 'set barbell bench press to 80kg', [
+        'Barbell Bench Press',
+      ]);
+
+      expect(parsed).not.toBeNull();
+      expect(parsed).toHaveLength(3);
+      expect(parsed?.[0].id).toBe('q0');
+      expect(parsed?.[1].id).toBe('q1');
+      expect(parsed?.[2].id).toBe('q2');
+      expect(parsed?.[0].exercises[0].name).toBe('Barbell Bench Press');
+      expect(parsed?.[1].exercises[0].name).toBe('Barbell Back Squat');
+      expect(parsed?.[2].exercises[0].name).toBe('Barbell Deadlift');
+
+      const differences = compareWorkoutQueues(queue, parsed ?? []);
+      expect(differences).toHaveLength(0);
+    });
+
     it('should preserve duplicate instance ids when repairing targeted duplicates', () => {
       const queue = [createQueueItem({
         id: 'q0',
@@ -615,6 +681,83 @@ describe('parseQueueFormatResponse', () => {
       expect(result![0].exercises[1].weight).toBe('75');
       expect(result![0].exercises[0].exerciseInstanceId).toBe('q0:e0');
       expect(result![0].exercises[1].exerciseInstanceId).toBe('q0:e1');
+    });
+
+    it('should keep moderate injury-driven pressing swaps without explicit remove keywords', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' }),
+          createExercise({ name: 'Dumbbell Flyes', weight: '15', reps: '10', sets: '3' }),
+        ],
+      })];
+
+      const request = 'moderate shoulder injury pressing is painful today, swap to safer options';
+      const targeted = extractTargetExerciseRefs(request, queue);
+
+      expect(targeted.map((item) => item.name)).toContain('Barbell Bench Press');
+
+      const response = 'Q0:D1:Dumbbell Flyes|15|10|3';
+      const result = parseQueueFormatResponse(response, queue, request, targeted);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises.map((exercise) => exercise.name)).not.toContain('Barbell Bench Press');
+    });
+
+    it('should keep severe injury-driven deadlifting swaps without explicit remove keywords', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' }),
+          createExercise({ name: 'Leg Extensions', weight: '50', reps: '12', sets: '3' }),
+        ],
+      })];
+
+      const request = 'severe lower back injury deadlifting is painful, make it safer';
+      const targeted = extractTargetExerciseRefs(request, queue);
+
+      expect(targeted.map((item) => item.name)).toContain('Barbell Deadlift');
+
+      const response = 'Q0:D1:Leg Extensions|50|12|3';
+      const result = parseQueueFormatResponse(response, queue, request, targeted);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises.map((exercise) => exercise.name)).not.toContain('Barbell Deadlift');
+    });
+
+    it('should preserve valid targeted variant updates during repair when prompt contains extra natural language', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            weight: '80',
+            reps: '8',
+            sets: '3',
+            variant: { angle: 'Flat' },
+          }),
+        ],
+      })];
+
+      const request = 'for my shoulder comfort, make the bench an incline variant and keep everything else the same';
+      const response = 'Q0:D1:Barbell Bench Press|80|8|3|Incline';
+      const targeted = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        },
+      ];
+
+      const result = parseQueueFormatResponse(response, queue, request, targeted);
+
+      expect(result).not.toBeNull();
+      expect(result![0].exercises[0].variant).toEqual({ angle: 'Incline' });
     });
   });
 
@@ -1120,6 +1263,68 @@ describe('compareWorkoutQueues', () => {
       expect(differences[0].oldWeight).toBe('70');
       expect(differences[0].newWeight).toBe('75');
     });
+
+    it('should not report remove/add pairs when parsed queue omits exerciseInstanceId but exercise content is unchanged', () => {
+      const oldQueue = [createQueueItem({
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '0', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Chest Press', weight: '0', reps: '8', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      })];
+
+      const newQueue = [createQueueItem({
+        id: oldQueue[0].id,
+        position: oldQueue[0].position,
+        dayNumber: oldQueue[0].dayNumber,
+        programName: oldQueue[0].programName,
+        programId: oldQueue[0].programId,
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '0', reps: '8', sets: '3', exerciseInstanceId: undefined }),
+          createExercise({ name: 'Chest Press', weight: '0', reps: '8', sets: '3', exerciseInstanceId: undefined }),
+        ],
+      })];
+
+      const differences = compareWorkoutQueues(oldQueue, newQueue);
+
+      expect(differences).toHaveLength(0);
+      expect(differences.some((d) => d.type === 'removed')).toBe(false);
+      expect(differences.some((d) => d.type === 'added')).toBe(false);
+    });
+
+    it('should not collapse queue items when queue ids are duplicated', () => {
+      const duplicateId = 'queue-dup';
+      const oldQueue = [
+        createQueueItem({
+          id: duplicateId,
+          position: 0,
+          exercises: [createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e0' })],
+        }),
+        createQueueItem({
+          id: duplicateId,
+          position: 1,
+          exercises: [createExercise({ name: 'Chest Press', exerciseInstanceId: 'q1:e0' })],
+        }),
+      ];
+
+      const newQueue = [
+        createQueueItem({
+          id: duplicateId,
+          position: 0,
+          exercises: [createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: undefined })],
+        }),
+        createQueueItem({
+          id: duplicateId,
+          position: 1,
+          exercises: [createExercise({ name: 'Chest Press', exerciseInstanceId: undefined })],
+        }),
+      ];
+
+      const differences = compareWorkoutQueues(oldQueue, newQueue);
+
+      expect(differences).toHaveLength(0);
+      expect(differences.some((d) => d.type === 'removed')).toBe(false);
+      expect(differences.some((d) => d.type === 'added')).toBe(false);
+    });
   });
 
   describe('no changes', () => {
@@ -1251,6 +1456,534 @@ describe('validateQueueStructure', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors.some((error) => error.includes('has no exercises'))).toBe(true);
+  });
+});
+
+describe('semantic outcome evaluators', () => {
+  it('fails severe injury semantic when affected exercise remains anywhere in the current queue', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+      createQueueItem({
+        id: 'q2',
+        position: 2,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+      createQueueItem({
+        id: 'q3',
+        position: 3,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+    ];
+
+    const failedSevereQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Leg Extensions' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+      createQueueItem({
+        id: 'q2',
+        position: 2,
+        exercises: [createExercise({ name: 'Leg Press' })],
+      }),
+      createQueueItem({
+        id: 'q3',
+        position: 3,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+    ];
+
+    const passedSevereQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Leg Extensions' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Leg Press' })],
+      }),
+      createQueueItem({
+        id: 'q2',
+        position: 2,
+        exercises: [createExercise({ name: 'Leg Curls' })],
+      }),
+      createQueueItem({
+        id: 'q3',
+        position: 3,
+        exercises: [createExercise({ name: 'Barbell Back Squat' })],
+      }),
+    ];
+
+    const failedResult = evaluateInjurySemanticOutcome(
+      'severe knee injury remove squats',
+      originalQueue,
+      failedSevereQueue,
+      ['Barbell Back Squat']
+    );
+
+    expect(failedResult.passed).toBe(false);
+    expect(failedResult.reason?.toLowerCase()).toContain('entire current queue');
+
+    const stillPresentOutsideFirstThree = evaluateInjurySemanticOutcome(
+      'severe knee injury remove squats',
+      originalQueue,
+      passedSevereQueue,
+      ['Barbell Back Squat']
+    );
+
+    expect(stillPresentOutsideFirstThree.passed).toBe(false);
+    expect(stillPresentOutsideFirstThree.reason?.toLowerCase()).toContain('entire current queue');
+  });
+
+  it('should fail variant semantic when requested target variant is not applied', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variant: { angle: 'flat' },
+          }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variant: { angle: 'decline' },
+          }),
+        ],
+      }),
+    ];
+
+    const result = evaluateVariantSemanticOutcome(
+      'make bench incline variant',
+      originalQueue,
+      parsedQueue,
+      [{
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press',
+      }],
+      'incline'
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain('incline');
+  });
+
+  it('should pass variant semantic when requested target variant is applied', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variant: { angle: 'flat' },
+          }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Bench Press',
+            variant: { angle: 'incline' },
+          }),
+        ],
+      }),
+    ];
+
+    const result = evaluateVariantSemanticOutcome(
+      'make bench incline variant',
+      originalQueue,
+      parsedQueue,
+      [{
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press',
+      }],
+      'incline'
+    );
+
+    expect(result.passed).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it('should pass variant semantic when targeted exercise moves but instance id matches', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            exerciseInstanceId: 'bench-1',
+            name: 'Barbell Bench Press',
+            variant: { angle: 'flat' },
+          }),
+          createExercise({
+            exerciseInstanceId: 'fly-1',
+            name: 'Dumbbell Flyes',
+          }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            exerciseInstanceId: 'fly-1',
+            name: 'Dumbbell Flyes',
+          }),
+        ],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [
+          createExercise({
+            exerciseInstanceId: 'bench-1',
+            name: 'Barbell Bench Press',
+            variant: { angle: 'incline' },
+          }),
+        ],
+      }),
+    ];
+
+    const result = evaluateVariantSemanticOutcome(
+      'make bench incline variant',
+      originalQueue,
+      parsedQueue,
+      [{
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        exerciseInstanceId: 'bench-1',
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press',
+      }],
+      'incline'
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('should fail severe injury semantic when affected name includes variant label', () => {
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [
+          createExercise({
+            name: 'Barbell Back Squat',
+            variant: { angle: 'High Bar' },
+          }),
+        ],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Leg Press' })],
+      }),
+      createQueueItem({
+        id: 'q2',
+        position: 2,
+        exercises: [createExercise({ name: 'Leg Curls' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'severe knee injury remove squats',
+      [],
+      parsedQueue,
+      ['Barbell Back Squat (High Bar)']
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('entire current queue');
+  });
+
+  it('should fail mild injury semantic when affected exercises are unchanged', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'mild shoulder irritation',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Bench Press']
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain('mild');
+  });
+
+  it('should pass mild injury semantic when affected exercises are lightened', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '60', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'mild shoulder irritation',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Bench Press']
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('should fail moderate injury semantic when affected exercises are unchanged', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'moderate lower back soreness',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Deadlift']
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain('moderate');
+  });
+
+  it('should pass moderate injury semantic when affected exercises are removed', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Leg Press', weight: '80', reps: '10', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'moderate lower back soreness',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Deadlift']
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('should fail mild injury semantic when one affected exercise in current queue is not lightened', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Dumbbell Bench Press', weight: '30', reps: '10', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Bench Press', weight: '70', reps: '8', sets: '3' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Dumbbell Bench Press', weight: '30', reps: '10', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'mild chest strain',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Bench Press', 'Dumbbell Bench Press']
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('all affected');
+  });
+
+  it('should fail moderate injury semantic when one affected exercise remains unchanged in the current queue', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Barbell Deadlift', weight: '120', reps: '5', sets: '3' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Romanian Deadlift', weight: '100', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        position: 0,
+        exercises: [createExercise({ name: 'Leg Press', weight: '80', reps: '10', sets: '3' })],
+      }),
+      createQueueItem({
+        id: 'q1',
+        position: 1,
+        exercises: [createExercise({ name: 'Romanian Deadlift', weight: '100', reps: '8', sets: '3' })],
+      }),
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'moderate lower back soreness',
+      originalQueue,
+      parsedQueue,
+      ['Barbell Deadlift', 'Romanian Deadlift']
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('all affected');
+  });
+});
+
+describe('analyzeTestPromptQueueCoverage', () => {
+  it('should report missing targets when prompt exercises are absent from the queue', () => {
+    const queue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [createExercise({ name: 'Barbell Bench Press' })],
+      }),
+    ];
+
+    const report = analyzeTestPromptQueueCoverage(
+      [{ type: 'Variant - Single', prompt: 'switch my lat pulldowns to close grip today' }],
+      queue
+    );
+
+    expect(report.allCovered).toBe(false);
+    expect(report.results[0].status).toBe('missing_targets');
+  });
+
+  it('should report missing variant capability when targeted exercise lacks requested variant support', () => {
+    const queue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Custom Unknown Row',
+            muscle_groups_worked: ['back'],
+            equipment: 'Machine',
+          }),
+        ],
+      }),
+    ];
+
+    const report = analyzeTestPromptQueueCoverage(
+      [{ type: 'Variant - Single', prompt: 'switch my custom unknown row to close grip today' }],
+      queue
+    );
+
+    expect(report.allCovered).toBe(false);
+    expect(report.results[0].status).toBe('missing_variant_capability');
+  });
+
+  it('should mark prompt as covered when a direct target match exists for non-variant tests', () => {
+    const queue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [createExercise({ name: 'Barbell Bench Press' })],
+      }),
+    ];
+
+    const report = analyzeTestPromptQueueCoverage(
+      [{ type: 'Single - Weight', prompt: 'set barbell bench press to 90kg' }],
+      queue
+    );
+
+    expect(report.allCovered).toBe(true);
+    expect(report.results[0].status).toBe('covered');
+    expect(report.results[0].targetedExercises).toContain('Barbell Bench Press');
   });
 });
 
