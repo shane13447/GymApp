@@ -21,6 +21,9 @@ import {
   compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
   differencesToProposedChanges,
+  evaluateInjurySemanticOutcome,
+  evaluatePromptIntentOutcome,
+  evaluateVariantSemanticOutcome,
   extractTargetExerciseRefs,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
@@ -76,6 +79,20 @@ const TEST_PROMPTS = [
 
   // Natural language duplication
   { type: 'Safety - Duplicate Add', prompt: 'hey add decline crunches to day 2 again' },
+
+  // --- TIER 5: VARIANT COVERAGE ---
+  { type: 'Variant - Single', prompt: 'switch my lat pulldowns to close grip today' },
+  {
+    type: 'Variant - Multi',
+    prompt: 'make lat pulldowns and cable rows neutral grip for this workout',
+  },
+  { type: 'Variant - Muscle', prompt: 'use incline variations for all chest moves today' },
+  { type: 'Variant - Safety', prompt: 'give me a wrist-friendly variant for barbell curls' },
+
+  // --- TIER 6: INJURY SCENARIOS ---
+  { type: 'Injury - Mild', prompt: 'my shoulder feels a little irritated today, go easier on pressing' },
+  { type: 'Injury - Moderate', prompt: 'my lower back is sore, adjust today\'s plan so it doesn\'t flare up' },
+  { type: 'Injury - Severe', prompt: 'I tweaked my knee badly, I cannot do any painful leg work today' },
 ];
 
 type CoachProxyMessage = {
@@ -87,6 +104,40 @@ type CoachTestResult = {
   type: string;
   success: boolean;
   error?: string;
+};
+
+const inferRequestedVariant = (prompt: string): string | null => {
+  const lowerPrompt = prompt.toLowerCase();
+
+  const explicitVariants = [
+    'neutral grip',
+    'close grip',
+    'wide grip',
+    'incline',
+    'decline',
+    'high bar',
+    'low bar',
+  ];
+
+  for (const variant of explicitVariants) {
+    if (lowerPrompt.includes(variant)) {
+      return variant;
+    }
+  }
+
+  if (lowerPrompt.includes('wrist-friendly')) {
+    return 'neutral grip';
+  }
+
+  return null;
+};
+
+const inferInjurySeverity = (type: string): 'mild' | 'moderate' | 'severe' | null => {
+  const lowerType = type.toLowerCase();
+  if (lowerType.includes('injury - severe')) return 'severe';
+  if (lowerType.includes('injury - moderate')) return 'moderate';
+  if (lowerType.includes('injury - mild')) return 'mild';
+  return null;
 };
 
 const COACH_API_TIMEOUT_MS = 60000;
@@ -174,6 +225,7 @@ const callCoachProxy = async (
     });
 
     const rawBody = await response.text();
+    console.log('[COACH PROXY] Raw API response body:', rawBody);
 
     if (!response.ok) {
       throw new Error(rawBody || `Coach proxy request failed (${response.status})`);
@@ -326,20 +378,87 @@ export default function CoachScreen() {
           // In test mode, auto-discard and log result
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
-            const hasWarnings = !validation.valid;
-            console.log(
-              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${hasWarnings ? 'SUCCESS (with warnings)' : 'SUCCESS'}`
-            );
-            if (hasWarnings) {
-              console.log(`[TEST] Validation warnings:`, validation.warnings);
+            const isVariantTest = currentTest.type.startsWith('Variant -');
+            const isInjuryTest = currentTest.type.startsWith('Injury -');
+
+            let semanticResult: { passed: boolean; reason?: string } = { passed: true };
+
+            if (isVariantTest) {
+              const requestedVariant = inferRequestedVariant(currentTest.prompt) ?? '';
+              semanticResult = evaluateVariantSemanticOutcome(
+                currentTest.prompt,
+                workoutQueue,
+                parsedQueue,
+                targetedExercisesRef.current,
+                requestedVariant
+              );
+            } else if (isInjuryTest) {
+              const injurySeverity = inferInjurySeverity(currentTest.type);
+              const semanticRequest = injurySeverity
+                ? `${injurySeverity} injury: ${currentTest.prompt}`
+                : currentTest.prompt;
+
+              semanticResult = evaluateInjurySemanticOutcome(
+                semanticRequest,
+                workoutQueue,
+                parsedQueue,
+                targetedExercisesRef.current.map((exercise) => exercise.displayName)
+              );
             }
+
+            const deterministicIntentResult =
+              !isVariantTest && !isInjuryTest
+                ? evaluatePromptIntentOutcome(
+                    currentTest.prompt,
+                    workoutQueue,
+                    parsedQueue,
+                    targetedExercisesRef.current
+                  )
+                : { passed: true };
+
+            const hasWarnings = !validation.valid;
+            const success = hasWarnings
+              ? false
+              : semanticResult.passed && deterministicIntentResult.passed;
+
+            console.log(
+              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${success ? 'SUCCESS' : 'FAILED'}`
+            );
+
+            if (hasWarnings) {
+              console.log(`[TEST][FAILED_VALIDATION]`, validation.warnings);
+            }
+
+            if (!semanticResult.passed) {
+              console.log(`[TEST][FAILED_SEMANTIC]`, semanticResult.reason);
+            }
+
+            if (!deterministicIntentResult.passed) {
+              console.log(`[TEST][FAILED_INTENT_MISMATCH]`, deterministicIntentResult.reason);
+            }
+
             console.log(`[TEST] Changes proposed:`, formatted);
+            const failureReasons: string[] = [];
+            if (hasWarnings) {
+              failureReasons.push(validation.warnings.join('; '));
+            }
+            if (!semanticResult.passed) {
+              failureReasons.push(
+                semanticResult.reason ?? `Semantic validation failed for ${currentTest.type}.`
+              );
+            }
+            if (!deterministicIntentResult.passed) {
+              failureReasons.push(
+                deterministicIntentResult.reason ?? `Intent mismatch for ${currentTest.type}.`
+              );
+            }
+
             setTestResults((prev) => [
               ...prev,
               {
                 type: currentTest.type,
-                success: true,
-                error: hasWarnings ? validation.warnings.join('; ') : undefined,
+                success,
+                error: failureReasons.length > 0 ? failureReasons.join('; ') : undefined,
               },
             ]);
 
@@ -709,6 +828,7 @@ export default function CoachScreen() {
       return;
     }
 
+    setError('');
     console.log('\n========================================');
     console.log('[TEST] Starting automated test suite');
     console.log(`[TEST] ${totalTests} tests to run`);
