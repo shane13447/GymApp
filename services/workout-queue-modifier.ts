@@ -2949,6 +2949,40 @@ export const evaluatePromptIntentOutcome = (
     }
   }
 
+  const allOriginalExercises = originalQueue.flatMap((item) => item.exercises);
+  const allParsedExercises = parsedQueue.flatMap((item) => item.exercises);
+  const uniqueTargetNames = Array.from(new Set(targetedExerciseRefs.map((targetRef) => normaliseText(targetRef.name))));
+
+  if (changeTypes.includes('add')) {
+    for (const targetName of uniqueTargetNames) {
+      const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+      const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+
+      if (parsedCount <= originalCount) {
+        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        return {
+          passed: false,
+          reason: `Intent semantic failed: add request did not increase count for ${failedTarget?.displayName ?? targetName}.`,
+        };
+      }
+    }
+  }
+
+  if (changeTypes.includes('remove')) {
+    for (const targetName of uniqueTargetNames) {
+      const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+      const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+
+      if (parsedCount >= originalCount) {
+        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        return {
+          passed: false,
+          reason: `Intent semantic failed: remove request did not decrease count for ${failedTarget?.displayName ?? targetName}.`,
+        };
+      }
+    }
+  }
+
   if (shouldRequireDuplicateAdd) {
     for (const targetRef of targetedExerciseRefs) {
       const normalisedName = normaliseText(targetRef.name);
