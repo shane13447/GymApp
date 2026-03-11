@@ -847,6 +847,40 @@ describe('parseQueueFormatResponse', () => {
       expect(parsed?.[0].exercises[0].exerciseInstanceId).toBe('q0:e0');
     });
 
+    it('Task 2 follow-up - non-variant crunch edits should preserve original variant', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Decline Crunches',
+            weight: '0',
+            reps: '12',
+            sets: '3',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Decline Crunches|0|15|3';
+      const parsed = parseQueueFormatResponse(response, queue, 'set decline crunches reps to 15', [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]);
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.[0].exercises[0].variant).toBeNull();
+      const differences = compareWorkoutQueues(queue, parsed ?? []);
+      expect(differences.some((difference) => difference.type === 'variant_change')).toBe(false);
+      expect(differences.some((difference) => difference.type === 'reps_change')).toBe(true);
+    });
+
     it('Task 1 regression - multi-reps intent should preserve calf 20 and leg extensions 6 through repair', () => {
       const queue = [createQueueItem({
         id: 'q0',
