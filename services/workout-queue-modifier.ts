@@ -1286,19 +1286,79 @@ export const repairQueueWithIntent = (
     (injuryIntent.severity === 'moderate' || injuryIntent.severity === 'severe');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
   
-  // Extract target values from request
-  const repsMatch = userPrompt.match(/(\d+)\s*reps?/i) || userPrompt.match(/reps?\s*(?:to\s*)?(\d+)/i);
-  const targetReps = repsMatch ? repsMatch[1] : null;
-  
-  const weightMatch = userPrompt.match(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/i) || userPrompt.match(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/i);
-  const targetWeight = weightMatch ? weightMatch[1] : null;
-  
-  const setsMatch = userPrompt.match(/(\d+)\s*sets?/i) || userPrompt.match(/sets?\s*(?:to\s*)?(\d+)/i);
-  const targetSets = setsMatch ? setsMatch[1] : null;
-  
-  // Also check "to X" pattern
-  const toValueMatch = userPrompt.match(/to\s+(\d+(?:\.\d+)?)/i);
-  const toValue = toValueMatch ? toValueMatch[1] : null;
+  const extractDestinationValues = (prompt: string, column: 'reps' | 'sets' | 'weight'): string[] => {
+    const values = new Set<string>();
+
+    const addMatches = (patterns: RegExp[]) => {
+      for (const pattern of patterns) {
+        for (const match of prompt.matchAll(pattern)) {
+          const destination = match[1];
+          if (destination) {
+            values.add(destination);
+          }
+        }
+      }
+    };
+
+    if (column === 'reps') {
+      addMatches([
+        /reps?\s*from\s*\d+\s*to\s*(\d+)/gi,
+        /from\s*\d+\s*to\s*(\d+)\s*reps?/gi,
+      ]);
+      if (values.size === 0) {
+        addMatches([
+          /reps?\s*(?:to|at)\s*(\d+)/gi,
+          /to\s*(\d+)\s*reps?/gi,
+        ]);
+      }
+      if (values.size === 0) {
+        addMatches([
+          /(\d+)\s*reps?/gi,
+          /reps?\s*(\d+)/gi,
+        ]);
+      }
+    }
+
+    if (column === 'sets') {
+      addMatches([
+        /sets?\s*from\s*\d+\s*to\s*(\d+)/gi,
+        /from\s*\d+\s*to\s*(\d+)\s*sets?/gi,
+      ]);
+      if (values.size === 0) {
+        addMatches([
+          /sets?\s*(?:to|at)\s*(\d+)/gi,
+          /to\s*(\d+)\s*sets?/gi,
+        ]);
+      }
+      if (values.size === 0) {
+        addMatches([
+          /(\d+)\s*sets?/gi,
+          /sets?\s*(\d+)/gi,
+        ]);
+      }
+    }
+
+    if (column === 'weight') {
+      addMatches([
+        /weight\s*from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)/gi,
+        /from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)(?:\s*kg)?\s*weight/gi,
+      ]);
+      if (values.size === 0) {
+        addMatches([
+          /weight\s*(?:to|at)\s*(\d+(?:\.\d+)?)/gi,
+          /to\s*(\d+(?:\.\d+)?)\s*(?:kgs?|kg)\b/gi,
+        ]);
+      }
+      if (values.size === 0) {
+        addMatches([
+          /(\d+(?:\.\d+)?)\s*(?:kg|weight)/gi,
+          /weight\s*(\d+(?:\.\d+)?)/gi,
+        ]);
+      }
+    }
+
+    return Array.from(values);
+  };
 
   // Normalize "expected" values for each column (supports concurrent attribute prompts)
   const mentionsReps = requestLower.includes('rep');
@@ -1325,48 +1385,17 @@ export const repairQueueWithIntent = (
     mentionsVariantBase && !(variantAppearsInTargetName && (mentionsReps || mentionsWeight || mentionsSets));
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets || mentionsVariant;
 
-  const extractColumnValues = (prompt: string, column: 'reps' | 'sets' | 'weight'): string[] => {
-    const values = new Set<string>();
+  const repDestinationValues = extractDestinationValues(userPrompt, 'reps');
+  const weightDestinationValues = extractDestinationValues(userPrompt, 'weight');
+  const setDestinationValues = extractDestinationValues(userPrompt, 'sets');
 
-    if (column === 'reps') {
-      for (const match of prompt.matchAll(/(\d+)\s*reps?/gi)) {
-        values.add(match[1]);
-      }
-      for (const match of prompt.matchAll(/reps?\s*(?:to\s*)?(\d+)/gi)) {
-        values.add(match[1]);
-      }
-    }
+  const expectedReps = repDestinationValues[0] ?? null;
+  const expectedWeight = weightDestinationValues[0] ?? null;
+  const expectedSets = setDestinationValues[0] ?? null;
 
-    if (column === 'sets') {
-      for (const match of prompt.matchAll(/(\d+)\s*sets?/gi)) {
-        values.add(match[1]);
-      }
-      for (const match of prompt.matchAll(/sets?\s*(?:to\s*)?(\d+)/gi)) {
-        values.add(match[1]);
-      }
-    }
-
-    if (column === 'weight') {
-      for (const match of prompt.matchAll(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/gi)) {
-        values.add(match[1]);
-      }
-      for (const match of prompt.matchAll(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/gi)) {
-        values.add(match[1]);
-      }
-    }
-
-    return Array.from(values);
-  };
-
-  const repValuesInPrompt = extractColumnValues(userPrompt, 'reps');
-  const setValuesInPrompt = extractColumnValues(userPrompt, 'sets');
-
-  const hasMultiTargetRepIntent = repValuesInPrompt.length > 1;
-  const hasMultiTargetSetIntent = setValuesInPrompt.length > 1;
-
-  const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
-  const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
-  const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
+  const targetedExerciseCount = targetedExerciseNames.length;
+  const hasMultiTargetRepIntent = targetedExerciseCount > 1 && repDestinationValues.length > 1;
+  const hasMultiTargetSetIntent = targetedExerciseCount > 1 && setDestinationValues.length > 1;
 
   const isExerciseTargeted = (
     originalItem: WorkoutQueueItem,
