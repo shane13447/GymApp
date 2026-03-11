@@ -2557,6 +2557,178 @@ describe('evaluatePromptIntentOutcome', () => {
     expect(result.reason?.toLowerCase()).toContain('add');
   });
 
+  it('fails add intent when only unrelated numeric changes occur', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', reps: '12', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', reps: '12', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '15', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'add decline crunches to day 2',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('add');
+  });
+
+  it('fails remove intent when targeted exercise is not removed', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', reps: '12', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', reps: '12', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '15', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'remove decline crunches from day 2',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('remove');
+  });
+
+  it('passes add intent when targeted exercise count increases', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'add decline crunches to day 2',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('passes remove intent when targeted exercise count decreases', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'remove decline crunches from day 2',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
   it('passes intent outcome when requested multi-sets values are both applied and non-target is unchanged', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
