@@ -155,7 +155,7 @@ const isVariantValidForExercise = (
 
   const allowedValues = variantValuesFromOptions(exerciseData ?? undefined);
   if (allowedValues.size === 0) {
-    return false;
+    return true;
   }
 
   const variantValues = variantToComparableSet(variant);
