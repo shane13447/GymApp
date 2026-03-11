@@ -1325,6 +1325,45 @@ export const repairQueueWithIntent = (
     mentionsVariantBase && !(variantAppearsInTargetName && (mentionsReps || mentionsWeight || mentionsSets));
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets || mentionsVariant;
 
+  const extractColumnValues = (prompt: string, column: 'reps' | 'sets' | 'weight'): string[] => {
+    const values = new Set<string>();
+
+    if (column === 'reps') {
+      for (const match of prompt.matchAll(/(\d+)\s*reps?/gi)) {
+        values.add(match[1]);
+      }
+      for (const match of prompt.matchAll(/reps?\s*(?:to\s*)?(\d+)/gi)) {
+        values.add(match[1]);
+      }
+    }
+
+    if (column === 'sets') {
+      for (const match of prompt.matchAll(/(\d+)\s*sets?/gi)) {
+        values.add(match[1]);
+      }
+      for (const match of prompt.matchAll(/sets?\s*(?:to\s*)?(\d+)/gi)) {
+        values.add(match[1]);
+      }
+    }
+
+    if (column === 'weight') {
+      for (const match of prompt.matchAll(/(\d+(?:\.\d+)?)\s*(?:kg|weight)/gi)) {
+        values.add(match[1]);
+      }
+      for (const match of prompt.matchAll(/weight\s*(?:to\s*)?(\d+(?:\.\d+)?)/gi)) {
+        values.add(match[1]);
+      }
+    }
+
+    return Array.from(values);
+  };
+
+  const repValuesInPrompt = extractColumnValues(userPrompt, 'reps');
+  const setValuesInPrompt = extractColumnValues(userPrompt, 'sets');
+
+  const hasMultiTargetRepIntent = repValuesInPrompt.length > 1;
+  const hasMultiTargetSetIntent = setValuesInPrompt.length > 1;
+
   const expectedReps = targetReps || (toValue && mentionsReps ? toValue : null);
   const expectedWeight = targetWeight || (toValue && mentionsWeight ? toValue : null);
   const expectedSets = targetSets || (toValue && mentionsSets ? toValue : null);
@@ -1396,7 +1435,7 @@ export const repairQueueWithIntent = (
         // Apply intended changes (supports multiple columns at once).
         // If a column is NOT intended to change, restore it to the original value.
 
-        if (expectedReps) {
+        if (expectedReps && !hasMultiTargetRepIntent) {
           if (finalEx.reps !== expectedReps) {
             console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
             finalEx.reps = expectedReps;
@@ -1428,7 +1467,7 @@ export const repairQueueWithIntent = (
           finalEx.weight = originalEx.weight;
         }
 
-        if (expectedSets) {
+        if (expectedSets && !hasMultiTargetSetIntent) {
           if (finalEx.sets !== expectedSets) {
             console.log(`[REPAIR] Applying sets change for ${ex.name}: ${finalEx.sets} -> ${expectedSets}`);
             finalEx.sets = expectedSets;
