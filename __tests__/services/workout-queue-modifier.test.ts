@@ -26,6 +26,7 @@ import {
     extractTargetExercises,
     findExerciseByName,
     fuzzyMatchExerciseName,
+    getLastQueueParseFailureReason,
     getSimilarity,
     parseQueueFormatResponse,
     preprocessMuscleGroupRequest,
@@ -1128,6 +1129,7 @@ describe('parseQueueFormatResponse', () => {
       ]);
 
       expect(parsed).toBeNull();
+      expect(getLastQueueParseFailureReason()).toBe('variant_source_conflict');
     });
 
     it('Variant - Multi should parse Name (variant) leakage when column 5 is omitted', () => {
@@ -1161,6 +1163,7 @@ describe('parseQueueFormatResponse', () => {
       );
 
       expect(parsed).not.toBeNull();
+      expect(getLastQueueParseFailureReason()).toBe('none');
       expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
       expect(parsed?.[0].exercises[1].variant).toEqual({ angle: 'Incline' });
     });
