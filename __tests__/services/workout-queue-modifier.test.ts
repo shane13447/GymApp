@@ -1099,6 +1099,106 @@ describe('parseQueueFormatResponse', () => {
       expect(parsed?.[0].exercises[0].name).toBe('Lat Pulldowns');
       expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
     });
+
+    it('Variant - Single should fail deterministically when Name (variant) conflicts with column 5', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Lat Pulldowns',
+            reps: '10',
+            sets: '3',
+            variant: { grip: 'Wide' },
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Lat Pulldowns (Close Grip)|55|10|3|Wide';
+      const parsed = parseQueueFormatResponse(response, queue, 'switch lat pulldowns to close grip', [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Lat Pulldowns',
+          displayName: 'Lat Pulldowns',
+        },
+      ]);
+
+      expect(parsed).toBeNull();
+    });
+
+    it('Variant - Multi should parse Name (variant) leakage when column 5 is omitted', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Lat Pulldowns',
+            reps: '10',
+            sets: '3',
+            variant: { grip: 'Wide' },
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Barbell Bench Press',
+            reps: '8',
+            sets: '3',
+            variant: { angle: 'Flat' },
+            exerciseInstanceId: 'q0:e1',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Lat Pulldowns (Close Grip)|55|10|3,Barbell Bench Press (Incline)|80|8|3';
+      const parsed = parseQueueFormatResponse(
+        response,
+        queue,
+        'switch lat pulldowns to close grip and change barbell bench press to incline',
+        ['Lat Pulldowns', 'Barbell Bench Press']
+      );
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
+      expect(parsed?.[0].exercises[1].variant).toEqual({ angle: 'Incline' });
+    });
+
+    it('Variant - Muscle should parse Name (variant) leakage for muscle-targeted variant prompts', () => {
+      const queue = [createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Lat Pulldowns',
+            reps: '10',
+            sets: '3',
+            variant: { grip: 'Wide' },
+            exerciseInstanceId: 'q0:e0',
+          }),
+          createExercise({
+            name: 'Triangle Rows',
+            reps: '10',
+            sets: '3',
+            variant: { grip: 'Neutral' },
+            exerciseInstanceId: 'q0:e1',
+          }),
+        ],
+      })];
+
+      const response = 'Q0:D1:Lat Pulldowns (Close Grip)|55|10|3,Triangle Rows (Close Grip)|50|10|3';
+      const parsed = parseQueueFormatResponse(
+        response,
+        queue,
+        'make all back movements close grip',
+        ['Lat Pulldowns', 'Triangle Rows']
+      );
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
+      expect(parsed?.[0].exercises[1].variant).toEqual({ grip: 'Close Grip' });
+    });
   });
 
   describe('invalid data', () => {
