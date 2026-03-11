@@ -21,6 +21,7 @@ import {
     encodeQueueForLLM,
     enforceColumnChanges,
     evaluateInjurySemanticOutcome,
+    evaluatePromptIntentOutcome,
     evaluateVariantSemanticOutcome,
     extractTargetExerciseRefs,
     extractTargetExercises,
@@ -2457,6 +2458,155 @@ describe('semantic outcome evaluators', () => {
 
     expect(result.passed).toBe(false);
     expect(result.reason?.toLowerCase()).toContain('all affected');
+  });
+});
+
+describe('evaluatePromptIntentOutcome', () => {
+  it('fails intent outcome when one requested multi-reps target is not satisfied', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Calf Press', reps: '12', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Leg Extensions', reps: '12', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Calf Press', reps: '20', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Leg Extensions', reps: '12', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'make calf press 20 reps but drop leg extensions to 6',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Calf Press',
+          displayName: 'Calf Press',
+        },
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Leg Extensions',
+          displayName: 'Leg Extensions',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain('Leg Extensions');
+    expect(result.reason).toContain('6');
+  });
+
+  it('fails intent outcome when duplicate-add prompt does not increase targeted exercise count', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'hey add decline crunches to day 2 again',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Decline Crunches',
+          displayName: 'Decline Crunches',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('add');
+  });
+
+  it('passes intent outcome when requested multi-sets values are both applied and non-target is unchanged', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Lat Pulldowns', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Triangle Rows', sets: '3', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Face Pulls', sets: '3', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Lat Pulldowns', sets: '4', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Triangle Rows', sets: '5', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Face Pulls', sets: '3', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'I want 4 sets of pulldowns and 5 sets of triangle rows',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Lat Pulldowns',
+          displayName: 'Lat Pulldowns',
+        },
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Triangle Rows',
+          displayName: 'Triangle Rows',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(true);
   });
 });
 
