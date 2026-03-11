@@ -65,7 +65,16 @@ const parseVariantLabel = (value: string): ExerciseVariant | null => {
       variant.angle = segment;
       continue;
     }
-    if (lower.includes('neutral') || lower.includes('supinated') || lower.includes('pronated') || lower.includes('reverse')) {
+    if (
+      lower.includes('grip') ||
+      lower.includes('neutral') ||
+      lower.includes('supinated') ||
+      lower.includes('pronated') ||
+      lower.includes('reverse') ||
+      lower.includes('close') ||
+      lower.includes('wide') ||
+      lower.includes('narrow')
+    ) {
       variant.grip = segment;
       continue;
     }
@@ -998,6 +1007,9 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
   * "reps" = column 3
   * "sets" = column 4
   * "variant" = column 5
+- For variants: keep column 1 as base exercise name only.
+- Do NOT embed variant in column 1 when column 5 is present.
+- If variant appears in both column 1 and column 5, both must be identical.
 - Preserve exact values in unchanged columns
 </critical>
 
@@ -1029,6 +1041,14 @@ OUT: Q0:D2:A|15|8|3,B|5|12|4;Q1:D3:C|20|10|3
 IN: Q0:D2:A|0|6|3,B|40|5|3
 REQ: remove A
 OUT: Q0:D2:B|40|5|3
+
+IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Barbell Row|70|8|3|Overhand
+REQ: switch lat pulldowns to close grip
+OUT: Q0:D2:Lat Pulldowns|55|10|3|Close Grip,Barbell Row|70|8|3|Overhand
+
+IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Triangle Rows|50|10|3|Neutral Grip
+REQ: switch back work to close grip
+OUT: Q0:D2:Lat Pulldowns|55|10|3|Close Grip,Triangle Rows|50|10|3|Close Grip
 </examples>
 
 <task>
@@ -1140,6 +1160,17 @@ export const parseQueueFormatResponse = (
         }
 
         const { name: parsedNameToken, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
+        if (variantToken && inlineVariantLabel) {
+          const inlineNormalized = normaliseText(inlineVariantLabel);
+          const columnNormalized = normaliseText(variantToken);
+          if (inlineNormalized !== columnNormalized) {
+            console.warn(
+              `[QUEUE FORMAT] Conflicting variant tokens for "${parsedNameToken}": inline="${inlineVariantLabel}" column5="${variantToken}"`
+            );
+            return null;
+          }
+        }
+
         const normalized = normalizeExerciseNameAndVariant(parsedNameToken, variantToken || inlineVariantLabel || '');
         const parsedName = normalized.name;
         const variantLabel = normalized.variantLabel;
