@@ -43,6 +43,16 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
 
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
+export type QueueParseFailureReason = 'none' | 'variant_source_conflict';
+
+let lastQueueParseFailureReason: QueueParseFailureReason = 'none';
+
+export const getLastQueueParseFailureReason = (): QueueParseFailureReason => lastQueueParseFailureReason;
+
+const setLastQueueParseFailureReason = (reason: QueueParseFailureReason): void => {
+  lastQueueParseFailureReason = reason;
+};
+
 const parseVariantLabel = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)
@@ -1111,6 +1121,8 @@ export const parseQueueFormatResponse = (
   userRequest: string = '',
   matchedExercises: TargetedExerciseMatcher[] = []
 ): WorkoutQueueItem[] | null => {
+  setLastQueueParseFailureReason('none');
+
   try {
     // Preprocess to fix common LLM errors
     const preprocessed = preprocessLLMResponse(response);
@@ -1164,6 +1176,7 @@ export const parseQueueFormatResponse = (
           const inlineNormalized = normaliseText(inlineVariantLabel);
           const columnNormalized = normaliseText(variantToken);
           if (inlineNormalized !== columnNormalized) {
+            setLastQueueParseFailureReason('variant_source_conflict');
             console.warn(
               `[QUEUE FORMAT] Conflicting variant tokens for "${parsedNameToken}": inline="${inlineVariantLabel}" column5="${variantToken}"`
             );
