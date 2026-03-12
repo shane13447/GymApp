@@ -3,17 +3,166 @@
  * Dashboard with quick actions and workout summary
  */
 
-import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as db from '@/services/database';
 import type { Program, Workout, WorkoutQueueItem } from '@/types';
+
+type RingVariant = 'primary' | 'secondary' | 'indigo';
+
+type SkeletonBlockProps = {
+  width?: number | `${number}%`;
+  height: number;
+  radius?: number;
+  theme: 'light' | 'dark';
+  shimmer: Animated.Value;
+};
+
+const getPressedRingStyle = (pressed: boolean, variant: RingVariant) => {
+  const ringColor =
+    variant === 'secondary' ? '#FFCA70' : variant === 'indigo' ? '#9480E6' : '#4DA2FF';
+
+  return {
+    borderWidth: 2,
+    borderColor: pressed ? ringColor : 'transparent',
+    shadowColor: ringColor,
+    shadowOpacity: pressed ? 0.35 : 0,
+    shadowRadius: pressed ? 10 : 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: pressed ? 2 : 0,
+  };
+};
+
+function SkeletonBlock({ width = '100%', height, radius = 14, theme, shimmer }: SkeletonBlockProps) {
+  const shimmerTranslate = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-140, 140],
+  });
+
+  return (
+    <View
+      style={{
+        width,
+        height,
+        borderRadius: radius,
+        overflow: 'hidden',
+        backgroundColor: theme === 'dark' ? '#1B2430' : '#E7EDF5',
+      }}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            width: 120,
+            backgroundColor: theme === 'dark' ? '#2A3543' : '#F5F9FF',
+            opacity: 0.45,
+            transform: [{ translateX: shimmerTranslate }],
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+function HomeLoadingSkeleton({ theme }: { theme: 'light' | 'dark' }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(shimmer, {
+        toValue: 1,
+        duration: 1050,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+      shimmer.stopAnimation();
+      shimmer.setValue(0);
+    };
+  }, [shimmer]);
+
+  return (
+    <ParallaxScrollView>
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-5"
+        style={{ borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8' }}
+      >
+        <View className="gap-3 mb-4">
+          <SkeletonBlock width="52%" height={26} radius={10} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="78%" height={14} radius={8} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="64%" height={14} radius={8} theme={theme} shimmer={shimmer} />
+        </View>
+        <View className="gap-2 mb-4">
+          <SkeletonBlock width="92%" height={12} radius={7} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="74%" height={12} radius={7} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="80%" height={12} radius={7} theme={theme} shimmer={shimmer} />
+        </View>
+        <SkeletonBlock width="100%" height={52} radius={999} theme={theme} shimmer={shimmer} />
+      </ThemedView>
+
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-5"
+        style={{ borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8' }}
+      >
+        <View className="flex-row items-center justify-between mb-4">
+          <SkeletonBlock width="42%" height={12} radius={999} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width={56} height={24} radius={999} theme={theme} shimmer={shimmer} />
+        </View>
+        <View className="flex-row items-center justify-between">
+          <SkeletonBlock width="28%" height={58} radius={12} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="28%" height={58} radius={12} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="28%" height={58} radius={12} theme={theme} shimmer={shimmer} />
+        </View>
+      </ThemedView>
+
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-5"
+        style={{ borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8' }}
+      >
+        <View className="flex-row items-center justify-between mb-4">
+          <SkeletonBlock width="34%" height={22} radius={9} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width={72} height={24} radius={999} theme={theme} shimmer={shimmer} />
+        </View>
+        <View className="gap-2.5">
+          <SkeletonBlock width="100%" height={44} radius={12} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="100%" height={44} radius={12} theme={theme} shimmer={shimmer} />
+          <SkeletonBlock width="100%" height={44} radius={12} theme={theme} shimmer={shimmer} />
+        </View>
+      </ThemedView>
+
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-2"
+        style={{ borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8' }}
+      >
+        <SkeletonBlock width="26%" height={22} radius={9} theme={theme} shimmer={shimmer} />
+        <View className="mt-4">
+          <SkeletonBlock width="100%" height={58} radius={14} theme={theme} shimmer={shimmer} />
+        </View>
+      </ThemedView>
+    </ParallaxScrollView>
+  );
+}
 
 const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
   const muscleGroups = new Set<string>();
@@ -25,8 +174,17 @@ const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
   return Array.from(muscleGroups).sort();
 };
 
+const getMuscleGroupSummary = (workout: WorkoutQueueItem): string => {
+  const groups = getMuscleGroups(workout);
+  if (groups.length === 0) return 'mixed focus';
+  if (groups.length <= 3) return groups.join(', ');
+  return `${groups.slice(0, 3).join(', ')} +${groups.length - 3}`;
+};
+
 export default function HomeScreen() {
   const router = useRouter();
+  const theme = useColorScheme() ?? 'light';
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
@@ -58,7 +216,7 @@ export default function HomeScreen() {
       setNextWorkout(queue.length > 0 ? queue[0] : null);
 
       const workouts = await db.getAllWorkouts();
-      setRecentWorkouts(workouts.slice(0, 4));
+      setRecentWorkouts(workouts.slice(0, 3));
 
       const now = new Date();
       const weekStart = new Date(now);
@@ -123,180 +281,216 @@ export default function HomeScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const canStartWorkout = !!nextWorkout;
-
   if (isLoading) {
-    return (
-      <ParallaxScrollView>
-        <LoadingSpinner message="Loading..." fullScreen />
-      </ParallaxScrollView>
-    );
+    return <HomeLoadingSkeleton theme={theme} />;
   }
 
   return (
     <ParallaxScrollView
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
     >
-      <View className="flex-row items-center justify-between pt-5 pb-5">
-        <View className="flex-1 items-center">
-          <ThemedText className="text-3xl font-bold text-center">{stats.totalWorkouts}</ThemedText>
-          <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
-            Total
-          </ThemedText>
-        </View>
-        <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
-        <View className="flex-1 items-center">
-          <ThemedText className="text-3xl font-bold text-center">{stats.thisWeek}</ThemedText>
-          <ThemedText
-            numberOfLines={1}
-            className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center"
-          >
-            {'This\u00A0Week'}
-          </ThemedText>
-        </View>
-        <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
-        <View className="flex-1 items-center">
-          <ThemedText className="text-3xl font-bold text-center">{stats.streak}</ThemedText>
-          <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
-            Streak
-          </ThemedText>
-        </View>
-      </View>
-
-      <View className="border-b border-gray-200 dark:border-gray-700 pb-6">
-        <Pressable
-          onPress={() =>
-            canStartWorkout ? router.push('/(tabs)/ActiveWorkout') : router.push('/(tabs)/Programs')
-          }
-          accessibilityRole="button"
-          accessibilityLabel={canStartWorkout ? 'Start active workout' : 'Create or choose a program'}
-        >
-          {({ pressed }) => (
-            <View
-              className={`rounded-full py-4 px-5 ${
-                canStartWorkout ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-400 dark:bg-gray-600'
-              }`}
-              style={pressed ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : undefined}
-            >
-              <ThemedText className="text-center text-white font-semibold text-base">
-                {canStartWorkout ? `Start Day ${nextWorkout.dayNumber}` : 'Create Your First Program'}
-              </ThemedText>
-            </View>
-          )}
-        </Pressable>
-      </View>
-
-      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
-        <ThemedText type="subtitle">Quick Actions</ThemedText>
-        <View className="flex-row flex-wrap gap-2">
-          <Pressable
-            onPress={() => router.push('/(tabs)/Coach')}
-            accessibilityRole="button"
-            accessibilityLabel="Open AI Coach"
-            className="w-[48%]"
-          >
-            {({ pressed }) => (
-              <View
-                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
-                style={pressed ? { opacity: 0.75 } : undefined}
-              >
-                <ThemedText className="text-base font-semibold text-center text-white">AI Coach</ThemedText>
-              </View>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(tabs)/Programs')}
-            accessibilityRole="button"
-            accessibilityLabel="Manage programs"
-            className="w-[48%]"
-          >
-            {({ pressed }) => (
-              <View
-                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
-                style={pressed ? { opacity: 0.75 } : undefined}
-              >
-                <ThemedText className="text-base font-semibold text-center text-white">Programs</ThemedText>
-              </View>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(tabs)/History')}
-            accessibilityRole="button"
-            accessibilityLabel="Open workout history"
-            className="w-[48%]"
-          >
-            {({ pressed }) => (
-              <View
-                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
-                style={pressed ? { opacity: 0.75 } : undefined}
-              >
-                <ThemedText className="text-base font-semibold text-center text-white">History</ThemedText>
-              </View>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(tabs)/Profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            className="w-[48%]"
-          >
-            {({ pressed }) => (
-              <View
-                className="rounded-full py-3 px-4 bg-blue-600 dark:bg-blue-500"
-                style={pressed ? { opacity: 0.75 } : undefined}
-              >
-                <ThemedText className="text-base font-semibold text-center text-white">Settings</ThemedText>
-              </View>
-            )}
-          </Pressable>
-        </View>
-      </ThemedView>
-
-      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
-        <ThemedText type="subtitle">Up Next</ThemedText>
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-5"
+        style={{
+          borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
+        }}
+      >
         {nextWorkout ? (
-          <View className="gap-3">
-            <View className="border-l-2 border-blue-500 pl-3">
-              <ThemedText className="font-semibold text-base">{nextWorkout.programName}</ThemedText>
-              <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-                Day {nextWorkout.dayNumber} • {nextWorkout.exercises.length} exercises
-              </ThemedText>
-            </View>
+          <>
+            <ThemedText className="text-2xl font-bold">Day {nextWorkout.dayNumber} • {nextWorkout.programName}</ThemedText>
+            <ThemedText className="text-sm mt-1 text-gray-600 dark:text-gray-400 capitalize">
+              {nextWorkout.exercises.length} exercises • {getMuscleGroupSummary(nextWorkout)}
+            </ThemedText>
 
-            <View className="flex-row flex-wrap gap-1.5">
-              {getMuscleGroups(nextWorkout).map((group) => (
-                <View key={group} className="px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40">
-                  <ThemedText className="text-xs font-medium capitalize text-blue-700 dark:text-blue-300">
-                    {group}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-
-            <View className="gap-1.5">
-              {nextWorkout.exercises.slice(0, 5).map((exercise) => (
-                <ThemedText key={exercise.name} className="text-sm text-gray-700 dark:text-gray-300">
+            <View className="mt-4 gap-1.5">
+              {nextWorkout.exercises.slice(0, 4).map((exercise, index) => (
+                <ThemedText
+                  key={`${exercise.name}-${index}`}
+                  className="text-sm"
+                  style={{ color: theme === 'dark' ? '#C3CAD3' : '#3A4656' }}
+                >
                   • {exercise.name}
                 </ThemedText>
               ))}
-              {nextWorkout.exercises.length > 5 && (
-                <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                  +{nextWorkout.exercises.length - 5} more exercises
+              {nextWorkout.exercises.length > 4 && (
+                <ThemedText className="text-sm" style={{ color: '#7A8798' }}>
+                  +{nextWorkout.exercises.length - 4} more exercises
                 </ThemedText>
               )}
             </View>
-          </View>
+
+            <Pressable
+              onPress={() => router.push('/(tabs)/ActiveWorkout')}
+              accessibilityRole="button"
+              accessibilityLabel="Start active workout"
+              className="mt-4"
+            >
+              {({ pressed }) => (
+                <View
+                  className="rounded-full py-4 px-5"
+                  style={{
+                    backgroundColor: '#007AFF',
+                    opacity: pressed ? 0.92 : 1,
+                    ...(pressed ? { transform: [{ scale: 0.99 }] } : {}),
+                    ...getPressedRingStyle(pressed, 'primary'),
+                  }}
+                >
+                  <ThemedText className="text-center text-white font-semibold text-base">
+                    Start Workout
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
+          </>
         ) : (
-          <ThemedText className="text-sm text-gray-600 dark:text-gray-400">
-            Queue is empty. Choose a program to generate your next workout.
-          </ThemedText>
+          <>
+            <ThemedText className="text-2xl font-bold">No workout queued</ThemedText>
+            <ThemedText className="text-sm mt-1 text-gray-600 dark:text-gray-400">
+              Build your first program to generate a workout queue and start training.
+            </ThemedText>
+
+            <Pressable
+              onPress={() => router.push('/(tabs)/Programs')}
+              accessibilityRole="button"
+              accessibilityLabel="Create your first program"
+              className="mt-4"
+            >
+              {({ pressed }) => (
+                <View
+                  className="rounded-full py-4 px-5"
+                  style={{
+                    backgroundColor: '#007AFF',
+                    opacity: pressed ? 0.92 : 1,
+                    ...(pressed ? { transform: [{ scale: 0.99 }] } : {}),
+                    ...getPressedRingStyle(pressed, 'primary'),
+                  }}
+                >
+                  <ThemedText className="text-center text-white font-semibold text-base">
+                    Create Your First Program
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
+          </>
         )}
       </ThemedView>
 
-      <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 mb-5"
+        style={{
+          borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
+        }}
+      >
+        <View className="flex-row items-center justify-between">
+          <ThemedText className="text-xs uppercase tracking-[1.1px] text-gray-500 dark:text-gray-400">
+            Performance Snapshot
+          </ThemedText>
+          <View
+            className="rounded-full px-3 py-1"
+            style={{ backgroundColor: theme === 'dark' ? '#007AFF1F' : '#EAF3FF' }}
+          >
+            <ThemedText className="text-xs font-semibold" style={{ color: '#007AFF' }}>
+              LIVE
+            </ThemedText>
+          </View>
+        </View>
+
+        <View className="flex-row items-center justify-between mt-4">
+          <View className="flex-1 items-center">
+            <ThemedText className="text-3xl font-bold text-center">{stats.totalWorkouts}</ThemedText>
+            <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
+              Total
+            </ThemedText>
+          </View>
+          <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
+          <View className="flex-1 items-center">
+            <ThemedText className="text-3xl font-bold text-center">{stats.thisWeek}</ThemedText>
+            <ThemedText
+              numberOfLines={1}
+              className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center"
+            >
+              {'This\u00A0Week'}
+            </ThemedText>
+          </View>
+          <View className="h-12 w-px bg-gray-200 dark:bg-gray-700" />
+          <View className="flex-1 items-center">
+            <ThemedText className="text-3xl font-bold text-center">{stats.streak}</ThemedText>
+            <ThemedText className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center">
+              Streak
+            </ThemedText>
+          </View>
+        </View>
+      </ThemedView>
+
+      {recentWorkouts.length > 0 && (
+        <ThemedView
+          lightColor="#FFFFFF"
+          darkColor="#10151D"
+          className="rounded-3xl border px-5 py-5 gap-4 mb-5"
+          style={{
+            borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
+          }}
+        >
+          <View className="flex-row items-center justify-between">
+            <ThemedText type="subtitle">Recent Activity</ThemedText>
+            <Pressable
+              onPress={() => router.push('/(tabs)/History')}
+              accessibilityRole="button"
+              accessibilityLabel="View all workout history"
+            >
+              {({ pressed }) => (
+                <View
+                  className="rounded-full px-3 py-1"
+                  style={{
+                    backgroundColor: theme === 'dark' ? '#2F2745' : '#F2EEFF',
+                    opacity: pressed ? 0.8 : 1,
+                    ...getPressedRingStyle(pressed, 'indigo'),
+                  }}
+                >
+                  <ThemedText className="text-sm font-semibold" style={{ color: '#6F59C9' }}>
+                    View all
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
+          <View className="gap-2">
+            {recentWorkouts.map((workout) => (
+              <View
+                key={workout.id}
+                className="flex-row items-center justify-between py-2.5 border-b"
+                style={{ borderColor: theme === 'dark' ? '#1B2430' : '#EDF1F5' }}
+              >
+                <View className="flex-1 pr-3">
+                  <ThemedText className="font-medium" numberOfLines={1}>
+                    {workout.programName} • Day {workout.dayNumber}
+                  </ThemedText>
+                  <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {workout.exercises.length} exercises
+                  </ThemedText>
+                </View>
+                <ThemedText className="text-xs" style={{ color: '#7A8798' }}>
+                  {formatDate(workout.date)}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </ThemedView>
+      )}
+
+      <ThemedView
+        lightColor="#FFFFFF"
+        darkColor="#10151D"
+        className="rounded-3xl border px-5 py-5 gap-4 mb-2"
+        style={{
+          borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
+        }}
+      >
         <ThemedText type="subtitle">Program</ThemedText>
         {currentProgram ? (
           <Pressable
@@ -306,18 +500,25 @@ export default function HomeScreen() {
           >
             {({ pressed }) => (
               <View
-                className="flex-row items-center justify-between"
-                style={pressed ? { opacity: 0.75 } : undefined}
+                className="flex-row items-center justify-between rounded-2xl p-4"
+                style={{
+                  borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
+                  borderWidth: 1,
+                  opacity: pressed ? 0.8 : 1,
+                  ...getPressedRingStyle(pressed, 'primary'),
+                }}
               >
                 <View className="flex-1 pr-3">
                   <ThemedText className="font-semibold text-base">{currentProgram.name}</ThemedText>
-                  <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                  <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {currentProgram.workoutDays.length} day
                     {currentProgram.workoutDays.length !== 1 ? 's' : ''} •{' '}
                     {currentProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercises
                   </ThemedText>
                 </View>
-                <ThemedText className="text-blue-500 text-lg">›</ThemedText>
+                <ThemedText className="text-lg" style={{ color: '#007AFF' }}>
+                  ›
+                </ThemedText>
               </View>
             )}
           </Pressable>
@@ -328,60 +529,22 @@ export default function HomeScreen() {
             accessibilityLabel="Create your first program"
           >
             {({ pressed }) => (
-              <ThemedText
-                className="text-sm text-blue-500 font-semibold"
-                style={pressed ? { opacity: 0.7 } : undefined}
+              <View
+                className="rounded-full py-3 px-4 self-start"
+                style={{
+                  backgroundColor: theme === 'dark' ? '#007AFF1F' : '#EAF3FF',
+                  opacity: pressed ? 0.8 : 1,
+                  ...getPressedRingStyle(pressed, 'primary'),
+                }}
               >
-                Create your first program
-              </ThemedText>
+                <ThemedText className="text-sm font-semibold" style={{ color: '#007AFF' }}>
+                  Create your first program
+                </ThemedText>
+              </View>
             )}
           </Pressable>
         )}
       </ThemedView>
-
-      {recentWorkouts.length > 0 && (
-        <ThemedView className="gap-3 border-b border-gray-200 dark:border-gray-700 pb-6">
-          <View className="flex-row items-center justify-between">
-            <ThemedText type="subtitle">Recent Activity</ThemedText>
-            <Pressable
-              onPress={() => router.push('/(tabs)/History')}
-              accessibilityRole="button"
-              accessibilityLabel="View all workout history"
-            >
-              {({ pressed }) => (
-                <ThemedText
-                  className="text-sm text-blue-500 font-semibold"
-                  style={pressed ? { opacity: 0.7 } : undefined}
-                >
-                  View all
-                </ThemedText>
-              )}
-            </Pressable>
-          </View>
-
-          <View className="gap-2">
-            {recentWorkouts.map((workout) => (
-              <View
-                key={workout.id}
-                className="flex-row items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
-              >
-                <View className="flex-1 pr-3">
-                  <ThemedText className="font-medium" numberOfLines={1}>
-                    {workout.programName} • Day {workout.dayNumber}
-                  </ThemedText>
-                  <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {workout.exercises.length} exercises
-                  </ThemedText>
-                </View>
-                <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                  {formatDate(workout.date)}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-        </ThemedView>
-      )}
-
     </ParallaxScrollView>
   );
 }
