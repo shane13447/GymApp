@@ -9,41 +9,106 @@ import { Platform } from 'react-native';
 // COLORS
 // =============================================================================
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#007AFF';
+const tintColorDark = '#007AFF';
+
+export const Palette = {
+  blue: {
+    50: '#EAF3FF',
+    100: '#D6E9FF',
+    200: '#B7D7FF',
+    300: '#8FC2FF',
+    400: '#5EA6FF',
+    500: '#007AFF',
+    600: '#0068D9',
+    700: '#0055B2',
+    800: '#00418A',
+    900: '#002D61',
+  },
+  amber: {
+    50: '#FFF8EA',
+    100: '#FFEDCC',
+    200: '#FFDCA0',
+    300: '#FFC971',
+    400: '#FFBA47',
+    500: '#FFB020',
+    600: '#E69900',
+    700: '#BF7F00',
+    800: '#966400',
+    900: '#664400',
+  },
+  neutral: {
+    950: '#0A0D12',
+    900: '#10151D',
+    800: '#1B2430',
+    700: '#2A3543',
+    600: '#3A4656',
+    500: '#596679',
+    400: '#7A8798',
+    300: '#A0AAB7',
+    200: '#C3CAD3',
+    100: '#E3E7EC',
+    50: '#F5F7FA',
+  },
+} as const;
+
+export const ColorTokens = {
+  primary: {
+    base: '#007AFF',
+    hover: '#1A89FF',
+    pressed: '#0068D9',
+    bgDark: '#007AFF1F',
+    bgLight: '#EAF3FF',
+    subtleBorderDark: '#007AFF66',
+    subtleBorderLight: '#B7D7FF',
+    focusRing: '#4DA2FF',
+    onSolid: '#FFFFFF',
+  },
+  secondary: {
+    base: '#FFB020',
+    hover: '#FFC04A',
+    pressed: '#E69900',
+    bgDark: '#FFB02024',
+    bgLight: '#FFF8EA',
+    subtleBorderDark: '#FFB02066',
+    subtleBorderLight: '#FFDCA0',
+    focusRing: '#FFCA70',
+    onSolid: '#1F1400',
+  },
+} as const;
 
 export const Colors = {
   light: {
     text: '#11181C',
-    background: '#fff',
+    background: '#F5F7FA',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#596679',
+    tabIconDefault: '#7A8798',
     tabIconSelected: tintColorLight,
-    card: '#ffffff',
-    border: '#e5e5e5',
+    card: '#FFFFFF',
+    border: '#D6DEE8',
     primary: '#007AFF',
-    secondary: '#5856D6',
+    secondary: '#FFB020',
     success: '#34C759',
-    warning: '#FF9500',
+    warning: '#F59E0B',
     error: '#FF3B30',
     muted: '#8E8E93',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#E3E7EC',
+    background: '#0A0D12',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#A0AAB7',
+    tabIconDefault: '#7A8798',
     tabIconSelected: tintColorDark,
-    card: '#1e1e1e',
-    border: '#333333',
-    primary: '#0A84FF',
-    secondary: '#5E5CE6',
+    card: '#10151D',
+    border: '#2A3543',
+    primary: '#007AFF',
+    secondary: '#FFB020',
     success: '#30D158',
-    warning: '#FF9F0A',
+    warning: '#F59E0B',
     error: '#FF453A',
-    muted: '#636366',
+    muted: '#8E8E93',
   },
 };
 
