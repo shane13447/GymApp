@@ -37,6 +37,7 @@ yarn-error.*
 # IDE/Editor files
 .cursorrules
 .claude/
+.worktrees/
 
 # Project documents (local only)
 Documents/
