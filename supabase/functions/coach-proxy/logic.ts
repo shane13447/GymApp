@@ -5,12 +5,39 @@ type CoachProxyMessage = {
   content: string;
 };
 
+interface ProxyLogMeta {
+  statusCategory: string;
+  latencyMs: number;
+}
+
+const redactSensitiveText = (input: string): string => {
+  if (!input.trim()) {
+    return input;
+  }
+
+  let redacted = input;
+
+  // Redact bearer credentials and API-like secret tokens.
+  redacted = redacted.replace(/authorization\s*:\s*bearer\s+[^\s|,;]+/gi, 'Authorization: Bearer [REDACTED]');
+  redacted = redacted.replace(/\b(?:sk|rk)-[a-z0-9_-]+\b/gi, '[REDACTED]');
+
+  // Redact profile-sensitive key/value patterns.
+  redacted = redacted.replace(/\b(currentWeight|goalWeight|name)\s*=\s*[^\s|,;]+/gi, '$1=[REDACTED]');
+
+  return redacted;
+};
+
 export const formatProxyDebugLog = (
   messages: CoachProxyMessage[],
-  output: string
+  output: string,
+  meta?: ProxyLogMeta
 ): string => {
-  const input = messages.map((message) => `${message.role}:${message.content}`).join(' | ');
-  return `[coach-proxy] input=${input} output=${output}`;
+  const input = messages.map((message) => `${message.role}:${redactSensitiveText(message.content)}`).join(' | ');
+  const safeOutput = redactSensitiveText(output);
+  const statusCategory = meta?.statusCategory ?? 'unknown';
+  const latencyMs = meta?.latencyMs ?? -1;
+
+  return `[coach-proxy] status_category=${statusCategory} latency_ms=${latencyMs} input=${input} output=${safeOutput}`;
 };
 
 export const parseAuthModeFromValue = (modeRaw?: string | null): AuthMode => {
@@ -137,4 +164,35 @@ export const isValidToonResponse = (text: string): boolean => {
   }
 
   return isValidStrictToonQueue(queueItems);
+};
+
+const isAbortLikeError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as { name?: unknown };
+  return maybeError.name === 'AbortError';
+};
+
+export const classifyProxyFailure = (error: unknown): { status: number; error: string } => {
+  if (error instanceof SyntaxError) {
+    return { status: 400, error: 'Request body must be valid JSON.' };
+  }
+
+  if (isAbortLikeError(error)) {
+    return { status: 504, error: 'Coach proxy request timed out.' };
+  }
+
+  const message = error instanceof Error ? error.message : 'Unhandled proxy error.';
+
+  if (message.includes('Upstream model request failed')) {
+    return { status: 502, error: message };
+  }
+
+  if (message.includes('Upstream model response did not contain text content')) {
+    return { status: 502, error: message };
+  }
+
+  return { status: 500, error: 'Unable to process coach request.' };
 };

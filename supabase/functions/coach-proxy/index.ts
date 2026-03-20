@@ -2,6 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { corsHeadersForRequest, jsonResponse } from '../_shared/cors.ts';
 import {
+  classifyProxyFailure,
   evaluateAuthMode,
   extractStrictToonCandidate,
   formatProxyDebugLog,
@@ -196,6 +197,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({ error: 'Method not allowed.' }, 405, request);
   }
 
+  const requestStartTime = Date.now();
+
   try {
     const authMode = parseAuthModeFromValue(Deno.env.get('COACH_PROXY_AUTH_MODE'));
     const authFailure = await enforceAuthMode(request, authMode);
@@ -246,28 +249,18 @@ Deno.serve(async (request: Request): Promise<Response> => {
       }
     }
 
-    console.log(formatProxyDebugLog(messages, modelOutput));
+    const latencyMs = Date.now() - requestStartTime;
+    console.log(
+      formatProxyDebugLog(messages, modelOutput, {
+        statusCategory: 'ok',
+        latencyMs,
+      })
+    );
     return jsonResponse({ response: modelOutput }, 200, request);
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      return jsonResponse({ error: 'Request body must be valid JSON.' }, 400, request);
-    }
-
-    if (error instanceof Error && error.name === 'AbortError') {
-      return jsonResponse({ error: 'Coach proxy request timed out.' }, 504, request);
-    }
-
+    const failure = classifyProxyFailure(error);
     const message = error instanceof Error ? error.message : 'Unhandled proxy error.';
     console.error('[coach-proxy] Request failed:', message);
-
-    if (message.includes('Upstream model request failed')) {
-      return jsonResponse({ error: message }, 502, request);
-    }
-
-    if (message.includes('Upstream model response did not contain text content')) {
-      return jsonResponse({ error: message }, 502, request);
-    }
-
-    return jsonResponse({ error: 'Unable to process coach request.' }, 500, request);
+    return jsonResponse({ error: failure.error }, failure.status, request);
   }
 });

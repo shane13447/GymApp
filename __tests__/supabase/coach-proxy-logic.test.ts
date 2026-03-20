@@ -1,4 +1,5 @@
 import {
+  classifyProxyFailure,
   evaluateAuthMode,
   extractStrictToonCandidate,
   formatProxyDebugLog,
@@ -112,19 +113,66 @@ describe('coach proxy logic', () => {
   });
 
   describe('proxy debug logging', () => {
-    it('formats a log line that includes both input and output', () => {
+    it('formats structured log with status and latency', () => {
       const logLine = formatProxyDebugLog(
         [
           { role: 'system', content: 'Output TOON only' },
           { role: 'user', content: 'Queue: Q0:D1:Bench|80|8|3 Request: lower weight' },
         ],
-        'Q0:D1:Bench|70|8|3'
+        'Q0:D1:Bench|70|8|3',
+        { statusCategory: 'ok', latencyMs: 123 }
       );
 
       expect(logLine).toContain('input=');
       expect(logLine).toContain('output=');
-      expect(logLine).toContain('Queue: Q0:D1:Bench|80|8|3');
-      expect(logLine).toContain('Q0:D1:Bench|70|8|3');
+      expect(logLine).toContain('status_category=ok');
+      expect(logLine).toContain('latency_ms=123');
+    });
+
+    it('redacts secrets and profile-sensitive values from logs', () => {
+      const logLine = formatProxyDebugLog(
+        [
+          { role: 'system', content: 'Authorization: Bearer real-token sk-live-raw-secret' },
+          { role: 'user', content: 'currentWeight=82 goalWeight=75 name=Shane' },
+        ],
+        'token=sk-live-raw-secret',
+        { statusCategory: 'ok', latencyMs: 10 }
+      );
+
+      expect(logLine).not.toContain('sk-live-raw-secret');
+      expect(logLine).not.toContain('Authorization: Bearer real-token');
+      expect(logLine).not.toContain('currentWeight=82');
+      expect(logLine).not.toContain('goalWeight=75');
+      expect(logLine).toContain('[REDACTED]');
+    });
+  });
+
+  describe('proxy failure mapping', () => {
+    it('maps abort errors to timeout hard-fail', () => {
+      const abortError = new DOMException('The operation was aborted.', 'AbortError');
+      expect(classifyProxyFailure(abortError)).toEqual({
+        status: 504,
+        error: 'Coach proxy request timed out.',
+      });
+    });
+
+    it('maps upstream overload and invalid output to 502', () => {
+      expect(classifyProxyFailure(new Error('Upstream model request failed with status 503.'))).toEqual({
+        status: 502,
+        error: 'Upstream model request failed with status 503.',
+      });
+
+      expect(classifyProxyFailure(new Error('Upstream model response did not contain text content.'))).toEqual({
+        status: 502,
+        error: 'Upstream model response did not contain text content.',
+      });
+    });
+
+    it('maps unhandled failures to generic 500 hard-fail', () => {
+      expect(classifyProxyFailure(new Error('Unexpected failure'))).toEqual({
+        status: 500,
+        error: 'Unable to process coach request.',
+      });
     });
   });
 });
