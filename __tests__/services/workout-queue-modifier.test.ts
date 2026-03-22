@@ -1846,6 +1846,156 @@ describe('repairQueue', () => {
       expect(deadliftCount).toBe(0);
     });
 
+    it('applies requested variant to every targeted exercise even when variant options metadata is missing', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Bent Over Barbell Row',
+              variant: { grip: 'Overhand' },
+              exerciseInstanceId: 'q1:e0',
+            }),
+            createExercise({
+              name: 'Overhead Barbell Press',
+              variant: { posture: 'Seated' },
+              exerciseInstanceId: 'q1:e1',
+            }),
+          ],
+        }),
+      ];
+
+      const parsedQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Bent Over Barbell Row',
+              variant: { grip: 'Overhand' },
+              exerciseInstanceId: 'q1:e0',
+            }),
+            createExercise({
+              name: 'Overhead Barbell Press',
+              variant: { posture: 'Seated' },
+              exerciseInstanceId: 'q1:e1',
+            }),
+          ],
+        }),
+      ];
+
+      const targetedRefs = [
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q1:e0',
+          name: 'Bent Over Barbell Row',
+          displayName: 'Bent Over Barbell Row (Overhand)',
+        },
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q1:e1',
+          name: 'Overhead Barbell Press',
+          displayName: 'Overhead Barbell Press (Seated)',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'make bent over barbell row and overhead barbell press incline',
+        targetedRefs
+      );
+
+      const result = evaluateVariantSemanticOutcome(
+        'make bent over barbell row and overhead barbell press incline',
+        originalQueue,
+        repaired,
+        targetedRefs,
+        'incline'
+      );
+
+      expect(result.passed).toBe(true);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('does not treat add-variant phrasing as structural add intent', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Hammer Curls',
+              variant: { grip: 'Neutral Grip' },
+              exerciseInstanceId: 'q1:e0',
+            }),
+            createExercise({
+              name: 'Reverse Grip Forearm Curls',
+              variant: { grip: 'Reverse Grip' },
+              exerciseInstanceId: 'q1:e1',
+            }),
+          ],
+        }),
+      ];
+
+      const parsedQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Hammer Curls',
+              variant: { grip: 'Neutral Grip' },
+              exerciseInstanceId: 'q1:e0',
+            }),
+            createExercise({
+              name: 'Reverse Grip Forearm Curls',
+              variant: { grip: 'Reverse Grip' },
+              exerciseInstanceId: 'q1:e1',
+            }),
+          ],
+        }),
+      ];
+
+      const targetedRefs = [
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q1:e0',
+          name: 'Hammer Curls',
+          displayName: 'Hammer Curls (Neutral Grip)',
+        },
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q1:e1',
+          name: 'Reverse Grip Forearm Curls',
+          displayName: 'Reverse Grip Forearm Curls (Reverse Grip)',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'add neutral grip to hammer curls and reverse grip forearm curls',
+        targetedRefs
+      );
+
+      expect(repaired[0].exercises).toHaveLength(2);
+    });
+
+
     it('repair regression - preserves intended neutral-grip variant for all targeted exercises in multi-target requests', () => {
       const originalQueue: WorkoutQueueItem[] = [
         createQueueItem({

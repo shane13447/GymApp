@@ -1400,7 +1400,13 @@ export const repairQueueWithIntent = (
   const isRelativeNumericDropPhrase =
     /\bdrop\b.*\bto\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(requestLower) ||
     /\bdrop\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?)\b/.test(requestLower);
-  const isAddRequest = includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase;
+  const requestedVariants = inferRequestedVariantsForRepair(requestLower);
+  const requestedVariant = requestedVariants[0] ?? null;
+  const isVariantAddPhrase = requestLower.includes('add') && requestedVariants.length > 0;
+  const isAddRequest =
+    includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) &&
+    !isRelativeNumericAddPhrase &&
+    !isVariantAddPhrase;
   const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !isRelativeNumericDropPhrase;
   const injuryIntent = inferInjuryIntent(requestLower);
   const isMildInjuryRequest = injuryIntent.hasInjuryContext && injuryIntent.severity === 'mild';
@@ -1487,8 +1493,6 @@ export const repairQueueWithIntent = (
   const mentionsReps = requestLower.includes('rep');
   const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
   const mentionsSets = /\bsets\b/.test(requestLower);
-  const requestedVariants = inferRequestedVariantsForRepair(requestLower);
-  const requestedVariant = requestedVariants[0] ?? null;
   const requestedVariantLabel = normaliseText(getExerciseVariantLabel(requestedVariant));
   const variantAppearsInTargetName = requestedVariantLabel.length > 0 && targetedExerciseNames.some((target) => {
     const rawName = isTargetedExerciseRef(target)
@@ -1496,17 +1500,21 @@ export const repairQueueWithIntent = (
       : target;
     return normaliseText(rawName).includes(requestedVariantLabel);
   });
-  const mentionsVariantBase =
+  const mentionsVariantStrongSignal =
     requestLower.includes('variant') ||
-    requestLower.includes('grip') ||
+    requestLower.includes('grip');
+  const mentionsVariantWeakSignal =
     requestLower.includes('incline') ||
     requestLower.includes('decline') ||
     requestLower.includes('seated') ||
     requestLower.includes('standing') ||
     requestLower.includes('one-arm') ||
     requestLower.includes('single-arm');
+  const mentionsVariantBase = mentionsVariantStrongSignal || mentionsVariantWeakSignal;
   const mentionsVariant =
-    mentionsVariantBase && !(variantAppearsInTargetName && (mentionsReps || mentionsWeight || mentionsSets));
+    mentionsVariantStrongSignal ||
+    (!mentionsReps && !mentionsWeight && !mentionsSets && mentionsVariantBase) ||
+    (mentionsVariantWeakSignal && variantAppearsInTargetName && !mentionsReps && !mentionsWeight && !mentionsSets);
   const hasExplicitColumnIntent = mentionsReps || mentionsWeight || mentionsSets || mentionsVariant;
 
   const repDestinationValues = extractDestinationValues(userPrompt, 'reps');
@@ -1695,7 +1703,21 @@ export const repairQueueWithIntent = (
         if (mentionsVariant) {
           const exerciseData = getVariantValidationSource(findExerciseByName(finalEx.name), originalEx);
           if (!exerciseData?.variantOptions?.length) {
-            finalEx.variant = finalEx.variant ?? requestedVariant ?? originalEx.variant ?? null;
+            const requestedVariantLabel = normaliseText(getExerciseVariantLabel(requestedVariant));
+            const currentVariantLabel = normaliseText(getExerciseVariantLabel(finalEx.variant));
+            const originalVariantLabel = normaliseText(getExerciseVariantLabel(originalEx.variant));
+
+            const parsedStillOriginalVariant =
+              currentVariantLabel.length > 0 &&
+              currentVariantLabel === originalVariantLabel &&
+              requestedVariantLabel.length > 0 &&
+              currentVariantLabel !== requestedVariantLabel;
+
+            if (!finalEx.variant || parsedStillOriginalVariant) {
+              finalEx.variant = requestedVariant ?? finalEx.variant ?? originalEx.variant ?? null;
+            } else {
+              finalEx.variant = finalEx.variant ?? originalEx.variant ?? null;
+            }
           } else {
             const normalisedExistingVariant = normaliseVariantAgainstOptions(
               exerciseData,
