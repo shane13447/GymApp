@@ -32,6 +32,7 @@ import {
     parseQueueFormatResponse,
     preprocessMuscleGroupRequest,
     repairQueue,
+    repairQueueWithIntent,
     resolveExerciseAlias,
     restoreDroppedExercises,
     validateChanges,
@@ -487,6 +488,21 @@ describe('COMPRESSED_SYSTEM_PROMPT injury policy', () => {
   });
 });
 
+describe('COMPRESSED_SYSTEM_PROMPT TOON deterministic sets guidance', () => {
+  it('documents deterministic sets derived from canonical reps and weight arrays', () => {
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/sets.*deterministic/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/array length/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/reps\[\]/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/weight\[\]/i);
+  });
+
+  it('includes varied TOON examples for deterministic sets, injury, and variant updates', () => {
+    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: mild shoulder irritation, go easier on pressing');
+    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: my lower back is sore, adjust today so it does not flare up');
+    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: switch lat pulldowns and triangle rows to neutral grip');
+  });
+});
+
 // =============================================================================
 // parseQueueFormatResponse
 // =============================================================================
@@ -930,7 +946,7 @@ describe('parseQueueFormatResponse', () => {
         ],
       })];
 
-      const response = 'Q0:D1:Crunches (Decline)|0|15|3';
+      const response = 'Q0:D1:Crunches|0|15|3|Decline';
       const parsed = parseQueueFormatResponse(response, queue, 'change decline crunches reps to 15', [
         {
           queueItemId: 'q0',
@@ -1070,7 +1086,7 @@ describe('parseQueueFormatResponse', () => {
       expect(rows?.sets).toBe('5');
     });
 
-    it('Task 1 regression - variant-heavy name(variant) leakage should still parse strict TOON rows', () => {
+    it('Task 1 regression - variant-heavy Name (variant) leakage should be rejected in strict TOON rows', () => {
       const queue = [createQueueItem({
         id: 'q0',
         dayNumber: 1,
@@ -1097,9 +1113,8 @@ describe('parseQueueFormatResponse', () => {
         },
       ]);
 
-      expect(parsed).not.toBeNull();
-      expect(parsed?.[0].exercises[0].name).toBe('Lat Pulldowns');
-      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
+      expect(parsed).toBeNull();
+      expect(getLastQueueParseFailureReason()).toBe('variant_source_conflict');
     });
 
     it('Variant - Single should fail deterministically when Name (variant) conflicts with column 5', () => {
@@ -1133,7 +1148,7 @@ describe('parseQueueFormatResponse', () => {
       expect(getLastQueueParseFailureReason()).toBe('variant_source_conflict');
     });
 
-    it('Variant - Multi should parse Name (variant) leakage when column 5 is omitted', () => {
+    it('Variant - Multi should reject Name (variant) leakage when column 5 is omitted', () => {
       const queue = [createQueueItem({
         id: 'q0',
         dayNumber: 1,
@@ -1163,13 +1178,11 @@ describe('parseQueueFormatResponse', () => {
         ['Lat Pulldowns', 'Barbell Bench Press']
       );
 
-      expect(parsed).not.toBeNull();
-      expect(getLastQueueParseFailureReason()).toBe('none');
-      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
-      expect(parsed?.[0].exercises[1].variant).toEqual({ angle: 'Incline' });
+      expect(parsed).toBeNull();
+      expect(getLastQueueParseFailureReason()).toBe('variant_source_conflict');
     });
 
-    it('Variant - Muscle should parse Name (variant) leakage for muscle-targeted variant prompts', () => {
+    it('Variant - Muscle should reject Name (variant) leakage for muscle-targeted variant prompts when column 5 is omitted', () => {
       const queue = [createQueueItem({
         id: 'q0',
         dayNumber: 1,
@@ -1199,9 +1212,8 @@ describe('parseQueueFormatResponse', () => {
         ['Lat Pulldowns', 'Triangle Rows']
       );
 
-      expect(parsed).not.toBeNull();
-      expect(parsed?.[0].exercises[0].variant).toEqual({ grip: 'Close Grip' });
-      expect(parsed?.[0].exercises[1].variant).toEqual({ grip: 'Close Grip' });
+      expect(parsed).toBeNull();
+      expect(getLastQueueParseFailureReason()).toBe('variant_source_conflict');
     });
   });
 
@@ -1362,6 +1374,18 @@ describe('detectRequestedChangeType', () => {
     it('should be case insensitive', () => {
       expect(detectRequestedChangeType('CHANGE WEIGHT')).toContain('weight');
     });
+
+    it('does not classify relative numeric add phrasing as structural add intent', () => {
+      const result = detectRequestedChangeType('add 5kg to barbell bench press');
+      expect(result).toContain('weight');
+      expect(result).not.toContain('add');
+    });
+
+    it('does not classify relative numeric drop phrasing as structural remove intent', () => {
+      const result = detectRequestedChangeType('drop leg extensions to 6 reps');
+      expect(result).toContain('reps');
+      expect(result).not.toContain('remove');
+    });
   });
 });
 
@@ -1466,7 +1490,8 @@ describe('extractTargetExercises', () => {
             exerciseInstanceId: 'q0:e0',
           }),
           createExercise({
-            name: 'Incline Dumbbell Press',
+            name: 'Dumbbell Press',
+            variant: { angle: 'Incline' },
             muscle_groups_worked: ['chest', 'shoulders', 'triceps'],
             exerciseInstanceId: 'q0:e1',
           }),
@@ -1495,7 +1520,7 @@ describe('extractTargetExercises', () => {
 
       expect(firstPass.length).toBeGreaterThan(0);
       expect(names).toEqual(
-        expect.arrayContaining(['Barbell Bench Press', 'Incline Dumbbell Press'])
+        expect.arrayContaining(['Barbell Bench Press', 'Dumbbell Press'])
       );
       expect(names).not.toContain('Cable Chest Flyes');
       expect(names).not.toContain('Tricep Pushdowns');
@@ -1725,6 +1750,267 @@ describe('repairQueue', () => {
       // Should restore Dumbbell Flyes
       expect(result[0].exercises.length).toBe(2);
     });
+
+    it('repair regression - preserves intended neutral-grip variant for all targeted exercises in multi-target requests', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Lat Pulldowns',
+              variant: { grip: 'Wide Grip' },
+              variantOptions: [
+                { label: 'Wide Grip', value: 'wide grip', field: 'grip' },
+                { label: 'Neutral Grip', value: 'neutral grip', field: 'grip' },
+              ],
+              exerciseInstanceId: 'q1:e6',
+            }),
+            createExercise({
+              name: 'Bent Over Barbell Row',
+              variant: { grip: 'Overhand' },
+              variantOptions: [
+                { label: 'Overhand', value: 'overhand', field: 'grip' },
+                { label: 'Neutral Grip', value: 'neutral grip', field: 'grip' },
+              ],
+              exerciseInstanceId: 'q1:e7',
+            }),
+          ],
+        }),
+      ];
+
+      const parsedQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q1',
+          dayNumber: 2,
+          position: 1,
+          exercises: [
+            createExercise({
+              name: 'Lat Pulldowns',
+              variant: { grip: 'Neutral Grip' },
+              exerciseInstanceId: 'q1:e6',
+            }),
+            createExercise({
+              name: 'Bent Over Barbell Row',
+              variant: { grip: 'Overhand' },
+              exerciseInstanceId: 'q1:e7',
+            }),
+          ],
+        }),
+      ];
+
+      const targetedRefs = [
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q1:e6',
+          name: 'Lat Pulldowns',
+          displayName: 'Lat Pulldowns (Wide Grip)',
+        },
+        {
+          queueItemId: 'q1',
+          dayNumber: 2,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q1:e7',
+          name: 'Bent Over Barbell Row',
+          displayName: 'Bent Over Barbell Row (Overhand)',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'make lat pulldowns and cable rows neutral grip for this workout',
+        targetedRefs
+      );
+
+      const result = evaluateVariantSemanticOutcome(
+        'make lat pulldowns and cable rows neutral grip for this workout',
+        originalQueue,
+        repaired,
+        targetedRefs,
+        'neutral grip'
+      );
+
+      expect(result.passed).toBe(true);
+      expect(result.reason).toBeUndefined();
+
+    });
+
+
+    it('injury fallback - mild injury lightens targeted exercises when model leaves them unchanged', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Overhead Barbell Press', weight: '50', reps: '8', sets: '3', exerciseInstanceId: 'q0:e1' }),
+            createExercise({ name: 'Barbell Back Squat', weight: '100', reps: '5', sets: '5', exerciseInstanceId: 'q0:e2' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue = JSON.parse(JSON.stringify(originalQueue)) as WorkoutQueueItem[];
+
+      const targetedRefs = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        },
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Overhead Barbell Press',
+          displayName: 'Overhead Barbell Press',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'mild shoulder injury pressing is painful today, make it easier',
+        targetedRefs
+      );
+
+      expect(repaired[0].exercises[0].weight).not.toBe('80');
+      expect(repaired[0].exercises[1].weight).not.toBe('50');
+      expect(repaired[0].exercises[2].weight).toBe('100');
+    });
+
+    it('injury fallback - mild phrasing without severity keyword still lightens targeted exercises', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Overhead Barbell Press', weight: '50', reps: '8', sets: '3', exerciseInstanceId: 'q0:e1' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue = JSON.parse(JSON.stringify(originalQueue)) as WorkoutQueueItem[];
+      const targetedRefs = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        },
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Overhead Barbell Press',
+          displayName: 'Overhead Barbell Press',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'my shoulder feels a little irritated today, go easier on pressing',
+        targetedRefs
+      );
+
+      expect(repaired[0].exercises[0].weight).not.toBe('80');
+      expect(repaired[0].exercises[1].weight).not.toBe('50');
+    });
+
+    it('injury fallback - moderate phrasing without severity keyword still removes targeted painful exercises', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Back Squat', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Leg Extensions', exerciseInstanceId: 'q0:e1' }),
+            createExercise({ name: 'Calf Press', exerciseInstanceId: 'q0:e2' }),
+            createExercise({ name: 'Barbell Deadlift', exerciseInstanceId: 'q0:e3' }),
+            createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e4' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue = JSON.parse(JSON.stringify(originalQueue)) as WorkoutQueueItem[];
+      const prompt = "my lower back is sore, adjust today's plan so it doesn't flare up";
+      const targetedRefs = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 3,
+          exerciseInstanceId: 'q0:e3',
+          name: 'Barbell Deadlift',
+          displayName: 'Barbell Deadlift',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(originalQueue, parsedQueue, prompt, targetedRefs);
+
+      const remainingNames = repaired[0].exercises.map((exercise) => exercise.name);
+      expect(remainingNames).not.toContain('Barbell Deadlift');
+      expect(remainingNames).toContain('Lat Pulldowns');
+    });
+
+
+    it('injury fallback - mild injury lightens affected exercises across queue even when incoming targets are partial', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Bench Press', weight: '80', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Overhead Barbell Press', weight: '50', reps: '8', sets: '3', exerciseInstanceId: 'q0:e1' }),
+            createExercise({ name: 'Barbell Back Squat', weight: '100', reps: '5', sets: '5', exerciseInstanceId: 'q0:e2' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue = JSON.parse(JSON.stringify(originalQueue)) as WorkoutQueueItem[];
+
+      const partialTargets = [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
+        },
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'my shoulder feels a little irritated today, go easier on pressing',
+        partialTargets
+      );
+
+      const bench = repaired[0].exercises.find((exercise) => exercise.name === 'Barbell Bench Press');
+      const ohp = repaired[0].exercises.find((exercise) => exercise.name === 'Overhead Barbell Press');
+      const squat = repaired[0].exercises.find((exercise) => exercise.name === 'Barbell Back Squat');
+
+      expect(bench?.weight).not.toBe('80');
+      expect(ohp?.weight).not.toBe('50');
+      expect(squat?.weight).toBe('100');
+    });
+
   });
 });
 
@@ -1935,24 +2221,133 @@ describe('differencesToProposedChanges', () => {
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle empty differences', () => {
-      const result = differencesToProposedChanges([]);
-      expect(result.weightChanges).toHaveLength(0);
-      expect(result.repsChanges).toHaveLength(0);
-      expect(result.setsChanges).toHaveLength(0);
-      expect(result.removals).toHaveLength(0);
-      expect(result.additions).toHaveLength(0);
-      expect(result.swaps).toHaveLength(0);
-    });
+  it('allows variant-only add/remove diff pairs when request explicitly asks for variant change', () => {
+    const differences = [
+      {
+        type: 'removed' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Lat Pulldowns (Wide Grip)',
+        oldExercise: createExercise({
+          name: 'Lat Pulldowns',
+          exerciseInstanceId: 'q1:e6',
+          variant: { grip: 'wide' },
+        }),
+      },
+      {
+        type: 'added' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Lat Pulldowns (Close Grip)',
+        newExercise: createExercise({
+          name: 'Lat Pulldowns',
+          exerciseInstanceId: 'q1:e6',
+          variant: { grip: 'close' },
+        }),
+      },
+    ];
+
+    const result = validateChanges('make lat pulldowns close grip', differences);
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(0);
   });
-});
 
-// =============================================================================
-// validateChanges
-// =============================================================================
+  it('allows variant-only add/remove pairs for multiple targeted exercises in variant requests', () => {
+    const differences = [
+      {
+        type: 'removed' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Lat Pulldowns (Wide Grip)',
+        oldExercise: createExercise({
+          name: 'Lat Pulldowns',
+          exerciseInstanceId: 'q1:e6',
+          variant: { grip: 'wide' },
+        }),
+      },
+      {
+        type: 'added' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Lat Pulldowns (Neutral Grip)',
+        newExercise: createExercise({
+          name: 'Lat Pulldowns',
+          exerciseInstanceId: 'q1:e6',
+          variant: { grip: 'neutral' },
+        }),
+      },
+      {
+        type: 'removed' as const,
+        queueItemId: 'q2',
+        queueItemName: 'Test',
+        dayNumber: 3,
+        exerciseName: 'Bent Over Barbell Row (Overhand)',
+        oldExercise: createExercise({
+          name: 'Bent Over Barbell Row',
+          exerciseInstanceId: 'q2:e4',
+          variant: { grip: 'overhand' },
+        }),
+      },
+      {
+        type: 'added' as const,
+        queueItemId: 'q2',
+        queueItemName: 'Test',
+        dayNumber: 3,
+        exerciseName: 'Bent Over Barbell Row (Neutral Grip)',
+        newExercise: createExercise({
+          name: 'Bent Over Barbell Row',
+          exerciseInstanceId: 'q2:e4',
+          variant: { grip: 'neutral' },
+        }),
+      },
+    ];
 
-describe('validateQueueStructure', () => {
+    const result = validateChanges('switch lats and rows to neutral grip', differences);
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('still warns for real structural add/remove when variant was not requested', () => {
+    const differences = [
+      {
+        type: 'removed' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Lat Pulldowns (Wide Grip)',
+        oldExercise: createExercise({
+          name: 'Lat Pulldowns',
+          exerciseInstanceId: 'q1:e6',
+          variant: { grip: 'wide' },
+        }),
+      },
+      {
+        type: 'added' as const,
+        queueItemId: 'q1',
+        queueItemName: 'Test',
+        dayNumber: 2,
+        exerciseName: 'Hammer Curls (Neutral Grip)',
+        newExercise: createExercise({
+          name: 'Hammer Curls',
+          exerciseInstanceId: 'q1:e2-new',
+          variant: { grip: 'neutral' },
+        }),
+      },
+    ];
+
+    const result = validateChanges('increase pulldown weight by 5kg', differences);
+
+    expect(result.valid).toBe(false);
+    expect(result.warnings.some((warning) => warning.includes('Unexpected removal'))).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes('Unexpected addition'))).toBe(true);
+  });
+
   const originalQueue = createTestQueue();
 
   it('should validate identical queue structure', () => {
@@ -2729,15 +3124,14 @@ describe('evaluatePromptIntentOutcome', () => {
     expect(result.passed).toBe(true);
   });
 
-  it('passes intent outcome when requested multi-sets values are both applied and non-target is unchanged', () => {
+  it('passes intent outcome for alias-family replacement without structural add/remove', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Lat Pulldowns', sets: '3', exerciseInstanceId: 'q0:e0' }),
-          createExercise({ name: 'Triangle Rows', sets: '3', exerciseInstanceId: 'q0:e1' }),
-          createExercise({ name: 'Face Pulls', sets: '3', exerciseInstanceId: 'q0:e2' }),
+          createExercise({ name: 'Barbell Bench Press', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
         ],
       }),
     ];
@@ -2747,15 +3141,14 @@ describe('evaluatePromptIntentOutcome', () => {
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Lat Pulldowns', sets: '4', exerciseInstanceId: 'q0:e0' }),
-          createExercise({ name: 'Triangle Rows', sets: '5', exerciseInstanceId: 'q0:e1' }),
-          createExercise({ name: 'Face Pulls', sets: '3', exerciseInstanceId: 'q0:e2' }),
+          createExercise({ name: 'Dumbbell Bench Press', reps: '8', sets: '3', exerciseInstanceId: 'q0:e2' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
         ],
       }),
     ];
 
     const result = evaluatePromptIntentOutcome(
-      'I want 4 sets of pulldowns and 5 sets of triangle rows',
+      'replace barbell bench press with dumbbell bench press',
       originalQueue,
       parsedQueue,
       [
@@ -2764,22 +3157,57 @@ describe('evaluatePromptIntentOutcome', () => {
           dayNumber: 1,
           exerciseIndex: 0,
           exerciseInstanceId: 'q0:e0',
-          name: 'Lat Pulldowns',
-          displayName: 'Lat Pulldowns',
-        },
-        {
-          queueItemId: 'q0',
-          dayNumber: 1,
-          exerciseIndex: 1,
-          exerciseInstanceId: 'q0:e1',
-          name: 'Triangle Rows',
-          displayName: 'Triangle Rows',
+          name: 'Barbell Bench Press',
+          displayName: 'Barbell Bench Press',
         },
       ]
     );
 
     expect(result.passed).toBe(true);
   });
+
+  it('passes intent outcome for relative reps decrease without structural remove requirement', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Leg Extensions', reps: '10', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Leg Extensions', reps: '6', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'drop leg extensions to 6 reps',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Leg Extensions',
+          displayName: 'Leg Extensions',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
 });
 
 describe('analyzeTestPromptQueueCoverage', () => {
@@ -2954,6 +3382,34 @@ describe('validateChanges', () => {
       const result = validateChanges('insert cable fly', differences);
       expect(result.valid).toBe(true);
     });
+    it('allows injury-driven removals without explicit remove keywords for moderate severity', () => {
+      const differences = [{
+        type: 'removed' as const,
+        queueItemId: 'q2',
+        queueItemName: 'Day 3',
+        dayNumber: 3,
+        exerciseName: 'Barbell Deadlift',
+      }];
+
+      const result = validateChanges("my lower back is sore, adjust today's plan so it doesn't flare up", differences);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('allows injury-driven removals without explicit remove keywords for severe severity', () => {
+      const differences = [{
+        type: 'removed' as const,
+        queueItemId: 'q2',
+        queueItemName: 'Day 3',
+        dayNumber: 3,
+        exerciseName: 'Barbell Back Squat',
+      }];
+
+      const result = validateChanges('I tweaked my knee badly, I cannot do any painful leg work today', differences);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toHaveLength(0);
+    });
+
   });
 
   describe('unexpected changes', () => {
