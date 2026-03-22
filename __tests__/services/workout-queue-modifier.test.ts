@@ -1359,6 +1359,10 @@ describe('detectRequestedChangeType', () => {
       expect(detectRequestedChangeType('get rid of bench')).toContain('remove');
       expect(detectRequestedChangeType('skip leg extensions')).toContain('remove');
     });
+
+    it('detects split phrasal remove intent', () => {
+      expect(detectRequestedChangeType('take fingertip curls out of day 2')).toContain('remove');
+    });
   });
 
   describe('unknown requests', () => {

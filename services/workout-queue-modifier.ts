@@ -1750,8 +1750,9 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   const isRelativeNumericDropPhrase =
     /\bdrop\b.*\bto\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(lowerRequest) ||
     /\bdrop\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?)\b/.test(lowerRequest);
+  const hasSplitPhrasalRemove = /\btake\b[\s\S]{1,60}\bout\b/.test(lowerRequest);
 
-  if (includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS) && !isRelativeNumericDropPhrase) {
+  if ((includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS) || hasSplitPhrasalRemove) && !isRelativeNumericDropPhrase) {
     types.push('remove');
   }
   if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase) {
