@@ -3209,6 +3209,64 @@ describe('evaluatePromptIntentOutcome', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('keeps clause-specific reps destinations isolated per targeted exercise', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        position: 0,
+        exercises: [
+          createExercise({ name: 'Calf Press', reps: '12', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Leg Extensions', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Leg Press', reps: '10', sets: '3', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        position: 0,
+        exercises: [
+          createExercise({ name: 'Calf Press', reps: '20', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Leg Extensions', reps: '20', sets: '3', exerciseInstanceId: 'q0:e1' }),
+          createExercise({ name: 'Leg Press', reps: '20', sets: '3', exerciseInstanceId: 'q0:e2' }),
+        ],
+      }),
+    ];
+
+    const repaired = repairQueueWithIntent(
+      originalQueue,
+      parsedQueue,
+      'make calf press 20 reps but drop leg extensions to 6',
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Calf Press',
+          displayName: 'Calf Press',
+        },
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 1,
+          exerciseInstanceId: 'q0:e1',
+          name: 'Leg Extensions',
+          displayName: 'Leg Extensions',
+        },
+      ]
+    );
+
+    const calf = repaired[0].exercises.find((exercise) => exercise.exerciseInstanceId === 'q0:e0');
+    const legExtensions = repaired[0].exercises.find((exercise) => exercise.exerciseInstanceId === 'q0:e1');
+
+    expect(calf?.reps).toBe('20');
+    expect(legExtensions?.reps).toBe('6');
+  });
+
   it('passes intent outcome for relative reps decrease without structural remove requirement', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({

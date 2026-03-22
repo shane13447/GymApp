@@ -698,6 +698,7 @@ const REMOVE_REQUEST_KEYWORDS = [
   'ditch',
 ] as const;
 
+
 const ADD_REQUEST_KEYWORDS = ['add', 'insert', 'put', 'include'] as const;
 const INJURY_CONTEXT_KEYWORDS = [
   'injury',
@@ -1395,7 +1396,10 @@ export const repairQueueWithIntent = (
   console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
   
   const requestLower = userPrompt.toLowerCase();
-  const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS);
+  const isRelativeNumericDropPhrase =
+    /\bdrop\b.*\bto\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(requestLower) ||
+    /\bdrop\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?)\b/.test(requestLower);
+  const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !isRelativeNumericDropPhrase;
   const injuryIntent = inferInjuryIntent(requestLower);
   const isMildInjuryRequest = injuryIntent.hasInjuryContext && injuryIntent.severity === 'mild';
   const injuryAllowsRemoval =
@@ -1514,6 +1518,12 @@ export const repairQueueWithIntent = (
   const targetedExerciseCount = targetedExerciseNames.length;
   const hasMultiTargetRepIntent = targetedExerciseCount > 1 && repDestinationValues.length > 1;
   const hasMultiTargetSetIntent = targetedExerciseCount > 1 && setDestinationValues.length > 1;
+  const targetedRefs = targetedExerciseNames.filter(isTargetedExerciseRef);
+  const targetedNumericIntents = inferTargetedNumericIntent(
+    userPrompt,
+    targetedRefs,
+    detectRequestedChangeType(userPrompt)
+  );
 
   const injurySeverityKeywordPresent = /\b(mild|moderate|severe)\b/.test(requestLower);
   const injuryFallbackTargets =
@@ -1548,7 +1558,7 @@ export const repairQueueWithIntent = (
       return doesExerciseTextMatch(originalExercise, target);
     }) || (targetMatchers.length === 0 && requestLower.includes(candidateExerciseName.toLowerCase()));
   };
-  
+
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
     const originalItem =
       originalQueue.find((oq) => oq.id === qItem.id) ||
@@ -1556,7 +1566,7 @@ export const repairQueueWithIntent = (
       originalQueue.find((oq) => oq.dayNumber === qItem.dayNumber);
     if (!originalItem) return qItem;
     const usedOriginalIndices = new Set<number>();
-    
+
     const healedExercises = qItem.exercises
       .map((ex, exerciseIndex) => {
       const finalEx = { ...ex };
@@ -1604,10 +1614,26 @@ export const repairQueueWithIntent = (
           return null;
         }
 
+        const targetIntentKey =
+          originalEx.exerciseInstanceId ??
+          `${originalItem.id}:${matchedOriginalIndex}:${normaliseText(originalEx.name)}`;
+        const targetedIntent = targetedNumericIntents.get(targetIntentKey);
+
         // Apply intended changes (supports multiple columns at once).
         // If a column is NOT intended to change, restore it to the original value.
 
-        if (expectedReps && !hasMultiTargetRepIntent) {
+        if (targetedIntent?.reps) {
+          if (finalEx.reps !== targetedIntent.reps) {
+            console.log(`[REPAIR] Applying targeted reps change for ${ex.name}: ${finalEx.reps} -> ${targetedIntent.reps}`);
+            finalEx.reps = targetedIntent.reps;
+          }
+
+          if (finalEx.weight === targetedIntent.reps && originalEx.weight !== targetedIntent.reps) {
+            console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Weight, Apply Reps`);
+            finalEx.weight = originalEx.weight;
+            finalEx.reps = targetedIntent.reps;
+          }
+        } else if (expectedReps && !hasMultiTargetRepIntent) {
           if (finalEx.reps !== expectedReps) {
             console.log(`[REPAIR] Applying reps change for ${ex.name}: ${finalEx.reps} -> ${expectedReps}`);
             finalEx.reps = expectedReps;
@@ -1623,7 +1649,18 @@ export const repairQueueWithIntent = (
           finalEx.reps = originalEx.reps;
         }
 
-        if (expectedWeight) {
+        if (targetedIntent?.weight) {
+          if (finalEx.weight !== targetedIntent.weight) {
+            console.log(`[REPAIR] Applying targeted weight change for ${ex.name}: ${finalEx.weight} -> ${targetedIntent.weight}`);
+            finalEx.weight = targetedIntent.weight;
+          }
+
+          if (finalEx.reps === targetedIntent.weight && originalEx.reps !== targetedIntent.weight) {
+            console.log(`[REPAIR] Fix Column Swap for ${ex.name}: Restore Reps, Apply Weight`);
+            finalEx.reps = originalEx.reps;
+            finalEx.weight = targetedIntent.weight;
+          }
+        } else if (expectedWeight) {
           if (finalEx.weight !== expectedWeight) {
             console.log(`[REPAIR] Applying weight change for ${ex.name}: ${finalEx.weight} -> ${expectedWeight}`);
             finalEx.weight = expectedWeight;
@@ -1639,7 +1676,12 @@ export const repairQueueWithIntent = (
           finalEx.weight = originalEx.weight;
         }
 
-        if (expectedSets && !hasMultiTargetSetIntent) {
+        if (targetedIntent?.sets) {
+          if (finalEx.sets !== targetedIntent.sets) {
+            console.log(`[REPAIR] Applying targeted sets change for ${ex.name}: ${finalEx.sets} -> ${targetedIntent.sets}`);
+            finalEx.sets = targetedIntent.sets;
+          }
+        } else if (expectedSets && !hasMultiTargetSetIntent) {
           if (finalEx.sets !== expectedSets) {
             console.log(`[REPAIR] Applying sets change for ${ex.name}: ${finalEx.sets} -> ${expectedSets}`);
             finalEx.sets = expectedSets;
@@ -1693,7 +1735,7 @@ export const repairQueueWithIntent = (
       return finalEx;
     })
       .filter((exercise): exercise is ProgramExercise => exercise !== null);
-    
+
     // --- OVER-PROTECTIVE FIX (Test 10 & 14) ---
     // Check for dropped exercises
     for (const [originalIndex, origEx] of originalItem.exercises.entries()) {
@@ -1705,9 +1747,9 @@ export const repairQueueWithIntent = (
           originalIndex,
           origEx.name
         );
-        
+
         console.log(`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`);
-        
+
         // Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.
         if ((isRemoveRequest && isTargeted) || (injuryAllowsRemoval && isTargeted)) {
           console.log(`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`);
@@ -2964,9 +3006,6 @@ const inferTargetedNumericIntent = (
   const clauses = loweredRequest.split(/(?:,|\band\b|\bbut\b|\balso\b)/i).map((part) => part.trim());
 
   for (const clause of clauses) {
-    const numericMatch = clause.match(/(\d+(?:\.\d+)?)/);
-    if (!numericMatch) continue;
-
     const hasWeightSignal = /\b(?:kg|weight|kilos?)\b/.test(clause);
     const hasRepsSignal = /\breps?\b/.test(clause);
     const hasSetsSignal = /\bsets?\b/.test(clause);
@@ -2989,6 +3028,30 @@ const inferTargetedNumericIntent = (
 
     if (!inferredAttribute) continue;
 
+    const destinationMatchByAttribute: Record<NumericAttribute, RegExp[]> = {
+      reps: [
+        /reps?\s*from\s*\d+\s*to\s*(\d+)/i,
+        /from\s*\d+\s*to\s*(\d+)\s*reps?/i,
+      ],
+      sets: [
+        /sets?\s*from\s*\d+\s*to\s*(\d+)/i,
+        /from\s*\d+\s*to\s*(\d+)\s*sets?/i,
+      ],
+      weight: [
+        /weight\s*from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)/i,
+        /from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)(?:\s*kg)?\s*weight/i,
+      ],
+    };
+
+    const destinationMatch = destinationMatchByAttribute[inferredAttribute]
+      .map((pattern) => clause.match(pattern))
+      .find(Boolean);
+    const valueToApply = destinationMatch?.[1] ?? clause.match(/(\d+(?:\.\d+)?)/)?.[1];
+
+    if (!valueToApply) continue;
+
+    let clauseMatchedTarget = false;
+
     for (const targetRef of targetedExerciseRefs) {
       const fullName = normaliseText(targetRef.name);
       const displayName = normaliseText(targetRef.displayName);
@@ -3003,11 +3066,21 @@ const inferTargetedNumericIntent = (
 
       if (!matchesClause) continue;
 
+      clauseMatchedTarget = true;
       const targetKey = getTargetKey(targetRef);
       const existingIntent = intentMap.get(targetKey) ?? {};
       intentMap.set(targetKey, {
         ...existingIntent,
-        [inferredAttribute]: numericMatch[1],
+        [inferredAttribute]: valueToApply,
+      });
+    }
+
+    if (!clauseMatchedTarget && requestHasSingleAttribute && targetedExerciseRefs.length === 1) {
+      const targetKey = getTargetKey(targetedExerciseRefs[0]);
+      const existingIntent = intentMap.get(targetKey) ?? {};
+      intentMap.set(targetKey, {
+        ...existingIntent,
+        [inferredAttribute]: valueToApply,
       });
     }
   }
