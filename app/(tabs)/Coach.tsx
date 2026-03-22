@@ -18,6 +18,11 @@ import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
 import {
+  executePromptThroughCoachPipeline,
+  runCoachPromptSuite,
+  type CoachPromptCase,
+} from '@/services/coach/prompt-test-runner';
+import {
   buildCompressedPrompt,
   compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
@@ -38,7 +43,7 @@ import { CoachMode } from '@/types';
 
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
-const TEST_PROMPTS = [
+const TEST_PROMPTS: CoachPromptCase[] = [
   // --- TIER 1: CONVERSATIONAL BASICS ---
   { type: 'Single - Weight', prompt: 'I want to do 25kg for decline crunches today' },
   { type: 'Single - Reps', prompt: 'can we bump leg extensions up to 15 reps?' },
@@ -66,36 +71,23 @@ const TEST_PROMPTS = [
   { type: 'Muscle - Remove', prompt: 'I hurt my wrists, take out all the forearm stuff' },
 
   // --- TIER 4: SAFETY & SLANG ---
-  // Slang/Fuzzy matching
   { type: 'Safety - Fuzzy Name', prompt: 'set deadlifts to a hundred' },
-
-  // Implicit context (Asking for a change without saying "weight" or "reps")
   { type: 'Safety - Day Boundary', prompt: 'switch lat pulldowns to 50' },
-
-  // Testing if the LLM/Repair system handles "by" vs "to"
   { type: 'Logic - Relative Math', prompt: 'add 5kg to my decline crunches' },
-
-  // Very blunt/short phrasing
   { type: 'Logic - Ambiguity', prompt: 'leg extensions 12 reps' },
-
-  // Natural language duplication
   { type: 'Safety - Duplicate Add', prompt: 'hey add decline crunches to day 2 again' },
 
   // --- TIER 5: VARIANT COVERAGE ---
   { type: 'Variant - Single', prompt: 'switch my lat pulldowns to close grip today' },
-  {
-    type: 'Variant - Multi',
-    prompt: 'make lat pulldowns and cable rows neutral grip for this workout',
-  },
+  { type: 'Variant - Multi', prompt: 'make lat pulldowns and cable rows neutral grip for this workout' },
   { type: 'Variant - Muscle', prompt: 'use incline variations for all chest moves today' },
   { type: 'Variant - Safety', prompt: 'give me a wrist-friendly variant for barbell curls' },
 
   // --- TIER 6: INJURY SCENARIOS ---
   { type: 'Injury - Mild', prompt: 'my shoulder feels a little irritated today, go easier on pressing' },
-  { type: 'Injury - Moderate', prompt: 'my lower back is sore, adjust today\'s plan so it doesn\'t flare up' },
+  { type: 'Injury - Moderate', prompt: "my lower back is sore, adjust today's plan so it doesn't flare up" },
   { type: 'Injury - Severe', prompt: 'I tweaked my knee badly, I cannot do any painful leg work today' },
 ];
-
 type CoachProxyMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -822,7 +814,7 @@ export default function CoachScreen() {
   }, [isGenerating, isTestMode, runNextTest]);
 
   // Start the test suite
-  const startTests = () => {
+  const startTests = async () => {
     if (!coachProxyUrl.current) {
       setError('Coach proxy URL is not configured.');
       return;
@@ -834,15 +826,68 @@ export default function CoachScreen() {
     }
 
     setError('');
+    setProxyError('');
+    setLoading(true);
+    setIsGenerating(true);
+    setIsTestMode(true);
+    setTestIndex(0);
+    setTestResults([]);
+
     console.log('\n========================================');
     console.log('[TEST] Starting automated test suite');
     console.log(`[TEST] ${totalTests} tests to run`);
     console.log('========================================\n');
 
-    setIsTestMode(true);
-    setTestIndex(0);
-    setTestResults([]);
-    runNextTest(0);
+    try {
+      const accessToken = await getSupabaseAccessToken();
+
+      const suiteResult = await runCoachPromptSuite({
+        prompts: TEST_PROMPTS,
+        baseQueue: workoutQueue,
+        onResult: (result, index, total) => {
+          setTestIndex(index);
+          setInputText(result.prompt);
+
+          console.log(`[TEST ${index + 1}/${total}] ${result.type}: ${result.status}`);
+          if (result.reasons.length > 0) {
+            console.log('[TEST][REASONS]', result.reasons);
+          }
+
+          setTestResults((prev) => [
+            ...prev,
+            {
+              type: result.type,
+              success: result.status === 'SUCCESS',
+              error: result.reasons.length > 0 ? result.reasons.join('; ') : undefined,
+            },
+          ]);
+        },
+        runPrompt: ({ promptCase, queue }) =>
+          executePromptThroughCoachPipeline(
+            {
+              callCoachProxy: (messages) => callCoachProxy(coachProxyUrl.current, messages, accessToken),
+            },
+            promptCase,
+            queue
+          ),
+      });
+
+      console.log(
+        `[TEST] Complete. Passed ${suiteResult.summary.passed}/${suiteResult.summary.total}, Failed ${suiteResult.summary.failed}`
+      );
+      Alert.alert(
+        'Test Complete',
+        `Passed ${suiteResult.summary.passed}/${suiteResult.summary.total}. ${suiteResult.summary.gatePassed ? 'Gate passed.' : 'Gate failed.'}`
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to run test suite';
+      setError(message);
+      console.error('[TEST] Suite error:', err);
+    } finally {
+      setIsTestMode(false);
+      setIsGenerating(false);
+      setLoading(false);
+    }
   };
 
   const handleConfirmChanges = async () => {

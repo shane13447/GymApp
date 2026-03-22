@@ -4,6 +4,7 @@ import { corsHeadersForRequest, jsonResponse } from '../_shared/cors.ts';
 import {
   evaluateAuthMode,
   extractStrictToonCandidate,
+  formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
   isValidToonResponse,
@@ -225,16 +226,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
     let modelOutput = await callDeepSeek(apiKey, messages);
 
     if (isToonMode && !isValidToonResponse(modelOutput)) {
+      const firstOutput = modelOutput;
       const retriedMessages: CoachProxyMessage[] = [
         ...messages,
         { role: 'system', content: TOON_RETRY_INSTRUCTION },
       ];
 
       modelOutput = await callDeepSeek(apiKey, retriedMessages);
+      const retryOutput = modelOutput;
 
       if (!isValidToonResponse(modelOutput)) {
         const candidate = extractStrictToonCandidate(modelOutput);
         if (!candidate || !isValidToonResponse(candidate)) {
+          console.log(formatInvalidToonDiagnostics(firstOutput, retryOutput));
           return jsonResponse(
             { error: 'Model returned invalid TOON output after retry.' },
             422,

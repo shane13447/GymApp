@@ -542,12 +542,12 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
   'reverse forearm curls': ['Reverse Grip Forearm Curls'],
   
   // Bench variations
-  'bench': ['Barbell Bench Press', 'Incline Dumbbell Press', 'Chest Press'],
-  'bench press': ['Barbell Bench Press'],
+  'bench': ['Barbell Bench Press', 'Dumbbell Press', 'Chest Press'],
+  'bench press': ['Barbell Bench Press', 'Dumbbell Press'],
   'barbell bench': ['Barbell Bench Press'],
-  'flat bench': ['Barbell Bench Press'],
-  'incline bench': ['Incline Dumbbell Press'],
-  'incline press': ['Incline Dumbbell Press'],
+  'flat bench': ['Barbell Bench Press', 'Dumbbell Press'],
+  'incline bench': ['Dumbbell Press'],
+  'incline press': ['Dumbbell Press'],
   
   // Squat variations
   'squat': ['Barbell Back Squat', 'Dumbbell Goblet Squat', 'Bulgarian Split Squat'],
@@ -708,6 +708,7 @@ const INJURY_CONTEXT_KEYWORDS = [
   'soreness',
   'strain',
   'irritation',
+  'irritated',
 ] as const;
 const GENERIC_EXERCISE_WORDS = new Set([
   'press',
@@ -728,16 +729,66 @@ function includesAnyKeyword(requestLower: string, keywords: readonly string[]): 
 }
 
 const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null } => {
-  const severity = requestLower.includes('severe')
-    ? 'severe'
-    : requestLower.includes('moderate')
-      ? 'moderate'
-      : requestLower.includes('mild')
-        ? 'mild'
-        : null;
+  const hasInjuryContext = includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS);
+
+  const inferSeverityFromLanguage = (): 'mild' | 'moderate' | 'severe' | null => {
+    if (requestLower.includes('severe')) return 'severe';
+    if (requestLower.includes('moderate')) return 'moderate';
+    if (requestLower.includes('mild')) return 'mild';
+
+    if (!hasInjuryContext) {
+      return null;
+    }
+
+    const severeCues = [
+      'cannot',
+      "can't",
+      'unable',
+      'badly',
+      'too painful',
+      'do not allow',
+      'cant do',
+      'can not',
+    ];
+    if (severeCues.some((cue) => requestLower.includes(cue))) {
+      return 'severe';
+    }
+
+    const moderateCues = [
+      'sore',
+      'flare up',
+      'doesnt flare up',
+      "doesn't flare up",
+      'painful',
+      'make it safer',
+      'safer options',
+      'adjust',
+    ];
+    if (moderateCues.some((cue) => requestLower.includes(cue))) {
+      return 'moderate';
+    }
+
+    const mildCues = [
+      'little',
+      'slight',
+      'a bit',
+      'go easier',
+      'irritated',
+      'lighten',
+      'easy today',
+      'easier today',
+    ];
+    if (mildCues.some((cue) => requestLower.includes(cue))) {
+      return 'mild';
+    }
+
+    return 'moderate';
+  };
+
+  const severity = inferSeverityFromLanguage();
 
   return {
-    hasInjuryContext: includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS) || severity !== null,
+    hasInjuryContext: hasInjuryContext || severity !== null,
     severity,
   };
 };
@@ -758,7 +809,7 @@ const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, string[]> = {
   knee: ['quads', 'hamstrings', 'glutes', 'calves'],
 };
 
-const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
+const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[] => {
   const candidateTokens = [
     'neutral grip',
     'close grip',
@@ -777,18 +828,32 @@ const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant |
     'single arm',
   ];
 
+  const toVariant = (token: string): ExerciseVariant | null => {
+    if (token === 'one-arm' || token === 'single-arm' || token === 'single arm') {
+      return { laterality: token };
+    }
+    return parseVariantFromToken(token);
+  };
+
+  const variants: ExerciseVariant[] = [];
+
   for (const token of candidateTokens) {
     if (!requestLower.includes(token)) {
       continue;
     }
 
-    const parsed = parseVariantFromToken(token);
+    const parsed = toVariant(token);
     if (parsed) {
-      return parsed;
+      variants.push(parsed);
     }
   }
 
-  return null;
+  return variants;
+};
+
+const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
+  const variants = inferRequestedVariantsForRepair(requestLower);
+  return variants[0] ?? null;
 };
 
 const findExercisesInQueueByMuscleGroup = (
@@ -1020,7 +1085,9 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 - For variants: keep column 1 as base exercise name only.
 - Do NOT embed variant in column 1 when column 5 is present.
 - If variant appears in both column 1 and column 5, both must be identical.
-- Preserve exact values in unchanged columns
+- Preserve exact values in unchanged columns.
+- Sets are deterministic. If canonical reps[] and weight[] arrays are provided upstream, set column 4 to array length.
+- Canonical conversion rule: kg=weight[0], reps=reps[0], sets=array length (reps[] and weight[] lengths must match).
 </critical>
 
 <injury_policy>
@@ -1032,33 +1099,25 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 </injury_policy>
 
 <examples>
-IN: Q0:D2:A|10|8|3,B|5|12|4;Q1:D3:C|20|6|3
-REQ: change A weight to 25
-OUT: Q0:D2:A|25|8|3,B|5|12|4;Q1:D3:C|20|6|3
+IN: Q0:D1:Barbell Bench Press|92.5|5|3|Flat,Chest Press|74|11|3|Incline;Q1:D2:Decline Crunches|25|20|4|Decline,Lat Pulldowns|67|8|4|Wide Grip
+REQ: change barbell bench press weight to 95
+OUT: Q0:D1:Barbell Bench Press|95|5|3|Flat,Chest Press|74|11|3|Incline;Q1:D2:Decline Crunches|25|20|4|Decline,Lat Pulldowns|67|8|4|Wide Grip
 
-IN: Q0:D2:A|0|10|3,B|5|15|3
-REQ: change A reps to 20
-OUT: Q0:D2:A|0|20|3,B|5|15|3
+IN: canonical row upstream reps[]=[5,5,5,5] weight[]=[92.5,92.5,92.5,92.5]
+REQ: convert to TOON row deterministically
+OUT: Q0:D1:Barbell Bench Press|92.5|5|4|Flat
 
-IN: Q0:D2:A|0|6|3,B|40|5|3,C|20|8|3
-REQ: change B sets to 5
-OUT: Q0:D2:A|0|6|3,B|40|5|5,C|20|8|3
+IN: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Overhead Barbell Press|47.5|6|4|Standing;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
+REQ: mild shoulder irritation, go easier on pressing
+OUT: Q0:D1:Barbell Bench Press|85|5|5|Flat,Overhead Barbell Press|40|6|4|Standing;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
 
-IN: Q0:D2:A|10|8|3,B|5|12|4;Q1:D3:C|20|6|3
-REQ: change A weight to 15 and C reps to 10
-OUT: Q0:D2:A|15|8|3,B|5|12|4;Q1:D3:C|20|10|3
+IN: Q0:D1:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
+REQ: my lower back is sore, adjust today so it does not flare up
+OUT: Q0:D1:Lat Pulldowns|67|8|4|Wide Grip
 
-IN: Q0:D2:A|0|6|3,B|40|5|3
-REQ: remove A
-OUT: Q0:D2:B|40|5|3
-
-IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Barbell Row|70|8|3|Overhand
-REQ: switch lat pulldowns to close grip
-OUT: Q0:D2:Lat Pulldowns|55|10|3|Close Grip,Barbell Row|70|8|3|Overhand
-
-IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Triangle Rows|50|10|3|Neutral Grip
-REQ: switch back work to close grip
-OUT: Q0:D2:Lat Pulldowns|55|10|3|Close Grip,Triangle Rows|50|10|3|Close Grip
+IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Triangle Rows|50|10|3|Close Grip
+REQ: switch lat pulldowns and triangle rows to neutral grip
+OUT: Q0:D2:Lat Pulldowns|55|10|3|Neutral Grip,Triangle Rows|50|10|3|Neutral Grip
 </examples>
 
 <task>
@@ -1172,19 +1231,15 @@ export const parseQueueFormatResponse = (
         }
 
         const { name: parsedNameToken, variantLabel: inlineVariantLabel } = splitNameAndInlineVariant(rawNameToken);
-        if (variantToken && inlineVariantLabel) {
-          const inlineNormalized = normaliseText(inlineVariantLabel);
-          const columnNormalized = normaliseText(variantToken);
-          if (inlineNormalized !== columnNormalized) {
-            setLastQueueParseFailureReason('variant_source_conflict');
-            console.warn(
-              `[QUEUE FORMAT] Conflicting variant tokens for "${parsedNameToken}": inline="${inlineVariantLabel}" column5="${variantToken}"`
-            );
-            return null;
-          }
+        if (inlineVariantLabel) {
+          setLastQueueParseFailureReason('variant_source_conflict');
+          console.warn(
+            `[QUEUE FORMAT] Inline variant notation is not allowed in TOON rows for "${parsedNameToken}". Use column 5 variant token only.`
+          );
+          return null;
         }
 
-        const normalized = normalizeExerciseNameAndVariant(parsedNameToken, variantToken || inlineVariantLabel || '');
+        const normalized = normalizeExerciseNameAndVariant(parsedNameToken, variantToken || '');
         const parsedName = normalized.name;
         const variantLabel = normalized.variantLabel;
         const parsedVariant = parseVariantFromToken(variantLabel);
@@ -1325,11 +1380,12 @@ export const repairQueueWithIntent = (
   const requestLower = userPrompt.toLowerCase();
   const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS);
   const injuryIntent = inferInjuryIntent(requestLower);
+  const isMildInjuryRequest = injuryIntent.hasInjuryContext && injuryIntent.severity === 'mild';
   const injuryAllowsRemoval =
     injuryIntent.hasInjuryContext &&
     (injuryIntent.severity === 'moderate' || injuryIntent.severity === 'severe');
   console.log('[REPAIR] isRemoveRequest:', isRemoveRequest);
-  
+
   const extractDestinationValues = (prompt: string, column: 'reps' | 'sets' | 'weight'): string[] => {
     const values = new Set<string>();
 
@@ -1408,7 +1464,8 @@ export const repairQueueWithIntent = (
   const mentionsReps = requestLower.includes('rep');
   const mentionsWeight = requestLower.includes('weight') || requestLower.includes('kg');
   const mentionsSets = /\bsets\b/.test(requestLower);
-  const requestedVariant = inferRequestedVariantForRepair(requestLower);
+  const requestedVariants = inferRequestedVariantsForRepair(requestLower);
+  const requestedVariant = requestedVariants[0] ?? null;
   const requestedVariantLabel = normaliseText(getExerciseVariantLabel(requestedVariant));
   const variantAppearsInTargetName = requestedVariantLabel.length > 0 && targetedExerciseNames.some((target) => {
     const rawName = isTargetedExerciseRef(target)
@@ -1441,13 +1498,20 @@ export const repairQueueWithIntent = (
   const hasMultiTargetRepIntent = targetedExerciseCount > 1 && repDestinationValues.length > 1;
   const hasMultiTargetSetIntent = targetedExerciseCount > 1 && setDestinationValues.length > 1;
 
+  const injurySeverityKeywordPresent = /\b(mild|moderate|severe)\b/.test(requestLower);
+  const injuryFallbackTargets =
+    injuryIntent.hasInjuryContext && !injurySeverityKeywordPresent
+      ? extractTargetExerciseRefs(userPrompt, originalQueue)
+      : [];
+  const targetMatchers: TargetedExerciseMatcher[] = [...targetedExerciseNames, ...injuryFallbackTargets];
+
   const isExerciseTargeted = (
     originalItem: WorkoutQueueItem,
     originalExercise: ProgramExercise,
     originalIndex: number,
     candidateExerciseName: string
   ): boolean => {
-    return targetedExerciseNames.some((target) => {
+    return targetMatchers.some((target) => {
       if (isTargetedExerciseRef(target)) {
         if (
           target.exerciseInstanceId &&
@@ -1465,7 +1529,7 @@ export const repairQueueWithIntent = (
       }
 
       return doesExerciseTextMatch(originalExercise, target);
-    }) || (targetedExerciseNames.length === 0 && requestLower.includes(candidateExerciseName.toLowerCase()));
+    }) || (targetMatchers.length === 0 && requestLower.includes(candidateExerciseName.toLowerCase()));
   };
   
   const healedQueue = parsedQueue.map((qItem, qIndex) => {
@@ -1476,7 +1540,8 @@ export const repairQueueWithIntent = (
     if (!originalItem) return qItem;
     const usedOriginalIndices = new Set<number>();
     
-    const healedExercises = qItem.exercises.map((ex, exerciseIndex) => {
+    const healedExercises = qItem.exercises
+      .map((ex, exerciseIndex) => {
       const finalEx = { ...ex };
       const originalMatch = findBestOriginalExerciseMatch(
         originalItem.exercises,
@@ -1484,19 +1549,20 @@ export const repairQueueWithIntent = (
         exerciseIndex,
         usedOriginalIndices
       );
-      const originalEx = originalMatch?.exercise;
-      
+      const originalEx = originalMatch?.exercise ?? originalItem.exercises[exerciseIndex];
+
       if (!originalEx) return finalEx;
-      usedOriginalIndices.add(originalMatch.index);
+      usedOriginalIndices.add(originalMatch?.index ?? exerciseIndex);
 
       finalEx.hasCustomisedSets = originalEx.hasCustomisedSets;
       finalEx.exerciseInstanceId = originalEx.exerciseInstanceId;
 
-      // Check if this exercise was targeted
+      const matchedOriginalIndex = originalMatch?.index ?? exerciseIndex;
+
       const isTargeted = isExerciseTargeted(
         originalItem,
         originalEx,
-        originalMatch.index,
+        matchedOriginalIndex,
         ex.name
       );
 
@@ -1505,6 +1571,22 @@ export const repairQueueWithIntent = (
       // --- LOGIC GAP FIX (Test 12) ---
       // Force the correct value on targeted exercises if LLM ignored it
       if (isTargeted) {
+        if (isMildInjuryRequest && !expectedWeight) {
+          const originalWeight = Number(originalEx.weight);
+          if (Number.isFinite(originalWeight) && originalWeight > 0) {
+            finalEx.weight = Math.max(1, Math.round((originalWeight * 0.85) * 10) / 10).toString();
+          } else {
+            const originalReps = Number(originalEx.reps);
+            if (Number.isFinite(originalReps) && originalReps > 1) {
+              finalEx.reps = Math.max(1, originalReps - 1).toString();
+            }
+          }
+        }
+
+        if (injuryAllowsRemoval && !isRemoveRequest) {
+          return null;
+        }
+
         // Apply intended changes (supports multiple columns at once).
         // If a column is NOT intended to change, restore it to the original value.
 
@@ -1550,18 +1632,23 @@ export const repairQueueWithIntent = (
         }
 
         if (mentionsVariant) {
-          const exerciseData = findExerciseByName(finalEx.name);
+          const exerciseData = getVariantValidationSource(findExerciseByName(finalEx.name), originalEx);
           if (!exerciseData?.variantOptions?.length) {
-            finalEx.variant = finalEx.variant ?? expectedVariant ?? originalEx.variant ?? null;
+            finalEx.variant = finalEx.variant ?? requestedVariant ?? originalEx.variant ?? null;
           } else {
             const normalisedExistingVariant = normaliseVariantAgainstOptions(
               exerciseData,
               finalEx.variant,
               null
             );
+
+            const requestedVariantForExercise = requestedVariants.find((candidate) =>
+              normaliseVariantAgainstOptions(exerciseData, candidate, null) !== null
+            ) ?? requestedVariant;
+
             finalEx.variant = normaliseVariantAgainstOptions(
               exerciseData,
-              normalisedExistingVariant ?? expectedVariant,
+              requestedVariantForExercise ?? normalisedExistingVariant,
               normalisedExistingVariant
             );
           }
@@ -1585,9 +1672,10 @@ export const repairQueueWithIntent = (
         }
         finalEx.variant = originalEx.variant ?? null;
       }
-      
+
       return finalEx;
-    });
+    })
+      .filter((exercise): exercise is ProgramExercise => exercise !== null);
     
     // --- OVER-PROTECTIVE FIX (Test 10 & 14) ---
     // Check for dropped exercises
@@ -1611,7 +1699,21 @@ export const repairQueueWithIntent = (
         
         // Otherwise, it was accidental data loss. Restore it.
         console.log(`[REPAIR] Restoring dropped exercise: ${origEx.name}`);
-        healedExercises.push({ ...origEx });
+        const restoredExercise = { ...origEx };
+
+        if (isTargeted && isMildInjuryRequest && !expectedWeight) {
+          const originalWeight = Number(origEx.weight);
+          if (Number.isFinite(originalWeight) && originalWeight > 0) {
+            restoredExercise.weight = Math.max(1, Math.round((originalWeight * 0.85) * 10) / 10).toString();
+          } else {
+            const originalReps = Number(origEx.reps);
+            if (Number.isFinite(originalReps) && originalReps > 1) {
+              restoredExercise.reps = Math.max(1, originalReps - 1).toString();
+            }
+          }
+        }
+
+        healedExercises.push(restoredExercise);
       }
     }
     
@@ -1634,7 +1736,7 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if (lowerRequest.includes('weight') || lowerRequest.includes('kg')) {
     types.push('weight');
   }
-  if (lowerRequest.includes('rep')) {
+  if (/\breps?\b/.test(lowerRequest)) {
     types.push('reps');
   }
   if (/\bsets\b/.test(lowerRequest)) {
@@ -1643,10 +1745,16 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if (lowerRequest.includes('variant') || lowerRequest.includes('grip') || lowerRequest.includes('incline') || lowerRequest.includes('decline')) {
     types.push('variant');
   }
-  if (includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS)) {
+
+  const isRelativeNumericAddPhrase = /\badd\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(lowerRequest);
+  const isRelativeNumericDropPhrase =
+    /\bdrop\b.*\bto\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(lowerRequest) ||
+    /\bdrop\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?)\b/.test(lowerRequest);
+
+  if (includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS) && !isRelativeNumericDropPhrase) {
     types.push('remove');
   }
-  if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS)) {
+  if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase) {
     types.push('add');
   }
 
@@ -2551,15 +2659,11 @@ export const validateChanges = (
 ): ValidationResult => {
   const warnings: string[] = [];
   const requestLower = userRequest.toLowerCase();
+  const injuryIntent = inferInjuryIntent(requestLower);
+  const injuryRemovalAllowed =
+    injuryIntent.hasInjuryContext &&
+    (injuryIntent.severity === 'moderate' || injuryIntent.severity === 'severe');
 
-  // Check for unexpected removals (if user did not request remove-like action)
-  if (!includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS)) {
-    const removals = differences.filter(d => d.type === 'removed');
-    if (removals.length > 0) {
-      const removedNames = removals.map(r => r.exerciseName).join(', ');
-      warnings.push(`Unexpected removal(s): ${removedNames}. These exercises were removed but you didn't request removal.`);
-    }
-  }
 
   // Check for unexpected variant changes
   const mentionsVariant =
@@ -2569,8 +2673,78 @@ export const validateChanges = (
     requestLower.includes('decline') ||
     requestLower.includes('seated') ||
     requestLower.includes('standing');
+
+  const removals = differences.filter((difference) => difference.type === 'removed');
+  const additions = differences.filter((difference) => difference.type === 'added');
+
+  const variantOnlyPairKey = (difference: QueueDifference): string | null => {
+    const exercise = difference.oldExercise ?? difference.newExercise;
+    const baseName = normaliseText(exercise?.name ?? difference.exerciseName ?? '');
+    if (!baseName) return null;
+
+    const instanceId = exercise?.exerciseInstanceId ?? null;
+    const queueItemId = difference.queueItemId;
+
+    return instanceId
+      ? `${queueItemId}:instance:${instanceId}`
+      : `${queueItemId}:name:${baseName}`;
+  };
+
+  const consumeVariantOnlyPairs = (): {
+    remainingRemovals: QueueDifference[];
+    remainingAdditions: QueueDifference[];
+  } => {
+    if (!mentionsVariant) {
+      return {
+        remainingRemovals: removals,
+        remainingAdditions: additions,
+      };
+    }
+
+    const additionBuckets = new Map<string, QueueDifference[]>();
+    for (const addition of additions) {
+      const key = variantOnlyPairKey(addition);
+      if (!key) continue;
+      const bucket = additionBuckets.get(key) ?? [];
+      bucket.push(addition);
+      additionBuckets.set(key, bucket);
+    }
+
+    const remainingRemovals: QueueDifference[] = [];
+
+    for (const removal of removals) {
+      const key = variantOnlyPairKey(removal);
+      if (!key) {
+        remainingRemovals.push(removal);
+        continue;
+      }
+
+      const matchingBucket = additionBuckets.get(key);
+      if (!matchingBucket || matchingBucket.length === 0) {
+        remainingRemovals.push(removal);
+        continue;
+      }
+
+      matchingBucket.shift();
+    }
+
+    const remainingAdditions = Array.from(additionBuckets.values()).flat();
+
+    return { remainingRemovals, remainingAdditions };
+  };
+
+  const { remainingRemovals, remainingAdditions } = consumeVariantOnlyPairs();
+
+  // Check for unexpected removals (if user did not request remove-like action)
+  if (!includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !injuryRemovalAllowed) {
+    if (remainingRemovals.length > 0) {
+      const removedNames = remainingRemovals.map((removal) => removal.exerciseName).join(', ');
+      warnings.push(`Unexpected removal(s): ${removedNames}. These exercises were removed but you didn't request removal.`);
+    }
+  }
+
   if (!mentionsVariant) {
-    const variantChanges = differences.filter(d => d.type === 'variant_change');
+    const variantChanges = differences.filter(difference => difference.type === 'variant_change');
     if (variantChanges.length > 0) {
       const variantNames = variantChanges.map(change => change.exerciseName).join(', ');
       warnings.push(`Unexpected variant change(s): ${variantNames}. Variants were changed but you didn't request variant updates.`);
@@ -2579,9 +2753,8 @@ export const validateChanges = (
 
   // Check for unexpected additions (if user did not request add-like action)
   if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS)) {
-    const additions = differences.filter(d => d.type === 'added');
-    if (additions.length > 0) {
-      const addedNames = additions.map(a => a.exerciseName).join(', ');
+    if (remainingAdditions.length > 0) {
+      const addedNames = remainingAdditions.map((addition) => addition.exerciseName).join(', ');
       warnings.push(`Unexpected addition(s): ${addedNames}. These exercises were added but you didn't request addition.`);
     }
   }
@@ -2832,6 +3005,7 @@ export const evaluatePromptIntentOutcome = (
 ): SemanticEvaluationResult => {
   const changeTypes = detectRequestedChangeType(request);
   const differences = compareWorkoutQueues(originalQueue, parsedQueue);
+  const requestLower = normaliseText(request);
   const shouldRequireDuplicateAdd =
     changeTypes.includes('add') && /\b(?:again|another|duplicate|extra)\b/i.test(request);
 
@@ -2953,7 +3127,17 @@ export const evaluatePromptIntentOutcome = (
   const allParsedExercises = parsedQueue.flatMap((item) => item.exercises);
   const uniqueTargetNames = Array.from(new Set(targetedExerciseRefs.map((targetRef) => normaliseText(targetRef.name))));
 
-  if (changeTypes.includes('add')) {
+  const requestIncludesReplacementCue = /\b(?:replace|swap|switch)\b/.test(requestLower);
+  const replacementPairs = differences.filter(
+    (difference) => difference.type === 'removed' || difference.type === 'added'
+  );
+  const isLikelyReplacement =
+    requestIncludesReplacementCue &&
+    replacementPairs.length >= 2 &&
+    replacementPairs.filter((difference) => difference.type === 'removed').length > 0 &&
+    replacementPairs.filter((difference) => difference.type === 'added').length > 0;
+
+  if (changeTypes.includes('add') && !isLikelyReplacement) {
     for (const targetName of uniqueTargetNames) {
       const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
       const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
@@ -2968,7 +3152,7 @@ export const evaluatePromptIntentOutcome = (
     }
   }
 
-  if (changeTypes.includes('remove')) {
+  if (changeTypes.includes('remove') && !isLikelyReplacement) {
     for (const targetName of uniqueTargetNames) {
       const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
       const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;

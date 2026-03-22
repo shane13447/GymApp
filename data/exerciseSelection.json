@@ -126,12 +126,6 @@
     "isCompound": false
   },
   {
-    "name": "Incline Dumbbell Press",
-    "equipment": "Dumbbell",
-    "muscle_groups_worked": ["chest", "shoulders", "triceps"],
-    "isCompound": true
-  },
-  {
     "name": "Lat Pulldowns",
     "equipment": "Cable",
     "muscle_groups_worked": ["lats"],
@@ -216,10 +210,15 @@
     "isCompound": false
   },
   {
-    "name": "Flat Dumbbell Press",
+    "name": "Dumbbell Press",
     "equipment": "Dumbbell",
     "muscle_groups_worked": ["chest", "shoulders", "triceps"],
-    "isCompound": true
+    "isCompound": true,
+    "variantOptions": [
+      { "label": "Flat", "field": "angle", "value": "flat", "aliases": ["flat press"] },
+      { "label": "Incline", "field": "angle", "value": "incline", "aliases": ["inclined", "incline press"] }
+    ],
+    "aliases": ["flat dumbbell press", "incline dumbbell press", "dumbbell bench press"]
   },
   {
     "name": "Chest-Supported Dumbbell Row",

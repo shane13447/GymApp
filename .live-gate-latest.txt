@@ -1,0 +1,3059 @@
+
+> shanes-gym-app@1.0.0 test
+> jest __tests__/services/headless-live-proxy-gate.test.ts --runInBand
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|25|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|5|Wide Grip,Lat Pulldowns|59|12|5|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip,Barbell Curls|0|0|0;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.warn
+    [QUEUE FORMAT] Unknown exercise: "Barbell Curls" - using as-is. This may indicate an LLM hallucination.
+
+    [0m [90m 1288 |[39m         } [36melse[39m {
+     [90m 1289 |[39m           [90m// Warn about unknown exercise name[39m
+    [31m[1m>[22m[39m[90m 1290 |[39m           console[33m.[39mwarn([32m`[QUEUE FORMAT] Unknown exercise: "${parsedName}" - using as-is. This may indicate an LLM hallucination.`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1291 |[39m           exercises[33m.[39mpush({
+     [90m 1292 |[39m             name[33m:[39m parsedName[33m,[39m
+     [90m 1293 |[39m             equipment[33m:[39m [32m''[39m[33m,[39m[0m
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1290:19)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: true
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Dropped exercise "Fingertip Curls" - isRemoveRequest: true, isTargeted: true
+
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Allowing removal of targeted exercise: Fingertip Curls
+
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|30|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|10|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|6|3|Seated,Calf Press|160|20|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Calf Press',
+        displayName: 'Calf Press (Neutral)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: true
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Applying reps change for Leg Extensions: 6 -> 20
+
+      at services/workout-queue-modifier.ts:1587:21
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Bent Over Barbell Row',
+        displayName: 'Bent Over Barbell Row (Overhand)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'One-Arm Dumbbell Row',
+        displayName: 'One-Arm Dumbbell Row (One-Arm)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 5,
+        exerciseInstanceId: undefined,
+        name: 'Triangle Rows',
+        displayName: 'Triangle Rows (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip,Hammer Curls|20|9|4|Neutral Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated,Dumbbell Flyes|20|12|3|Flat
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Hammer Curls|20|9|4|Neutral Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: true
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Dropped exercise "Fingertip Curls" - isRemoveRequest: true, isTargeted: true
+
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Allowing removal of targeted exercise: Fingertip Curls
+
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Dropped exercise "Reverse Grip Forearm Curls" - isRemoveRequest: true, isTargeted: true
+
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Allowing removal of targeted exercise: Reverse Grip Forearm Curls
+
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|15|5|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|40|12|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|20|20|5|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|50|10|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Applying reps change for Lat Pulldowns: 12 -> 10
+
+      at services/workout-queue-modifier.ts:1587:21
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Applying weight change for Lat Pulldowns: 59 -> 50
+
+      at services/workout-queue-modifier.ts:1603:21
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Applying sets change for Lat Pulldowns: 3 -> 4
+
+      at services/workout-queue-modifier.ts:1619:21
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|30|10|4|One-Arm,Triangle Rows|30|7|5|Neutral Grip,Lat Pulldowns|30|8|4|Wide Grip,Lat Pulldowns|30|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|30|3|5|Conventional,Bent Over Barbell Row|30|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'One-Arm Dumbbell Row',
+        displayName: 'One-Arm Dumbbell Row (One-Arm)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 5,
+        exerciseInstanceId: undefined,
+        name: 'Triangle Rows',
+        displayName: 'Triangle Rows (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Bent Over Barbell Row',
+        displayName: 'Bent Over Barbell Row (Overhand)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 5,
+        exerciseInstanceId: undefined,
+        name: 'Chest-Supported Dumbbell Row',
+        displayName: 'Chest-Supported Dumbbell Row (Supported)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|20|5|Flat,Chest Press|74|20|3|Incline,Dumbbell Press|34|20|4|Incline,Overhead Barbell Press|47.5|20|4|Standing,Dumbbell Press|28|20|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|20|3|Neutral Grip,Hammer Curls|20|20|4|Neutral Grip,Reverse Grip Forearm Curls|12|20|3|Reverse Grip,One-Arm Dumbbell Row|36|20|4|One-Arm,Triangle Rows|52|20|5|Neutral Grip,Lat Pulldowns|67|20|4|Wide Grip,Lat Pulldowns|59|20|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|20|5|High Bar,Leg Extensions|55|20|3|Seated,Calf Press|160|20|5|Neutral,Barbell Deadlift|135|20|5|Conventional,Bent Over Barbell Row|82.5|20|4|Overhand,Chest-Supported Dumbbell Row|30|20|3|Supported,Overhead Barbell Press|42.5|20|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Back Squat',
+        displayName: 'Barbell Back Squat (High Bar)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Calf Press',
+        displayName: 'Calf Press (Neutral)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Restoring reps for Barbell Bench Press: 20 -> 5
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Chest Press: 20 -> 11
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Dumbbell Press: 20 -> 8
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Overhead Barbell Press: 20 -> 6
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Dumbbell Press: 20 -> 14
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Fingertip Curls: 20 -> 18
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Hammer Curls: 20 -> 9
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Reverse Grip Forearm Curls: 20 -> 16
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for One-Arm Dumbbell Row: 20 -> 10
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Triangle Rows: 20 -> 7
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Lat Pulldowns: 20 -> 8
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Lat Pulldowns: 20 -> 12
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Bent Over Barbell Row: 20 -> 6
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Chest-Supported Dumbbell Row: 20 -> 13
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Overhead Barbell Press: 20 -> 12
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|5|Incline,Dumbbell Press|34|8|5|Incline,Overhead Barbell Press|47.5|6|5|Standing,Dumbbell Press|28|14|5|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|5|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press (Flat)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Chest Press',
+        displayName: 'Chest Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Standing)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Flat)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Seated)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Hammer Curls|20|9|4|Neutral Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Bent Over Barbell Row',
+        displayName: 'Bent Over Barbell Row (Overhand)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 5,
+        exerciseInstanceId: undefined,
+        name: 'Chest-Supported Dumbbell Row',
+        displayName: 'Chest-Supported Dumbbell Row (Supported)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: true
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Dropped exercise "Fingertip Curls" - isRemoveRequest: true, isTargeted: true
+
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Allowing removal of targeted exercise: Fingertip Curls
+
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Dropped exercise "Reverse Grip Forearm Curls" - isRemoveRequest: true, isTargeted: true
+
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Allowing removal of targeted exercise: Reverse Grip Forearm Curls
+
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|100|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|50|8|4|Wide Grip,Lat Pulldowns|50|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|5|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|12|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Decline Crunches',
+        displayName: 'Decline Crunches (Decline)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Restoring weight for Fingertip Curls: 0 -> 10
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Fingertip Curls: 20 -> 18
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Fingertip Curls: 4 -> 3
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for Hammer Curls: 10 -> 20
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Hammer Curls: 18 -> 9
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Hammer Curls: 3 -> 4
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for Reverse Grip Forearm Curls: 20 -> 12
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Reverse Grip Forearm Curls: 9 -> 16
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Reverse Grip Forearm Curls: 4 -> 3
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for One-Arm Dumbbell Row: 12 -> 36
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for One-Arm Dumbbell Row: 16 -> 10
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for One-Arm Dumbbell Row: 3 -> 4
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for Triangle Rows: 36 -> 52
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Triangle Rows: 10 -> 7
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Triangle Rows: 4 -> 5
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for Lat Pulldowns: 52 -> 67
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Lat Pulldowns: 7 -> 8
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Lat Pulldowns: 5 -> 4
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring weight for Lat Pulldowns: 67 -> 59
+
+      at services/workout-queue-modifier.ts:1654:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring reps for Lat Pulldowns: 8 -> 12
+
+      at services/workout-queue-modifier.ts:1658:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Restoring sets for Lat Pulldowns: 4 -> 3
+
+      at services/workout-queue-modifier.ts:1662:19
+          at Array.map (<anonymous>)
+          at Array.map (<anonymous>)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Close Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Neutral Grip,Lat Pulldowns|59|12|3|Neutral Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Bent Over Barbell Row',
+        displayName: 'Bent Over Barbell Row (Overhand)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'One-Arm Dumbbell Row',
+        displayName: 'One-Arm Dumbbell Row (One-Arm)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 5,
+        exerciseInstanceId: undefined,
+        name: 'Triangle Rows',
+        displayName: 'Triangle Rows (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Wide Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 7,
+        exerciseInstanceId: undefined,
+        name: 'Lat Pulldowns',
+        displayName: 'Lat Pulldowns (Close Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Incline,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Seated,Dumbbell Press|28|14|2|Incline;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press (Flat)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Chest Press',
+        displayName: 'Chest Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Standing)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Flat)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Seated)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+  console.log
+    [QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+
+  console.log
+    [QUEUE FORMAT] Parsed 3 queue items
+
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+
+  console.log
+    [REPAIR] Starting queue repair...
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+
+  console.log
+    [REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Hammer Curls',
+        displayName: 'Hammer Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Fingertip Curls',
+        displayName: 'Fingertip Curls (Neutral Grip)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Reverse Grip Forearm Curls',
+        displayName: 'Reverse Grip Forearm Curls (Reverse Grip)'
+      }
+    ]
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+
+  console.log
+    [REPAIR] isRemoveRequest: false
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+
+  console.log
+    [REPAIR] Queue repair complete
+
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+
+FAIL __tests__/services/headless-live-proxy-gate.test.ts (302.067 s)
+  headless live proxy gate
+    × runs full 30-prompt suite against live proxy using official baseline fixture (299980 ms)
+
+  ● headless live proxy gate › runs full 30-prompt suite against live proxy using official baseline fixture
+
+    thrown: "Exceeded timeout of 300000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 131 |[39m
+     [90m 132 |[39m describe([32m'headless live proxy gate'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 133 |[39m   it(
+     [90m     |[39m   [31m[1m^[22m[39m
+     [90m 134 |[39m     [32m'runs full 30-prompt suite against live proxy using official baseline fixture'[39m[33m,[39m
+     [90m 135 |[39m     [36masync[39m () [33m=>[39m {
+     [90m 136 |[39m       [36mconst[39m proxyUrl [33m=[39m getCoachProxyUrl()[33m;[39m[0m
+
+      at __tests__/services/headless-live-proxy-gate.test.ts:133:3
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:132:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        302.239 s
+Ran all test suites matching /__tests__\\services\\headless-live-proxy-gate.test.ts/i.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|85|5|5|Flat,Chest Press|67|11|3|Incline,Dumbbell Press|31|8|4|Incline,Overhead Barbell Press|43|6|4|Standing,Dumbbell Press|25|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional,Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|38|12|2|Seated".
+
+    [0m [90m 1186 |[39m     [36mconst[39m preprocessed [33m=[39m preprocessLLMResponse(response)[33m;[39m
+     [90m 1187 |[39m     [36mconst[39m trimmed [33m=[39m preprocessed[33m.[39mtrim()[33m;[39m
+    [31m[1m>[22m[39m[90m 1188 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsing response:'[39m[33m,[39m trimmed)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1189 |[39m     
+     [90m 1190 |[39m     [36mconst[39m queueMatch [33m=[39m trimmed[33m.[39mmatch([35m/Q\d+:D\d+:[^;]+(;Q\d+:D\d+:[^;]+)*/[39m)[33m;[39m
+     [90m 1191 |[39m     [36mif[39m ([33m![39mqueueMatch) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsed 3 queue items".
+
+    [0m [90m 1315 |[39m     }
+     [90m 1316 |[39m     
+    [31m[1m>[22m[39m[90m 1317 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsed'[39m[33m,[39m newQueue[33m.[39mlength[33m,[39m [32m'queue items'[39m)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1318 |[39m     
+     [90m 1319 |[39m     [36mif[39m (newQueue[33m.[39mlength [33m===[39m [35m0[39m) {
+     [90m 1320 |[39m       [36mreturn[39m [36mnull[39m[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Starting queue repair...".
+
+    [0m [90m 1374 |[39m   targetedExerciseNames[33m:[39m [33mTargetedExerciseMatcher[39m[] [33m=[39m []
+     [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+    [31m[1m>[22m[39m[90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Bench Press',
+        displayName: 'Barbell Bench Press (Flat)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Chest Press',
+        displayName: 'Chest Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Incline)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Standing)'
+      },
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'Dumbbell Press',
+        displayName: 'Dumbbell Press (Flat)'
+      },
+      {
+        queueItemId: 'q1',
+        dayNumber: 2,
+        exerciseIndex: 4,
+        exerciseInstanceId: undefined,
+        name: 'One-Arm Dumbbell Row',
+        displayName: 'One-Arm Dumbbell Row (One-Arm)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 6,
+        exerciseInstanceId: undefined,
+        name: 'Overhead Barbell Press',
+        displayName: 'Overhead Barbell Press (Seated)'
+      }
+    ]".
+
+    [0m [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+     [90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m
+     [90m 1380 |[39m   [36mconst[39m isRemoveRequest [33m=[39m includesAnyKeyword(requestLower[33m,[39m [33mREMOVE_REQUEST_KEYWORDS[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] isRemoveRequest: false".
+
+    [0m [90m 1384 |[39m     injuryIntent[33m.[39mhasInjuryContext [33m&&[39m
+     [90m 1385 |[39m     (injuryIntent[33m.[39mseverity [33m===[39m [32m'moderate'[39m [33m||[39m injuryIntent[33m.[39mseverity [33m===[39m [32m'severe'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1386 |[39m   console[33m.[39mlog([32m'[REPAIR] isRemoveRequest:'[39m[33m,[39m isRemoveRequest)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1387 |[39m
+     [90m 1388 |[39m   [36mconst[39m extractDestinationValues [33m=[39m (prompt[33m:[39m string[33m,[39m column[33m:[39m [32m'reps'[39m [33m|[39m [32m'sets'[39m [33m|[39m [32m'weight'[39m)[33m:[39m string[] [33m=>[39m {
+     [90m 1389 |[39m     [36mconst[39m values [33m=[39m [36mnew[39m [33mSet[39m[33m<[39m[33mstring[39m[33m>[39m()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Queue repair complete".
+
+    [0m [90m 1713 |[39m   })[33m;[39m
+     [90m 1714 |[39m   
+    [31m[1m>[22m[39m[90m 1715 |[39m   console[33m.[39mlog([32m'[REPAIR] Queue repair complete'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1716 |[39m   [36mreturn[39m healedQueue[33m;[39m
+     [90m 1717 |[39m }[33m;[39m
+     [90m 1718 |[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated".
+
+    [0m [90m 1186 |[39m     [36mconst[39m preprocessed [33m=[39m preprocessLLMResponse(response)[33m;[39m
+     [90m 1187 |[39m     [36mconst[39m trimmed [33m=[39m preprocessed[33m.[39mtrim()[33m;[39m
+    [31m[1m>[22m[39m[90m 1188 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsing response:'[39m[33m,[39m trimmed)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1189 |[39m     
+     [90m 1190 |[39m     [36mconst[39m queueMatch [33m=[39m trimmed[33m.[39mmatch([35m/Q\d+:D\d+:[^;]+(;Q\d+:D\d+:[^;]+)*/[39m)[33m;[39m
+     [90m 1191 |[39m     [36mif[39m ([33m![39mqueueMatch) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsed 3 queue items".
+
+    [0m [90m 1315 |[39m     }
+     [90m 1316 |[39m     
+    [31m[1m>[22m[39m[90m 1317 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsed'[39m[33m,[39m newQueue[33m.[39mlength[33m,[39m [32m'queue items'[39m)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1318 |[39m     
+     [90m 1319 |[39m     [36mif[39m (newQueue[33m.[39mlength [33m===[39m [35m0[39m) {
+     [90m 1320 |[39m       [36mreturn[39m [36mnull[39m[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Starting queue repair...".
+
+    [0m [90m 1374 |[39m   targetedExerciseNames[33m:[39m [33mTargetedExerciseMatcher[39m[] [33m=[39m []
+     [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+    [31m[1m>[22m[39m[90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Back Squat',
+        displayName: 'Barbell Back Squat (High Bar)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Calf Press',
+        displayName: 'Calf Press (Neutral)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      }
+    ]".
+
+    [0m [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+     [90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m
+     [90m 1380 |[39m   [36mconst[39m isRemoveRequest [33m=[39m includesAnyKeyword(requestLower[33m,[39m [33mREMOVE_REQUEST_KEYWORDS[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] isRemoveRequest: false".
+
+    [0m [90m 1384 |[39m     injuryIntent[33m.[39mhasInjuryContext [33m&&[39m
+     [90m 1385 |[39m     (injuryIntent[33m.[39mseverity [33m===[39m [32m'moderate'[39m [33m||[39m injuryIntent[33m.[39mseverity [33m===[39m [32m'severe'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1386 |[39m   console[33m.[39mlog([32m'[REPAIR] isRemoveRequest:'[39m[33m,[39m isRemoveRequest)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1387 |[39m
+     [90m 1388 |[39m   [36mconst[39m extractDestinationValues [33m=[39m (prompt[33m:[39m string[33m,[39m column[33m:[39m [32m'reps'[39m [33m|[39m [32m'sets'[39m [33m|[39m [32m'weight'[39m)[33m:[39m string[] [33m=>[39m {
+     [90m 1389 |[39m     [36mconst[39m values [33m=[39m [36mnew[39m [33mSet[39m[33m<[39m[33mstring[39m[33m>[39m()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Barbell Back Squat" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Barbell Back Squat".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Barbell Deadlift" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Barbell Deadlift".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Bent Over Barbell Row" - isRemoveRequest: false, isTargeted: false".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Restoring dropped exercise: Bent Over Barbell Row".
+
+    [0m [90m 1691 |[39m         
+     [90m 1692 |[39m         [90m// Otherwise, it was accidental data loss. Restore it.[39m
+    [31m[1m>[22m[39m[90m 1693 |[39m         console[33m.[39mlog([32m`[REPAIR] Restoring dropped exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1694 |[39m         [36mconst[39m restoredExercise [33m=[39m { [33m...[39morigEx }[33m;[39m
+     [90m 1695 |[39m
+     [90m 1696 |[39m         [36mif[39m (isTargeted [33m&&[39m isMildInjuryRequest [33m&&[39m [33m![39mexpectedWeight) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1693:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Queue repair complete".
+
+    [0m [90m 1713 |[39m   })[33m;[39m
+     [90m 1714 |[39m   
+    [31m[1m>[22m[39m[90m 1715 |[39m   console[33m.[39mlog([32m'[REPAIR] Queue repair complete'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1716 |[39m   [36mreturn[39m healedQueue[33m;[39m
+     [90m 1717 |[39m }[33m;[39m
+     [90m 1718 |[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsing response: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Chest Press|74|11|3|Incline,Dumbbell Press|34|8|4|Incline,Overhead Barbell Press|47.5|6|4|Standing,Dumbbell Press|28|14|2|Flat;Q1:D2:Decline Crunches|0|20|4|Decline,Fingertip Curls|10|18|3|Neutral Grip,Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,One-Arm Dumbbell Row|36|10|4|One-Arm,Triangle Rows|52|7|5|Neutral Grip,Lat Pulldowns|67|8|4|Wide Grip,Lat Pulldowns|59|12|3|Close Grip;Q2:D3:Bent Over Barbell Row|82.5|6|4|Overhand,Chest-Supported Dumbbell Row|30|13|3|Supported,Overhead Barbell Press|42.5|12|2|Seated".
+
+    [0m [90m 1186 |[39m     [36mconst[39m preprocessed [33m=[39m preprocessLLMResponse(response)[33m;[39m
+     [90m 1187 |[39m     [36mconst[39m trimmed [33m=[39m preprocessed[33m.[39mtrim()[33m;[39m
+    [31m[1m>[22m[39m[90m 1188 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsing response:'[39m[33m,[39m trimmed)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1189 |[39m     
+     [90m 1190 |[39m     [36mconst[39m queueMatch [33m=[39m trimmed[33m.[39mmatch([35m/Q\d+:D\d+:[^;]+(;Q\d+:D\d+:[^;]+)*/[39m)[33m;[39m
+     [90m 1191 |[39m     [36mif[39m ([33m![39mqueueMatch) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1188:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[QUEUE FORMAT] Parsed 3 queue items".
+
+    [0m [90m 1315 |[39m     }
+     [90m 1316 |[39m     
+    [31m[1m>[22m[39m[90m 1317 |[39m     console[33m.[39mlog([32m'[QUEUE FORMAT] Parsed'[39m[33m,[39m newQueue[33m.[39mlength[33m,[39m [32m'queue items'[39m)[33m;[39m
+     [90m      |[39m             [31m[1m^[22m[39m
+     [90m 1318 |[39m     
+     [90m 1319 |[39m     [36mif[39m (newQueue[33m.[39mlength [33m===[39m [35m0[39m) {
+     [90m 1320 |[39m       [36mreturn[39m [36mnull[39m[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1317:13)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Starting queue repair...".
+
+    [0m [90m 1374 |[39m   targetedExerciseNames[33m:[39m [33mTargetedExerciseMatcher[39m[] [33m=[39m []
+     [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+    [31m[1m>[22m[39m[90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1376:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] targetedExerciseNames: [
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 0,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Back Squat',
+        displayName: 'Barbell Back Squat (High Bar)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 1,
+        exerciseInstanceId: undefined,
+        name: 'Leg Extensions',
+        displayName: 'Leg Extensions (Seated)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 2,
+        exerciseInstanceId: undefined,
+        name: 'Calf Press',
+        displayName: 'Calf Press (Neutral)'
+      },
+      {
+        queueItemId: 'q2',
+        dayNumber: 3,
+        exerciseIndex: 3,
+        exerciseInstanceId: undefined,
+        name: 'Barbell Deadlift',
+        displayName: 'Barbell Deadlift (Conventional)'
+      }
+    ]".
+
+    [0m [90m 1375 |[39m )[33m:[39m [33mWorkoutQueueItem[39m[] [33m=>[39m {
+     [90m 1376 |[39m   console[33m.[39mlog([32m'[REPAIR] Starting queue repair...'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1377 |[39m   console[33m.[39mlog([32m'[REPAIR] targetedExerciseNames:'[39m[33m,[39m targetedExerciseNames)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1378 |[39m   
+     [90m 1379 |[39m   [36mconst[39m requestLower [33m=[39m userPrompt[33m.[39mtoLowerCase()[33m;[39m
+     [90m 1380 |[39m   [36mconst[39m isRemoveRequest [33m=[39m includesAnyKeyword(requestLower[33m,[39m [33mREMOVE_REQUEST_KEYWORDS[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1377:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] isRemoveRequest: false".
+
+    [0m [90m 1384 |[39m     injuryIntent[33m.[39mhasInjuryContext [33m&&[39m
+     [90m 1385 |[39m     (injuryIntent[33m.[39mseverity [33m===[39m [32m'moderate'[39m [33m||[39m injuryIntent[33m.[39mseverity [33m===[39m [32m'severe'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 1386 |[39m   console[33m.[39mlog([32m'[REPAIR] isRemoveRequest:'[39m[33m,[39m isRemoveRequest)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1387 |[39m
+     [90m 1388 |[39m   [36mconst[39m extractDestinationValues [33m=[39m (prompt[33m:[39m string[33m,[39m column[33m:[39m [32m'reps'[39m [33m|[39m [32m'sets'[39m [33m|[39m [32m'weight'[39m)[33m:[39m string[] [33m=>[39m {
+     [90m 1389 |[39m     [36mconst[39m values [33m=[39m [36mnew[39m [33mSet[39m[33m<[39m[33mstring[39m[33m>[39m()[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1386:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Barbell Back Squat" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Barbell Back Squat".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Leg Extensions" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Leg Extensions".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Calf Press" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Calf Press".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Dropped exercise "Barbell Deadlift" - isRemoveRequest: false, isTargeted: true".
+
+    [0m [90m 1682 |[39m         )[33m;[39m
+     [90m 1683 |[39m         
+    [31m[1m>[22m[39m[90m 1684 |[39m         console[33m.[39mlog([32m`[REPAIR] Dropped exercise "${origEx.name}" - isRemoveRequest: ${isRemoveRequest}, isTargeted: ${isTargeted}`[39m)[33m;[39m
+     [90m      |[39m                 [31m[1m^[22m[39m
+     [90m 1685 |[39m         
+     [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1684:17
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Allowing removal of targeted exercise: Barbell Deadlift".
+
+    [0m [90m 1686 |[39m         [90m// Allow dropping targeted exercises for explicit removals and injury-driven moderate/severe swaps.[39m
+     [90m 1687 |[39m         [36mif[39m ((isRemoveRequest [33m&&[39m isTargeted) [33m||[39m (injuryAllowsRemoval [33m&&[39m isTargeted)) {
+    [31m[1m>[22m[39m[90m 1688 |[39m           console[33m.[39mlog([32m`[REPAIR] Allowing removal of targeted exercise: ${origEx.name}`[39m)[33m;[39m
+     [90m      |[39m                   [31m[1m^[22m[39m
+     [90m 1689 |[39m           [36mcontinue[39m[33m;[39m
+     [90m 1690 |[39m         }
+     [90m 1691 |[39m         [0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at services/workout-queue-modifier.ts:1688:19
+          at Array.map (<anonymous>)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1527:35)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[REPAIR] Queue repair complete".
+
+    [0m [90m 1713 |[39m   })[33m;[39m
+     [90m 1714 |[39m   
+    [31m[1m>[22m[39m[90m 1715 |[39m   console[33m.[39mlog([32m'[REPAIR] Queue repair complete'[39m)[33m;[39m
+     [90m      |[39m           [31m[1m^[22m[39m
+     [90m 1716 |[39m   [36mreturn[39m healedQueue[33m;[39m
+     [90m 1717 |[39m }[33m;[39m
+     [90m 1718 |[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at repairQueueWithIntent (services/workout-queue-modifier.ts:1715:11)
+      at parseQueueFormatResponse (services/workout-queue-modifier.ts:1325:50)
+      at executePromptThroughCoachPipeline (services/coach/prompt-test-runner.ts:293:47)
+      at runCoachPromptSuite (services/coach/prompt-test-runner.ts:181:22)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:144:27)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_SUMMARY passed=14 failed=16 total=30 gatePassed=false".
+
+    [0m [90m 156 |[39m
+     [90m 157 |[39m       [36mconst[39m summaryLine [33m=[39m [32m`LIVE_GATE_SUMMARY passed=${suiteResult.summary.passed} failed=${suiteResult.summary.failed} total=${suiteResult.summary.total} gatePassed=${suiteResult.summary.gatePassed}`[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+     [90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m 161 |[39m       }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:158:15)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 1/30 type="Single - Weight" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 2/30 type="Single - Reps" status=NO_CHANGES reasons="No changes detected"".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 3/30 type="Single - Sets" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 4/30 type="Single - Add" status=FAILED reasons="Intent semantic failed: add request did not increase count for Hammer Curls (Neutral Grip)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 5/30 type="Single - Remove" status=FAILED reasons="Intent semantic failed: remove request did not decrease count for Hammer Curls (Neutral Grip)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 6/30 type="Multi - Weight" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 7/30 type="Multi - Reps" status=FAILED reasons="Intent semantic failed: Leg Extensions (Seated) reps expected 6 but got 20."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 8/30 type="Multi - Sets" status=NO_CHANGES reasons="No changes detected"".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 9/30 type="Multi - Add" status=FAILED reasons="Intent semantic failed: add request did not increase count for Fingertip Curls (Neutral Grip)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 10/30 type="Multi - Remove" status=FAILED reasons="Intent semantic failed: remove request did not decrease count for Hammer Curls (Neutral Grip)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 11/30 type="Single - Weight + Reps" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 12/30 type="Single - Reps + Weight" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 13/30 type="Single - Weight + Sets" status=FAILED reasons="Intent semantic failed: Decline Crunches (Decline) sets expected 20 but got 5."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 14/30 type="Single - Full Mod" status=FAILED reasons="Intent semantic failed: Lat Pulldowns (Wide Grip) sets did not change for requested update."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 15/30 type="Muscle - Weight" status=FAILED reasons="Intent semantic failed: Chest-Supported Dumbbell Row (Supported) weight did not change for requested update."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 16/30 type="Muscle - Reps" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 17/30 type="Muscle - Sets" status=FAILED reasons="Intent semantic failed: Barbell Bench Press (Flat) sets did not change for requested update."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 18/30 type="Muscle - Remove" status=FAILED reasons="Intent semantic failed: remove request did not decrease count for Hammer Curls (Neutral Grip)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 19/30 type="Safety - Fuzzy Name" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 20/30 type="Safety - Day Boundary" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 21/30 type="Logic - Relative Math" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 22/30 type="Logic - Ambiguity" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 23/30 type="Safety - Duplicate Add" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 24/30 type="Variant - Single" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 25/30 type="Variant - Multi" status=FAILED reasons="Variant semantic failed: requested variant "neutral grip" not applied to Bent Over Barbell Row (Overhand)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 26/30 type="Variant - Muscle" status=FAILED reasons="Variant semantic failed: requested variant "incline" not applied to Overhead Barbell Press (Standing)."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 27/30 type="Variant - Safety" status=NO_CHANGES reasons="No changes detected"".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 28/30 type="Injury - Mild" status=FAILED reasons="Injury semantic failed: mild injuries require all affected exercises in the entire current queue to be lightened using a weight-first rule."".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 29/30 type="Injury - Moderate" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "LIVE_GATE_CASE 30/30 type="Injury - Severe" status=SUCCESS reasons=""".
+
+    [0m [90m 158 |[39m       console[33m.[39mlog(summaryLine)[33m;[39m
+     [90m 159 |[39m       [36mfor[39m ([36mconst[39m [index[33m,[39m result] [36mof[39m suiteResult[33m.[39mresults[33m.[39mentries()) {
+    [31m[1m>[22m[39m[90m 160 |[39m         console[33m.[39mlog([32m`LIVE_GATE_CASE ${index + 1}/${suiteResult.results.length} type="${result.type}" status=${result.status} reasons="${result.reasons.join(' | ')}"`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 161 |[39m       }
+     [90m 162 |[39m
+     [90m 163 |[39m       expect(suiteResult[33m.[39msummary[33m.[39mtotal)[33m.[39mtoBe([35m30[39m)[33m;[39m[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at Object.<anonymous> (__tests__/services/headless-live-proxy-gate.test.ts:160:17)
+
