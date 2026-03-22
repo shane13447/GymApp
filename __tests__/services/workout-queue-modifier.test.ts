@@ -489,24 +489,20 @@ describe('COMPRESSED_SYSTEM_PROMPT injury policy', () => {
   });
 });
 
-describe('COMPRESSED_SYSTEM_PROMPT TOON deterministic sets guidance', () => {
-  it('documents deterministic sets derived from canonical reps and weight arrays', () => {
-    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/sets.*deterministic/i);
-    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/array length/i);
-    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/reps\[\]/i);
-    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/weight\[\]/i);
+describe('COMPRESSED_SYSTEM_PROMPT structural edit guidance', () => {
+  it('documents explicit structural add/remove behavior with non-target preservation', () => {
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/explicit structural requests \(add\/remove\)/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/must increase target count/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/must decrease target count/i);
+    expect(COMPRESSED_SYSTEM_PROMPT).toMatch(/do not remove unrelated exercises/i);
   });
 
-  it('includes varied TOON examples for deterministic sets, injury, and variant updates', () => {
-    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: mild shoulder irritation, go easier on pressing');
-    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: my lower back is sore, adjust today so it does not flare up');
-    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: switch lat pulldowns and triangle rows to neutral grip');
+  it('includes structural add/remove TOON examples', () => {
+    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: add another hammer curls');
+    expect(COMPRESSED_SYSTEM_PROMPT).toContain('REQ: remove barbell deadlift from day 3');
   });
 });
 
-// =============================================================================
-// parseQueueFormatResponse
-// =============================================================================
 
 describe('parseQueueFormatResponse', () => {
   const originalQueue = createTestQueue();
