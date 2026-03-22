@@ -3086,15 +3086,14 @@ describe('evaluatePromptIntentOutcome', () => {
     expect(result.passed).toBe(true);
   });
 
-  it('passes remove intent when targeted exercise count decreases', () => {
+  it('fails remove intent when a non-target duplicate is removed instead of the targeted instance', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
-          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e1' }),
-          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e2' }),
+          createExercise({ name: 'Lat Pulldowns', variant: { grip: 'Close Grip' }, exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Lat Pulldowns', variant: { grip: 'Wide Grip' }, exerciseInstanceId: 'q0:e1' }),
         ],
       }),
     ];
@@ -3104,14 +3103,13 @@ describe('evaluatePromptIntentOutcome', () => {
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Decline Crunches', exerciseInstanceId: 'q0:e0' }),
-          createExercise({ name: 'Lat Pulldowns', exerciseInstanceId: 'q0:e2' }),
+          createExercise({ name: 'Lat Pulldowns', variant: { grip: 'Close Grip' }, exerciseInstanceId: 'q0:e0' }),
         ],
       }),
     ];
 
     const result = evaluatePromptIntentOutcome(
-      'remove decline crunches from day 2',
+      'remove close grip lat pulldowns',
       originalQueue,
       parsedQueue,
       [
@@ -3120,15 +3118,15 @@ describe('evaluatePromptIntentOutcome', () => {
           dayNumber: 1,
           exerciseIndex: 0,
           exerciseInstanceId: 'q0:e0',
-          name: 'Decline Crunches',
-          displayName: 'Decline Crunches',
+          name: 'Lat Pulldowns',
+          displayName: 'Lat Pulldowns (Close Grip)',
         },
       ]
     );
 
-    expect(result.passed).toBe(true);
+    expect(result.passed).toBe(false);
+    expect(result.reason?.toLowerCase()).toContain('remove');
   });
-
   it('passes intent outcome for alias-family replacement without structural add/remove', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
