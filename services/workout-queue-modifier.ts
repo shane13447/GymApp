@@ -856,6 +856,23 @@ const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant |
   return variants[0] ?? null;
 };
 
+const canonicaliseExerciseNameForSemantics = (nameRaw: string): string => {
+  const lower = normaliseText(nameRaw);
+  if (!lower) return '';
+
+  const directMatches = resolveExerciseAlias(lower, EXERCISES.map((exercise) => exercise.name));
+  if (directMatches.length > 0) {
+    return normaliseText(directMatches[0]);
+  }
+
+  const knownExercise = findExerciseByName(nameRaw);
+  if (knownExercise?.name) {
+    return normaliseText(knownExercise.name);
+  }
+
+  return lower;
+};
+
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
   targetMuscles: string[]
@@ -3127,6 +3144,9 @@ export const evaluatePromptIntentOutcome = (
   const allOriginalExercises = originalQueue.flatMap((item) => item.exercises);
   const allParsedExercises = parsedQueue.flatMap((item) => item.exercises);
   const uniqueTargetNames = Array.from(new Set(targetedExerciseRefs.map((targetRef) => normaliseText(targetRef.name))));
+  const canonicalTargetNames = new Set(
+    uniqueTargetNames.map((targetName) => canonicaliseExerciseNameForSemantics(targetName))
+  );
 
   const requestIncludesReplacementCue = /\b(?:replace|swap|switch)\b/.test(requestLower);
   const replacementPairs = differences.filter(
@@ -3144,34 +3164,40 @@ export const evaluatePromptIntentOutcome = (
 
     for (const [queueIndex, queueItem] of originalQueue.entries()) {
       for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
-        const normalisedName = normaliseText(exercise.name);
+        const canonicalName = canonicaliseExerciseNameForSemantics(exercise.name);
         const key =
           exercise.exerciseInstanceId ??
-          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${normalisedName}`;
-        const bucket = originalKeysByName.get(normalisedName) ?? new Set<string>();
+          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${canonicalName}`;
+        const bucket = originalKeysByName.get(canonicalName) ?? new Set<string>();
         bucket.add(key);
-        originalKeysByName.set(normalisedName, bucket);
+        originalKeysByName.set(canonicalName, bucket);
       }
     }
 
     for (const [queueIndex, queueItem] of parsedQueue.entries()) {
       for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
-        const normalisedName = normaliseText(exercise.name);
+        const canonicalName = canonicaliseExerciseNameForSemantics(exercise.name);
         const key =
           exercise.exerciseInstanceId ??
-          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${normalisedName}`;
-        const bucket = parsedKeysByName.get(normalisedName) ?? new Set<string>();
+          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${canonicalName}`;
+        const bucket = parsedKeysByName.get(canonicalName) ?? new Set<string>();
         bucket.add(key);
-        parsedKeysByName.set(normalisedName, bucket);
+        parsedKeysByName.set(canonicalName, bucket);
       }
     }
 
-    for (const targetName of uniqueTargetNames) {
-      const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
-      const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+    for (const targetName of canonicalTargetNames) {
+      const originalCount = allOriginalExercises.filter(
+        (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
+      ).length;
+      const parsedCount = allParsedExercises.filter(
+        (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
+      ).length;
 
       if (parsedCount <= originalCount) {
-        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        const failedTarget = targetedExerciseRefs.find(
+          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
+        );
         return {
           passed: false,
           reason: `Intent semantic failed: add request did not increase count for ${failedTarget?.displayName ?? targetName}.`,
@@ -3183,7 +3209,9 @@ export const evaluatePromptIntentOutcome = (
       const introducedNewTarget = Array.from(parsedKeys).some((key) => !originalKeys.has(key));
 
       if (!introducedNewTarget) {
-        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        const failedTarget = targetedExerciseRefs.find(
+          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
+        );
         return {
           passed: false,
           reason: `Intent semantic failed: add request did not create a new instance for ${failedTarget?.displayName ?? targetName}.`,
@@ -3210,12 +3238,18 @@ export const evaluatePromptIntentOutcome = (
       }
     }
 
-    for (const targetName of uniqueTargetNames) {
-      const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
-      const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
+    for (const targetName of canonicalTargetNames) {
+      const originalCount = allOriginalExercises.filter(
+        (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
+      ).length;
+      const parsedCount = allParsedExercises.filter(
+        (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
+      ).length;
 
       if (parsedCount >= originalCount) {
-        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        const failedTarget = targetedExerciseRefs.find(
+          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
+        );
         return {
           passed: false,
           reason: `Intent semantic failed: remove request did not decrease count for ${failedTarget?.displayName ?? targetName}.`,

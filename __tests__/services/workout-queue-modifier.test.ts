@@ -3127,13 +3127,54 @@ describe('evaluatePromptIntentOutcome', () => {
     expect(result.passed).toBe(false);
     expect(result.reason?.toLowerCase()).toContain('remove');
   });
-  it('passes intent outcome for alias-family replacement without structural add/remove', () => {
+  it('passes add intent when parsed exercise uses canonical alias of requested target', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Barbell Bench Press', reps: '8', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Preacher Curl', reps: '10', sets: '3', exerciseInstanceId: 'q0:e0' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Preacher Curl', reps: '10', sets: '3', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Preacher Curl', reps: '8', sets: '3', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const result = evaluatePromptIntentOutcome(
+      'add barbell curls to day 2',
+      originalQueue,
+      parsedQueue,
+      [
+        {
+          queueItemId: 'q0',
+          dayNumber: 1,
+          exerciseIndex: 0,
+          exerciseInstanceId: 'q0:e0',
+          name: 'Barbell Curls',
+          displayName: 'Barbell Curls',
+        },
+      ]
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('passes remove intent when parsed queue removes canonical alias target of requested name', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Preacher Curl', reps: '10', sets: '3', exerciseInstanceId: 'q0:e0' }),
           createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
         ],
       }),
@@ -3144,14 +3185,13 @@ describe('evaluatePromptIntentOutcome', () => {
         id: 'q0',
         dayNumber: 1,
         exercises: [
-          createExercise({ name: 'Dumbbell Bench Press', reps: '8', sets: '3', exerciseInstanceId: 'q0:e2' }),
           createExercise({ name: 'Lat Pulldowns', reps: '10', sets: '3', exerciseInstanceId: 'q0:e1' }),
         ],
       }),
     ];
 
     const result = evaluatePromptIntentOutcome(
-      'replace barbell bench press with dumbbell bench press',
+      'remove barbell curls from day 2',
       originalQueue,
       parsedQueue,
       [
@@ -3160,8 +3200,8 @@ describe('evaluatePromptIntentOutcome', () => {
           dayNumber: 1,
           exerciseIndex: 0,
           exerciseInstanceId: 'q0:e0',
-          name: 'Barbell Bench Press',
-          displayName: 'Barbell Bench Press',
+          name: 'Barbell Curls',
+          displayName: 'Barbell Curls',
         },
       ]
     );
