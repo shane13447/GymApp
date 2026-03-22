@@ -3139,6 +3139,33 @@ export const evaluatePromptIntentOutcome = (
     replacementPairs.filter((difference) => difference.type === 'added').length > 0;
 
   if (changeTypes.includes('add') && !isLikelyReplacement) {
+    const originalKeysByName = new Map<string, Set<string>>();
+    const parsedKeysByName = new Map<string, Set<string>>();
+
+    for (const [queueIndex, queueItem] of originalQueue.entries()) {
+      for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
+        const normalisedName = normaliseText(exercise.name);
+        const key =
+          exercise.exerciseInstanceId ??
+          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${normalisedName}`;
+        const bucket = originalKeysByName.get(normalisedName) ?? new Set<string>();
+        bucket.add(key);
+        originalKeysByName.set(normalisedName, bucket);
+      }
+    }
+
+    for (const [queueIndex, queueItem] of parsedQueue.entries()) {
+      for (const [exerciseIndex, exercise] of queueItem.exercises.entries()) {
+        const normalisedName = normaliseText(exercise.name);
+        const key =
+          exercise.exerciseInstanceId ??
+          `${queueItem.id}:${queueIndex}:${exerciseIndex}:${normalisedName}`;
+        const bucket = parsedKeysByName.get(normalisedName) ?? new Set<string>();
+        bucket.add(key);
+        parsedKeysByName.set(normalisedName, bucket);
+      }
+    }
+
     for (const targetName of uniqueTargetNames) {
       const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
       const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
@@ -3150,10 +3177,39 @@ export const evaluatePromptIntentOutcome = (
           reason: `Intent semantic failed: add request did not increase count for ${failedTarget?.displayName ?? targetName}.`,
         };
       }
+
+      const originalKeys = originalKeysByName.get(targetName) ?? new Set<string>();
+      const parsedKeys = parsedKeysByName.get(targetName) ?? new Set<string>();
+      const introducedNewTarget = Array.from(parsedKeys).some((key) => !originalKeys.has(key));
+
+      if (!introducedNewTarget) {
+        const failedTarget = targetedExerciseRefs.find((targetRef) => normaliseText(targetRef.name) === targetName);
+        return {
+          passed: false,
+          reason: `Intent semantic failed: add request did not create a new instance for ${failedTarget?.displayName ?? targetName}.`,
+        };
+      }
     }
   }
 
   if (changeTypes.includes('remove') && !isLikelyReplacement) {
+    for (const targetRef of targetedExerciseRefs) {
+      if (!targetRef.exerciseInstanceId) {
+        continue;
+      }
+
+      const instanceStillPresent = parsedQueue.some((queueItem) =>
+        queueItem.exercises.some((exercise) => exercise.exerciseInstanceId === targetRef.exerciseInstanceId)
+      );
+
+      if (instanceStillPresent) {
+        return {
+          passed: false,
+          reason: `Intent semantic failed: remove request did not remove targeted instance ${targetRef.displayName}.`,
+        };
+      }
+    }
+
     for (const targetName of uniqueTargetNames) {
       const originalCount = allOriginalExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
       const parsedCount = allParsedExercises.filter((exercise) => normaliseText(exercise.name) === targetName).length;
