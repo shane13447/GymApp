@@ -1,12 +1,136 @@
 export type AuthMode = 'off' | 'optional' | 'required';
 
+export type CoachProvider = 'openrouter' | 'deepseek';
+
 type CoachProxyMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
 
+type UpstreamModelResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+    text?: string;
+  }>;
+};
+
+type ProviderEnv = {
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  OPENROUTER_URL?: string;
+  DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_MODEL?: string;
+  DEEPSEEK_URL?: string;
+  OPENROUTER_DEFAULT_URL?: string;
+};
+
+export type ResolvedProviderConfig = {
+  ok: true;
+  provider: CoachProvider;
+  apiKey: string;
+  model: string;
+  url: string;
+};
+
+export type MissingProviderConfig = {
+  ok: false;
+  missing: string[];
+};
+
+export type ProviderConfigResult = ResolvedProviderConfig | MissingProviderConfig;
+
+const DEFAULT_OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
+
 const sanitizeForSingleLineLog = (value: string): string => {
   return value.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+};
+
+const isObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null;
+};
+
+const normalizeEnvValue = (value?: string): string | null => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+};
+
+export const parseProviderFromValue = (value?: string | null): CoachProvider => {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'deepseek' ? 'deepseek' : 'openrouter';
+};
+
+export const resolveProviderConfig = (
+  provider: CoachProvider,
+  env: ProviderEnv
+): ProviderConfigResult => {
+  if (provider === 'openrouter') {
+    const apiKeyRaw = normalizeEnvValue(env.OPENROUTER_API_KEY);
+    const modelRaw = normalizeEnvValue(env.OPENROUTER_MODEL);
+    const missing = [
+      ...(apiKeyRaw ? [] : ['OPENROUTER_API_KEY']),
+      ...(modelRaw ? [] : ['OPENROUTER_MODEL']),
+    ];
+
+    if (missing.length > 0) {
+      return { ok: false, missing };
+    }
+
+    const apiKey = apiKeyRaw as string;
+    const model = modelRaw as string;
+
+    return {
+      ok: true,
+      provider,
+      apiKey,
+      model,
+      url: normalizeEnvValue(env.OPENROUTER_URL)
+        ?? normalizeEnvValue(env.OPENROUTER_DEFAULT_URL)
+        ?? DEFAULT_OPENROUTER_URL,
+    };
+  }
+
+
+  const apiKey = normalizeEnvValue(env.DEEPSEEK_API_KEY);
+  if (!apiKey) {
+    return { ok: false, missing: ['DEEPSEEK_API_KEY'] };
+  }
+
+  return {
+    ok: true,
+    provider,
+    apiKey,
+    model: normalizeEnvValue(env.DEEPSEEK_MODEL) ?? DEFAULT_DEEPSEEK_MODEL,
+    url: normalizeEnvValue(env.DEEPSEEK_URL) ?? DEFAULT_DEEPSEEK_URL,
+  };
+};
+
+export const extractModelText = (payload: unknown): string | null => {
+  if (!isObject(payload)) {
+    return null;
+  }
+
+  const response = payload as UpstreamModelResponse;
+  const firstChoice = response.choices?.[0];
+
+  if (typeof firstChoice?.message?.content === 'string') {
+    return firstChoice.message.content.trim();
+  }
+
+  if (typeof firstChoice?.text === 'string') {
+    return firstChoice.text.trim();
+  }
+
+  return null;
+};
+
+export const classifyUpstreamHttpStatus = (
+  status: number
+): 'bad_gateway' | 'bad_gateway_rate_limited' => {
+  return status === 429 ? 'bad_gateway_rate_limited' : 'bad_gateway';
 };
 
 export const formatProxyDebugLog = (

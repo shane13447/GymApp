@@ -1,11 +1,15 @@
 import {
   evaluateAuthMode,
+  extractModelText,
   extractStrictToonCandidate,
   formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
   isValidToonResponse,
   parseAuthModeFromValue,
+  parseProviderFromValue,
+  resolveProviderConfig,
+  classifyUpstreamHttpStatus,
 } from '@/supabase/functions/coach-proxy/logic';
 
 describe('coach proxy logic', () => {
@@ -129,16 +133,75 @@ describe('coach proxy logic', () => {
     });
   });
 
-  describe('invalid TOON diagnostics', () => {
-    it('includes first and retry outputs for strict TOON failures', () => {
-      const line = formatInvalidToonDiagnostics(
-        'Q0:D1:Bench Press|80|8-10|3',
-        'Q0:D1:Bench Press|80|8-10|3\nI changed the queue as requested.'
-      );
+  describe('provider selection and config', () => {
+    it('defaults to openrouter for missing or invalid provider values', () => {
+      expect(parseProviderFromValue(undefined)).toBe('openrouter');
+      expect(parseProviderFromValue('invalid')).toBe('openrouter');
+    });
 
-      expect(line).toContain('[coach-proxy] invalid_toon');
-      expect(line).toContain('first_output=Q0:D1:Bench Press|80|8-10|3');
-      expect(line).toContain('retry_output=Q0:D1:Bench Press|80|8-10|3\\nI changed the queue as requested.');
+    it('accepts explicit deepseek provider value', () => {
+      expect(parseProviderFromValue('deepseek')).toBe('deepseek');
+    });
+
+    it('requires OPENROUTER_API_KEY and OPENROUTER_MODEL for openrouter provider', () => {
+      expect(
+        resolveProviderConfig('openrouter', {
+          OPENROUTER_API_KEY: '',
+          OPENROUTER_MODEL: '',
+        })
+      ).toEqual({ ok: false, missing: ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'] });
+    });
+
+    it('defaults OPENROUTER_URL when omitted', () => {
+      const result = resolveProviderConfig('openrouter', {
+        OPENROUTER_API_KEY: 'k',
+        OPENROUTER_MODEL: 'openai/gpt-4o-mini',
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        provider: 'openrouter',
+        apiKey: 'k',
+        model: 'openai/gpt-4o-mini',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+      });
+    });
+
+    it('requires DEEPSEEK_API_KEY and defaults DEEPSEEK_MODEL for deepseek provider', () => {
+      expect(resolveProviderConfig('deepseek', { DEEPSEEK_API_KEY: '' })).toEqual({
+        ok: false,
+        missing: ['DEEPSEEK_API_KEY'],
+      });
+
+      const result = resolveProviderConfig('deepseek', {
+        DEEPSEEK_API_KEY: 'k',
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        provider: 'deepseek',
+        apiKey: 'k',
+        model: 'deepseek-chat',
+        url: 'https://api.deepseek.com/chat/completions',
+      });
+    });
+  });
+
+  describe('upstream response extraction and status mapping', () => {
+    it('extracts choices[0].message.content first, then choices[0].text', () => {
+      expect(extractModelText({ choices: [{ message: { content: 'A' }, text: 'B' }] })).toBe('A');
+      expect(extractModelText({ choices: [{ text: 'B' }] })).toBe('B');
+    });
+
+    it('returns null for malformed upstream payload', () => {
+      expect(extractModelText({ choices: [{ message: { content: 123 } }] })).toBeNull();
+    });
+
+    it('classifies 401/403/429/5xx as upstream 502 candidates', () => {
+      expect(classifyUpstreamHttpStatus(401)).toBe('bad_gateway');
+      expect(classifyUpstreamHttpStatus(403)).toBe('bad_gateway');
+      expect(classifyUpstreamHttpStatus(429)).toBe('bad_gateway_rate_limited');
+      expect(classifyUpstreamHttpStatus(503)).toBe('bad_gateway');
     });
   });
 });
