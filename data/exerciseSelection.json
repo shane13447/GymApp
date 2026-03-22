@@ -12,6 +12,12 @@
     "isCompound": true
   },
   {
+    "name": "Barbell Curls",
+    "equipment": "Barbell",
+    "muscle_groups_worked": ["biceps", "forearms"],
+    "isCompound": false
+  },
+  {
     "name": "Barbell Deadlift",
     "equipment": "Barbell",
     "muscle_groups_worked": ["hamstrings", "glutes", "lats", "traps", "forearms"],

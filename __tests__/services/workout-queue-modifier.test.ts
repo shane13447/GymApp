@@ -115,9 +115,10 @@ describe('findExerciseByName', () => {
       expect(result!.name).toBe('Barbell Bench Press');
     });
 
-    it('should find exercise by partial name (contains)', () => {
-      const result = findExerciseByName('Bench Press');
+    it('should find newly supported barbell curls exercise', () => {
+      const result = findExerciseByName('Barbell Curls');
       expect(result).not.toBeNull();
+      expect(result!.name).toBe('Barbell Curls');
     });
   });
 
