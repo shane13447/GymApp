@@ -1,6 +1,7 @@
 import {
   evaluateAuthMode,
   extractStrictToonCandidate,
+  formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
   isValidToonResponse,
@@ -125,6 +126,19 @@ describe('coach proxy logic', () => {
       expect(logLine).toContain('output=');
       expect(logLine).toContain('Queue: Q0:D1:Bench|80|8|3');
       expect(logLine).toContain('Q0:D1:Bench|70|8|3');
+    });
+  });
+
+  describe('invalid TOON diagnostics', () => {
+    it('includes first and retry outputs for strict TOON failures', () => {
+      const line = formatInvalidToonDiagnostics(
+        'Q0:D1:Bench Press|80|8-10|3',
+        'Q0:D1:Bench Press|80|8-10|3\nI changed the queue as requested.'
+      );
+
+      expect(line).toContain('[coach-proxy] invalid_toon');
+      expect(line).toContain('first_output=Q0:D1:Bench Press|80|8-10|3');
+      expect(line).toContain('retry_output=Q0:D1:Bench Press|80|8-10|3\\nI changed the queue as requested.');
     });
   });
 });

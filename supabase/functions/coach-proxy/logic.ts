@@ -5,12 +5,23 @@ type CoachProxyMessage = {
   content: string;
 };
 
+const sanitizeForSingleLineLog = (value: string): string => {
+  return value.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+};
+
 export const formatProxyDebugLog = (
   messages: CoachProxyMessage[],
   output: string
 ): string => {
   const input = messages.map((message) => `${message.role}:${message.content}`).join(' | ');
   return `[coach-proxy] input=${input} output=${output}`;
+};
+
+export const formatInvalidToonDiagnostics = (
+  firstOutput: string,
+  retryOutput: string
+): string => {
+  return `[coach-proxy] invalid_toon first_output=${sanitizeForSingleLineLog(firstOutput)} retry_output=${sanitizeForSingleLineLog(retryOutput)}`;
 };
 
 export const parseAuthModeFromValue = (modeRaw?: string | null): AuthMode => {
