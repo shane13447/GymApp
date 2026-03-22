@@ -1396,9 +1396,11 @@ export const repairQueueWithIntent = (
   console.log('[REPAIR] targetedExerciseNames:', targetedExerciseNames);
   
   const requestLower = userPrompt.toLowerCase();
+  const isRelativeNumericAddPhrase = /\badd\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(requestLower);
   const isRelativeNumericDropPhrase =
     /\bdrop\b.*\bto\s+\d+(?:\.\d+)?(?:\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?))?\b/.test(requestLower) ||
     /\bdrop\s+\d+(?:\.\d+)?\s*(?:kg|kgs?|kilo(?:s)?|lbs?|lb|pounds?|reps?|sets?)\b/.test(requestLower);
+  const isAddRequest = includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase;
   const isRemoveRequest = includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !isRelativeNumericDropPhrase;
   const injuryIntent = inferInjuryIntent(requestLower);
   const isMildInjuryRequest = injuryIntent.hasInjuryContext && injuryIntent.severity === 'mild';
@@ -1778,7 +1780,80 @@ export const repairQueueWithIntent = (
     
     return { ...qItem, exercises: healedExercises };
   });
-  
+
+  // Deterministic structural reconciliation pass for explicit add/remove intents
+  if (isRemoveRequest) {
+    for (const target of targetedExerciseNames) {
+      if (!isTargetedExerciseRef(target)) {
+        continue;
+      }
+
+      const queueItemIndex = healedQueue.findIndex((item) => item.id === target.queueItemId);
+      if (queueItemIndex < 0) {
+        continue;
+      }
+
+      healedQueue[queueItemIndex] = {
+        ...healedQueue[queueItemIndex],
+        exercises: healedQueue[queueItemIndex].exercises.filter((exercise) => {
+          if (
+            target.exerciseInstanceId &&
+            exercise.exerciseInstanceId &&
+            exercise.exerciseInstanceId === target.exerciseInstanceId
+          ) {
+            return false;
+          }
+
+          return !doesExerciseTextMatch(exercise, target.displayName);
+        }),
+      };
+    }
+  }
+
+  if (isAddRequest) {
+    for (const target of targetedExerciseNames) {
+      if (!isTargetedExerciseRef(target)) {
+        continue;
+      }
+
+      const sourceQueueItem = originalQueue.find((item) => item.id === target.queueItemId);
+      const sourceExercise =
+        (target.exerciseInstanceId
+          ? sourceQueueItem?.exercises.find((exercise) => exercise.exerciseInstanceId === target.exerciseInstanceId)
+          : undefined) ?? sourceQueueItem?.exercises[target.exerciseIndex];
+
+      if (!sourceQueueItem || !sourceExercise) {
+        continue;
+      }
+
+      const healedQueueItemIndex = healedQueue.findIndex((item) => item.id === target.queueItemId);
+      if (healedQueueItemIndex < 0) {
+        continue;
+      }
+
+      const existingCount = healedQueue[healedQueueItemIndex].exercises.filter((exercise) =>
+        canonicaliseExerciseNameForSemantics(exercise.name) === canonicaliseExerciseNameForSemantics(sourceExercise.name)
+      ).length;
+      const originalCount = sourceQueueItem.exercises.filter((exercise) =>
+        canonicaliseExerciseNameForSemantics(exercise.name) === canonicaliseExerciseNameForSemantics(sourceExercise.name)
+      ).length;
+
+      if (existingCount > originalCount) {
+        continue;
+      }
+
+      const duplicateExercise: ProgramExercise = {
+        ...sourceExercise,
+        exerciseInstanceId: `${target.queueItemId}:e${healedQueue[healedQueueItemIndex].exercises.length}`,
+      };
+
+      healedQueue[healedQueueItemIndex] = {
+        ...healedQueue[healedQueueItemIndex],
+        exercises: [...healedQueue[healedQueueItemIndex].exercises, duplicateExercise],
+      };
+    }
+  }
+
   console.log('[REPAIR] Queue repair complete');
   return healedQueue;
 };
