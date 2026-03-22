@@ -1108,6 +1108,15 @@ Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
 - Canonical conversion rule: kg=weight[0], reps=reps[0], sets=array length (reps[] and weight[] lengths must match).
 </critical>
 
+<structural_rules>
+- Explicit structural requests (add/remove) are mandatory intent constraints.
+- "add" requests must increase target count for each targeted exercise by at least +1.
+- "remove" requests must decrease target count for each targeted exercise by at least -1.
+- Structural operations must be target-scoped. Do not remove unrelated exercises.
+- Structural operations must preserve non-targeted exercises and queue items exactly.
+- When add/remove appears with variant terms (e.g., "add neutral grip"), treat this as variant intent unless the prompt explicitly asks for a new exercise instance.
+</structural_rules>
+
 <injury_policy>
 - mild: lighten all affected exercises across the entire current queue using a weight-first rule (reduce kg first, then reps/sets if needed)
 - moderate: swap all affected exercises across the entire current queue to safer similar alternatives or remove them
@@ -1136,6 +1145,14 @@ OUT: Q0:D1:Lat Pulldowns|67|8|4|Wide Grip
 IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Triangle Rows|50|10|3|Close Grip
 REQ: switch lat pulldowns and triangle rows to neutral grip
 OUT: Q0:D2:Lat Pulldowns|55|10|3|Neutral Grip,Triangle Rows|50|10|3|Neutral Grip
+
+IN: Q0:D2:Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip
+REQ: add another hammer curls
+OUT: Q0:D2:Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,Hammer Curls|20|9|4|Neutral Grip
+
+IN: Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Barbell Deadlift|135|3|5|Conventional
+REQ: remove barbell deadlift from day 3
+OUT: Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated
 </examples>
 
 <task>
