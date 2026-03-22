@@ -26,6 +26,8 @@ export type PromptResultStatus =
   | 'FAILED'
   | 'FAILED_PARSE'
   | 'NO_CHANGES'
+  | 'NO_CHANGES_MODEL_NOOP'
+  | 'NO_CHANGES_REPAIR_REVERTED'
   | 'STRUCTURE_VALIDATION_FAILED'
   | 'ERROR';
 
@@ -290,6 +292,12 @@ export const executePromptThroughCoachPipeline = async (
   ];
 
   const generatedText = await deps.callCoachProxy(messages);
+  const parsedQueueWithoutRepair = parseQueueFormatResponse(
+    generatedText,
+    transportQueue,
+    '',
+    []
+  );
   const parsedQueue = parseQueueFormatResponse(
     generatedText,
     transportQueue,
@@ -305,7 +313,23 @@ export const executePromptThroughCoachPipeline = async (
   }
 
   const differences = compareWorkoutQueues(transportQueue, parsedQueue);
-  if (differences.length === 0) return { status: 'NO_CHANGES', reasons: ['No changes detected'] };
+  if (differences.length === 0) {
+    const unrepairedDifferences = parsedQueueWithoutRepair
+      ? compareWorkoutQueues(transportQueue, parsedQueueWithoutRepair)
+      : [];
+
+    if (unrepairedDifferences.length > 0) {
+      return {
+        status: 'NO_CHANGES_REPAIR_REVERTED',
+        reasons: ['No changes detected: model proposed edits but deterministic repair reverted them'],
+      };
+    }
+
+    return {
+      status: 'NO_CHANGES_MODEL_NOOP',
+      reasons: ['No changes detected: model returned effectively unchanged queue'],
+    };
+  }
 
   differencesToProposedChanges(differences);
   const validation = validateChanges(promptCase.prompt, differences);

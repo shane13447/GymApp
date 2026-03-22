@@ -8,6 +8,7 @@ jest.mock('@/services/database', () => ({
 import type { ExerciseVariant } from '@/types';
 import {
   applyCanonicalSetCount,
+  executePromptThroughCoachPipeline,
   materializeCanonicalFixtureQueue,
   runCoachPromptSuite,
   type CanonicalFixtureDay,
@@ -52,6 +53,38 @@ describe('prompt-test-runner', () => {
     expect(bench.reps).toBe('[5,5,5]');
     expect(bench.weight).toBe('[92.5,92.5,92.5]');
     expect(bench.sets).toBe('3');
+  });
+
+  it('returns NO_CHANGES_MODEL_NOOP when model output is unchanged', async () => {
+    const queue = materializeCanonicalFixtureQueue(createFixture());
+
+    const result = await executePromptThroughCoachPipeline(
+      {
+        callCoachProxy: async () => 'Q0:D1:Barbell Bench Press|92.5|5|3|Flat',
+      },
+      { type: 'Single - Weight', prompt: 'change barbell bench press weight to 92.5' },
+      queue
+    );
+
+    expect(result.status).toBe('NO_CHANGES_MODEL_NOOP');
+    expect(result.reasons).toEqual(['No changes detected: model returned effectively unchanged queue']);
+  });
+
+  it('returns NO_CHANGES_REPAIR_REVERTED when repair removes model-only drift', async () => {
+    const queue = materializeCanonicalFixtureQueue(createFixture());
+
+    const result = await executePromptThroughCoachPipeline(
+      {
+        callCoachProxy: async () => 'Q0:D1:Barbell Bench Press|92.5|5|3|Incline',
+      },
+      { type: 'Single - Weight', prompt: 'change barbell bench press weight to 92.5' },
+      queue
+    );
+
+    expect(result.status).toBe('NO_CHANGES_REPAIR_REVERTED');
+    expect(result.reasons).toEqual([
+      'No changes detected: model proposed edits but deterministic repair reverted them',
+    ]);
   });
 
   it('continues through all prompts after failures', async () => {
