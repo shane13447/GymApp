@@ -1756,6 +1756,96 @@ describe('repairQueue', () => {
       expect(result[0].exercises.length).toBe(2);
     });
 
+    it('should deterministically add a targeted duplicate when add intent is requested but model returns no structural change', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Hammer Curls', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e1' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Hammer Curls', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Barbell Bench Press', exerciseInstanceId: 'q0:e1' }),
+          ],
+        }),
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'add another hammer curls',
+        [
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 0,
+            exerciseInstanceId: 'q0:e0',
+            name: 'Hammer Curls',
+            displayName: 'Hammer Curls',
+          },
+        ]
+      );
+
+      const hammerCount = repaired[0].exercises.filter((exercise) => exercise.name === 'Hammer Curls').length;
+      expect(hammerCount).toBe(2);
+    });
+
+    it('should deterministically remove targeted exercises when remove intent is requested but model returns no structural change', () => {
+      const originalQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Deadlift', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Barbell Back Squat', exerciseInstanceId: 'q0:e1' }),
+          ],
+        }),
+      ];
+
+      const parsedQueue: WorkoutQueueItem[] = [
+        createQueueItem({
+          id: 'q0',
+          dayNumber: 1,
+          position: 0,
+          exercises: [
+            createExercise({ name: 'Barbell Deadlift', exerciseInstanceId: 'q0:e0' }),
+            createExercise({ name: 'Barbell Back Squat', exerciseInstanceId: 'q0:e1' }),
+          ],
+        }),
+      ];
+
+      const repaired = repairQueueWithIntent(
+        originalQueue,
+        parsedQueue,
+        'remove barbell deadlift from my workout',
+        [
+          {
+            queueItemId: 'q0',
+            dayNumber: 1,
+            exerciseIndex: 0,
+            exerciseInstanceId: 'q0:e0',
+            name: 'Barbell Deadlift',
+            displayName: 'Barbell Deadlift',
+          },
+        ]
+      );
+
+      const deadliftCount = repaired[0].exercises.filter((exercise) => exercise.name === 'Barbell Deadlift').length;
+      expect(deadliftCount).toBe(0);
+    });
+
     it('repair regression - preserves intended neutral-grip variant for all targeted exercises in multi-target requests', () => {
       const originalQueue: WorkoutQueueItem[] = [
         createQueueItem({
