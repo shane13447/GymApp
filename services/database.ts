@@ -80,9 +80,125 @@ const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
   }
 };
 
+type SeedFixtureExercise = {
+  name: string;
+  reps: number[];
+  weight: number[];
+  variant?: ExerciseVariant | null;
+};
+
+type SeedFixtureDay = {
+  dayNumber: number;
+  exercises: SeedFixtureExercise[];
+};
+
+type SeedFixture = SeedFixtureDay[];
+
+type SeedCatalogEntry = {
+  equipment?: string;
+  muscle_groups_worked?: string[];
+  isCompound?: boolean;
+};
+
+export const validateSeedFixture = (fixture: unknown): { isValid: boolean; reason?: string } => {
+  if (!Array.isArray(fixture)) {
+    return { isValid: false, reason: 'Fixture must be an array of days.' };
+  }
+
+  for (let dayIndex = 0; dayIndex < fixture.length; dayIndex++) {
+    const day = fixture[dayIndex] as SeedFixtureDay;
+
+    if (!Number.isInteger(day?.dayNumber) || day.dayNumber < 1) {
+      return { isValid: false, reason: `Invalid dayNumber at index ${dayIndex}.` };
+    }
+
+    if (!Array.isArray(day.exercises) || day.exercises.length === 0) {
+      return { isValid: false, reason: `Invalid exercises array at day index ${dayIndex}.` };
+    }
+
+    for (let exerciseIndex = 0; exerciseIndex < day.exercises.length; exerciseIndex++) {
+      const exercise = day.exercises[exerciseIndex];
+
+      if (typeof exercise?.name !== 'string' || !exercise.name.trim()) {
+        return {
+          isValid: false,
+          reason: `Invalid exercise name at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+
+      if (!Array.isArray(exercise.reps) || !Array.isArray(exercise.weight)) {
+        return {
+          isValid: false,
+          reason: `Missing reps/weight arrays at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+
+      if (exercise.reps.length === 0 || exercise.weight.length === 0) {
+        return {
+          isValid: false,
+          reason: `Empty reps/weight arrays at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+
+      if (exercise.reps.length !== exercise.weight.length) {
+        return {
+          isValid: false,
+          reason: `Mismatched reps/weight lengths at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+
+      if (exercise.reps.some((value) => !Number.isFinite(value))) {
+        return {
+          isValid: false,
+          reason: `Invalid reps values at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+
+      if (exercise.weight.some((value) => !Number.isFinite(value))) {
+        return {
+          isValid: false,
+          reason: `Invalid weight values at day ${dayIndex}, exercise ${exerciseIndex}.`,
+        };
+      }
+    }
+  }
+
+  return { isValid: true };
+};
+
+export const mapSeedFixtureToProgram = (
+  programId: string,
+  programName: string,
+  fixture: SeedFixture,
+  catalogIndex: Record<string, SeedCatalogEntry>
+): Omit<Program, 'createdAt' | 'updatedAt'> => ({
+  id: programId,
+  name: programName,
+  workoutDays: fixture.map((day) => ({
+    dayNumber: day.dayNumber,
+    exercises: day.exercises.map((exercise) => {
+      const catalogEntry = catalogIndex[exercise.name.toLowerCase()];
+
+      return {
+        name: exercise.name,
+        equipment: catalogEntry?.equipment ?? '',
+        muscle_groups_worked: catalogEntry?.muscle_groups_worked ?? [],
+        isCompound: catalogEntry?.isCompound ?? false,
+        variant: exercise.variant ?? null,
+        weight: String(exercise.weight[0]),
+        reps: String(exercise.reps[0]),
+        sets: String(exercise.reps.length),
+        restTime: '180',
+        progression: '0',
+        hasCustomisedSets: true,
+      } as ProgramExercise;
+    }),
+  })),
+});
+
 /**
  * Get the database instance, initializing if necessary
- * 
+ *
  * RACE CONDITION FIX: Uses a shared promise to ensure only one initialization
  * happens even when multiple callers request the database simultaneously.
  * Without this, concurrent calls could:
