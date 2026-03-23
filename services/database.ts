@@ -538,6 +538,51 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
   await ensureColumnExists('program_exercises', 'variant_json', "TEXT DEFAULT ''");
   await ensureColumnExists('workout_exercises', 'variant_json', "TEXT DEFAULT ''");
   await ensureColumnExists('queue_exercises', 'variant_json', "TEXT DEFAULT ''");
+  await ensureColumnExists('user_preferences', 'seed_test_program_state', "TEXT DEFAULT 'pending'");
+  await ensureColumnExists('user_preferences', 'seed_3day_full_body_state', "TEXT DEFAULT 'pending'");
+};
+
+const SEED_STATE_KEY_BY_ID: Record<string, 'seed_test_program_state' | 'seed_3day_full_body_state'> = {
+  'seed-test-program': 'seed_test_program_state',
+  'seed-3day-full-body': 'seed_3day_full_body_state',
+};
+
+export type SeedLifecycleState = 'pending' | 'seeded' | 'deleted_by_user';
+
+export const getSeedLifecycleState = async (seedId: string): Promise<SeedLifecycleState> => {
+  const column = SEED_STATE_KEY_BY_ID[seedId];
+  if (!column) {
+    return 'pending';
+  }
+
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Record<typeof column, string | null>>(
+    `SELECT ${column} FROM user_preferences WHERE id = ?`,
+    ['default']
+  );
+
+  const value = row?.[column];
+  if (value === 'seeded' || value === 'deleted_by_user') {
+    return value;
+  }
+
+  return 'pending';
+};
+
+export const setSeedLifecycleState = async (
+  seedId: string,
+  state: SeedLifecycleState
+): Promise<void> => {
+  const column = SEED_STATE_KEY_BY_ID[seedId];
+  if (!column) {
+    return;
+  }
+
+  const database = await getDatabase();
+  await database.runAsync(
+    `UPDATE user_preferences SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [state, 'default']
+  );
 };
 
 // =============================================================================
