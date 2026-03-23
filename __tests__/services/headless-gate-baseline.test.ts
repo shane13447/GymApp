@@ -5,10 +5,22 @@ jest.mock('@/services/database', () => ({
   clearWorkoutQueue: jest.fn(),
 }));
 
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-baseline';
 import { materializeCanonicalFixtureQueue } from '@/services/coach/prompt-test-runner';
 
 describe('headless gate baseline fixture', () => {
+  it('is sourced from data/TestProgram.JSON', () => {
+    const fixturePath = path.resolve(__dirname, '../../data/TestProgram.JSON');
+
+    expect(existsSync(fixturePath)).toBe(true);
+    if (!existsSync(fixturePath)) return;
+
+    const parsed = JSON.parse(readFileSync(fixturePath, 'utf8'));
+    expect(OFFICIAL_HEADLESS_GATE_BASELINE).toEqual(parsed);
+  });
+
   it('keeps canonical reps/weight arrays aligned for every exercise', () => {
     for (const day of OFFICIAL_HEADLESS_GATE_BASELINE) {
       for (const exercise of day.exercises) {
@@ -32,3 +44,4 @@ describe('headless gate baseline fixture', () => {
     }
   });
 });
+
