@@ -29,4 +29,26 @@ describe('database initialization', () => {
     await expect(getDatabase()).resolves.toBeDefined();
     expect(execAsync).not.toHaveBeenCalledWith(expect.stringContaining('ALTER TABLE'));
   });
+
+  it('initializes seed lifecycle states for both programs as pending when absent', async () => {
+    const execAsync = jest.fn(async () => {});
+    const getAllAsync = jest.fn(async () => []);
+    const getFirstAsync = jest.fn(async () => null);
+
+    jest.doMock('expo-sqlite', () => ({
+      openDatabaseAsync: jest.fn(async () => ({
+        execAsync,
+        getAllAsync,
+        getFirstAsync,
+        runAsync: jest.fn(),
+        getAllSync: jest.fn(),
+        getFirstSync: jest.fn(),
+      })),
+    }));
+
+    const { getSeedLifecycleState } = await import('@/services/database');
+
+    await expect(getSeedLifecycleState('seed-test-program')).resolves.toBe('pending');
+    await expect(getSeedLifecycleState('seed-3day-full-body')).resolves.toBe('pending');
+  });
 });
