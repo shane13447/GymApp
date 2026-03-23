@@ -26,13 +26,8 @@ describe('seed fixture helpers', () => {
       expect(validateSeedFixture(fixture).isValid).toBe(true);
     });
 
-    it('rejects fixture when any row has mismatched reps/weight lengths', () => {
-      const fixture: SeedFixture = [
-        {
-          dayNumber: 1,
-          exercises: [{ name: 'Leg Press', reps: [10, 10], weight: [100] }],
-        },
-      ];
+    it('rejects an empty fixture array', () => {
+      const fixture: SeedFixture = [];
 
       expect(validateSeedFixture(fixture).isValid).toBe(false);
     });

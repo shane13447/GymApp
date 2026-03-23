@@ -21,8 +21,6 @@ import type {
   WorkoutQueueItem
 } from '@/types';
 import { TrainingGoal } from '@/types';
-import { readFileSync } from 'fs';
-import path from 'path';
 import * as SQLite from 'expo-sqlite';
 
 // =============================================================================
@@ -83,6 +81,8 @@ const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
   }
 };
 
+
+
 type SeedFixtureExercise = {
   name: string;
   reps: number[];
@@ -103,26 +103,38 @@ type SeedCatalogEntry = {
   isCompound?: boolean;
 };
 
-const loadSeedFixture = (fixtureFileName: 'TestProgram.JSON' | 'TestProgram2.JSON'): SeedFixture => {
-  try {
-    const fixturePath = path.resolve(__dirname, `../data/${fixtureFileName}`);
-    const fixtureContent = readFileSync(fixturePath, 'utf8');
-    return JSON.parse(fixtureContent) as SeedFixture;
-  } catch {
-    return [];
-  }
+const testProgramFixtureRaw = require('../data/TestProgram.json') as unknown;
+const testProgram2FixtureRaw = require('../data/TestProgram2.json') as unknown;
+
+const normaliseSeedFixtureModule = (fixtureModule: unknown): SeedFixture => {
+  const normalised =
+    fixtureModule && typeof fixtureModule === 'object' && 'default' in fixtureModule
+      ? (fixtureModule as { default: unknown }).default
+      : fixtureModule;
+
+  return Array.isArray(normalised) ? (normalised as SeedFixture) : [];
+};
+
+const STATIC_SEED_FIXTURES: Record<'TestProgram.json' | 'TestProgram2.json', SeedFixture> = {
+  'TestProgram.json': normaliseSeedFixtureModule(testProgramFixtureRaw),
+  'TestProgram2.json': normaliseSeedFixtureModule(testProgram2FixtureRaw),
+};
+
+const loadSeedFixture = (fixtureFileName: 'TestProgram.json' | 'TestProgram2.json'): SeedFixture => {
+  const fixture = STATIC_SEED_FIXTURES[fixtureFileName];
+  return Array.isArray(fixture) ? fixture : [];
 };
 
 const SEED_PROGRAMS = [
   {
     id: 'seed-test-program',
     name: 'Test Program',
-    fixtureName: 'TestProgram.JSON' as const,
+    fixtureName: 'TestProgram.json' as const,
   },
   {
     id: 'seed-3day-full-body',
     name: '3 Day Full body',
-    fixtureName: 'TestProgram2.JSON' as const,
+    fixtureName: 'TestProgram2.json' as const,
   },
 ] as const;
 
@@ -241,6 +253,33 @@ const getSeedLifecycleStateWithDatabase = async (
   return 'pending';
 };
 
+const hasSeedProgramStructure = async (
+  database: SQLite.SQLiteDatabase,
+  seedId: string
+): Promise<boolean> => {
+  const workoutDays = await database.getAllAsync<{ id: number }>(
+    'SELECT * FROM workout_days WHERE program_id = ?',
+    [seedId]
+  );
+
+  if (workoutDays.length === 0) {
+    return false;
+  }
+
+  for (const workoutDay of workoutDays) {
+    const exercises = await database.getAllAsync<{ id: number }>(
+      'SELECT * FROM program_exercises WHERE workout_day_id = ?',
+      [workoutDay.id]
+    );
+
+    if (exercises.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const seedTestProgramsIfMissing = async (database: SQLite.SQLiteDatabase): Promise<void> => {
   const catalogIndex = buildSeedCatalogIndex();
   const seedIds = SEED_PROGRAMS.map((seedProgram) => seedProgram.id);
@@ -259,13 +298,23 @@ const seedTestProgramsIfMissing = async (database: SQLite.SQLiteDatabase): Promi
     }
 
     if (existingProgramIds.has(seedProgram.id)) {
-      if (lifecycleState !== 'seeded') {
-        await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
+      const hasStructure = await hasSeedProgramStructure(database, seedProgram.id);
+      if (!hasStructure) {
+        await database.runAsync('DELETE FROM programs WHERE id = ?', [seedProgram.id]);
+        existingProgramIds.delete(seedProgram.id);
+        if (lifecycleState === 'seeded') {
+          await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'pending');
+        }
+      } else {
+        if (lifecycleState !== 'seeded') {
+          await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
+        }
+        continue;
       }
-      continue;
     }
 
-    if (lifecycleState !== 'pending') {
+    const stateAfterIntegrityCheck = await getSeedLifecycleStateWithDatabase(database, seedProgram.id);
+    if (stateAfterIntegrityCheck !== 'pending') {
       continue;
     }
 
@@ -309,6 +358,10 @@ const seedTestProgramsIfMissing = async (database: SQLite.SQLiteDatabase): Promi
 export const validateSeedFixture = (fixture: unknown): { isValid: boolean; reason?: string } => {
   if (!Array.isArray(fixture)) {
     return { isValid: false, reason: 'Fixture must be an array of days.' };
+  }
+
+  if (fixture.length === 0) {
+    return { isValid: false, reason: 'Fixture must contain at least one workout day.' };
   }
 
   for (let dayIndex = 0; dayIndex < fixture.length; dayIndex++) {
@@ -1304,7 +1357,7 @@ export const updateProgram = async (program: Program): Promise<void> => {
  */
 export const deleteProgram = async (programId: string): Promise<void> => {
   const database = await getDatabase();
-  
+
   // Check if this is the current program and clear it
   const prefs = await getUserPreferences();
   if (prefs.currentProgramId === programId) {
@@ -1312,7 +1365,12 @@ export const deleteProgram = async (programId: string): Promise<void> => {
   }
 
   // Delete program (cascade deletes workout_days and program_exercises)
-  await database.runAsync('DELETE FROM programs WHERE id = ?', [programId]);
+  const deleteResult = await database.runAsync('DELETE FROM programs WHERE id = ?', [programId]);
+  const deletedRows = typeof deleteResult?.changes === 'number' ? deleteResult.changes : 0;
+
+  if (deletedRows > 0 && getSeedStateColumn(programId)) {
+    await setSeedLifecycleStateWithDatabase(database, programId, 'deleted_by_user');
+  }
 };
 
 // =============================================================================
