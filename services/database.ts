@@ -8,6 +8,7 @@
  */
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
+import exercisesData from '@/data/exerciseSelection.json';
 import type {
   ExerciseVariant,
   MuscleGroupTarget,
@@ -20,6 +21,8 @@ import type {
   WorkoutQueueItem
 } from '@/types';
 import { TrainingGoal } from '@/types';
+import { readFileSync } from 'fs';
+import path from 'path';
 import * as SQLite from 'expo-sqlite';
 
 // =============================================================================
@@ -98,6 +101,209 @@ type SeedCatalogEntry = {
   equipment?: string;
   muscle_groups_worked?: string[];
   isCompound?: boolean;
+};
+
+const loadSeedFixture = (fixtureFileName: 'TestProgram.JSON' | 'TestProgram2.JSON'): SeedFixture => {
+  try {
+    const fixturePath = path.resolve(__dirname, `../data/${fixtureFileName}`);
+    const fixtureContent = readFileSync(fixturePath, 'utf8');
+    return JSON.parse(fixtureContent) as SeedFixture;
+  } catch {
+    return [];
+  }
+};
+
+const SEED_PROGRAMS = [
+  {
+    id: 'seed-test-program',
+    name: 'Test Program',
+    fixtureName: 'TestProgram.JSON' as const,
+  },
+  {
+    id: 'seed-3day-full-body',
+    name: '3 Day Full body',
+    fixtureName: 'TestProgram2.JSON' as const,
+  },
+] as const;
+
+const SEED_STATE_KEY_BY_ID: Record<string, 'seed_test_program_state' | 'seed_3day_full_body_state'> = {
+  'seed-test-program': 'seed_test_program_state',
+  'seed-3day-full-body': 'seed_3day_full_body_state',
+};
+
+const getSeedStateColumn = (seedId: string): 'seed_test_program_state' | 'seed_3day_full_body_state' | null =>
+  SEED_STATE_KEY_BY_ID[seedId] ?? null;
+
+const buildSeedCatalogIndex = (): Record<string, SeedCatalogEntry> =>
+  (exercisesData as Array<SeedCatalogEntry & { name?: string }>).reduce<Record<string, SeedCatalogEntry>>(
+    (acc, entry) => {
+      if (typeof entry.name === 'string' && entry.name.trim()) {
+        acc[entry.name.toLowerCase()] = {
+          equipment: entry.equipment,
+          muscle_groups_worked: Array.isArray(entry.muscle_groups_worked)
+            ? entry.muscle_groups_worked
+            : [],
+          isCompound: Boolean(entry.isCompound),
+        };
+      }
+      return acc;
+    },
+    {}
+  );
+
+const createProgramWithDatabase = async (
+  database: SQLite.SQLiteDatabase,
+  program: Omit<Program, 'createdAt' | 'updatedAt'>
+): Promise<boolean> => {
+  const now = new Date().toISOString();
+
+  const result = await database.runAsync(
+    'INSERT OR IGNORE INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    [program.id, program.name, now, now]
+  );
+
+  const insertChanges = typeof result?.changes === 'number' ? result.changes : 1;
+  if (insertChanges === 0) {
+    return false;
+  }
+
+  for (const day of program.workoutDays) {
+    const dayResult = await database.runAsync(
+      'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
+      [program.id, day.dayNumber]
+    );
+
+    const dayId = dayResult?.lastInsertRowId ?? null;
+
+    for (let i = 0; i < day.exercises.length; i++) {
+      const exercise = day.exercises[i];
+      await database.runAsync(
+        `INSERT INTO program_exercises
+         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          dayId,
+          exercise.name ?? '',
+          exercise.equipment ?? '',
+          JSON.stringify(exercise.muscle_groups_worked ?? []),
+          exercise.isCompound ? 1 : 0,
+          parseFloat(exercise.weight) || 0,
+          parseInt(exercise.reps, 10) || 8,
+          parseInt(exercise.sets, 10) || 3,
+          parseInt(exercise.restTime, 10) || 180,
+          parseFloat(exercise.progression) || 0,
+          exercise.hasCustomisedSets ? 1 : 0,
+          serializeVariant(exercise.variant),
+          i,
+        ]
+      );
+    }
+  }
+
+  return true;
+};
+
+const setSeedLifecycleStateWithDatabase = async (
+  database: SQLite.SQLiteDatabase,
+  seedId: string,
+  state: SeedLifecycleState
+): Promise<void> => {
+  const column = getSeedStateColumn(seedId);
+  if (!column) {
+    return;
+  }
+
+  await database.runAsync(
+    `UPDATE user_preferences SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [state, 'default']
+  );
+};
+
+const getSeedLifecycleStateWithDatabase = async (
+  database: SQLite.SQLiteDatabase,
+  seedId: string
+): Promise<SeedLifecycleState> => {
+  const column = getSeedStateColumn(seedId);
+  if (!column) {
+    return 'pending';
+  }
+
+  const row = await database.getFirstAsync<Record<string, string | null>>(
+    `SELECT ${column} FROM user_preferences WHERE id = ?`,
+    ['default']
+  );
+
+  const value = row?.[column];
+  if (value === 'seeded' || value === 'deleted_by_user') {
+    return value;
+  }
+
+  return 'pending';
+};
+
+const seedTestProgramsIfMissing = async (database: SQLite.SQLiteDatabase): Promise<void> => {
+  const catalogIndex = buildSeedCatalogIndex();
+  const seedIds = SEED_PROGRAMS.map((seedProgram) => seedProgram.id);
+
+  const existingRows = await database.getAllAsync<{ id: string }>(
+    `SELECT id FROM programs WHERE id IN (${seedIds.map(() => '?').join(', ')})`,
+    seedIds
+  );
+  const existingProgramIds = new Set(existingRows.map((row) => row.id));
+
+  for (const seedProgram of SEED_PROGRAMS) {
+    const lifecycleState = await getSeedLifecycleStateWithDatabase(database, seedProgram.id);
+
+    if (lifecycleState === 'deleted_by_user') {
+      continue;
+    }
+
+    if (existingProgramIds.has(seedProgram.id)) {
+      if (lifecycleState !== 'seeded') {
+        await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
+      }
+      continue;
+    }
+
+    if (lifecycleState !== 'pending') {
+      continue;
+    }
+
+    const fixture = loadSeedFixture(seedProgram.fixtureName);
+    const validation = validateSeedFixture(fixture);
+    if (!validation.isValid) {
+      console.warn('[seed-programs]', {
+        seed_id: seedProgram.id,
+        fixture: seedProgram.fixtureName,
+        reason: 'validation_failed',
+        detail: validation.reason,
+      });
+      continue;
+    }
+
+    try {
+      const mappedProgram = mapSeedFixtureToProgram(
+        seedProgram.id,
+        seedProgram.name,
+        fixture,
+        catalogIndex
+      );
+
+      const inserted = await createProgramWithDatabase(database, mappedProgram);
+      if (inserted) {
+        existingProgramIds.add(seedProgram.id);
+      }
+
+      await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
+    } catch (error) {
+      console.warn('[seed-programs]', {
+        seed_id: seedProgram.id,
+        fixture: seedProgram.fixtureName,
+        reason: 'insert_failed',
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 };
 
 export const validateSeedFixture = (fixture: unknown): { isValid: boolean; reason?: string } => {
@@ -540,17 +746,14 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
   await ensureColumnExists('queue_exercises', 'variant_json', "TEXT DEFAULT ''");
   await ensureColumnExists('user_preferences', 'seed_test_program_state', "TEXT DEFAULT 'pending'");
   await ensureColumnExists('user_preferences', 'seed_3day_full_body_state', "TEXT DEFAULT 'pending'");
-};
 
-const SEED_STATE_KEY_BY_ID: Record<string, 'seed_test_program_state' | 'seed_3day_full_body_state'> = {
-  'seed-test-program': 'seed_test_program_state',
-  'seed-3day-full-body': 'seed_3day_full_body_state',
+  await seedTestProgramsIfMissing(database);
 };
 
 export type SeedLifecycleState = 'pending' | 'seeded' | 'deleted_by_user';
 
 export const getSeedLifecycleState = async (seedId: string): Promise<SeedLifecycleState> => {
-  const column = SEED_STATE_KEY_BY_ID[seedId];
+  const column = getSeedStateColumn(seedId);
   if (!column) {
     return 'pending';
   }
@@ -573,7 +776,7 @@ export const setSeedLifecycleState = async (
   seedId: string,
   state: SeedLifecycleState
 ): Promise<void> => {
-  const column = SEED_STATE_KEY_BY_ID[seedId];
+  const column = getSeedStateColumn(seedId);
   if (!column) {
     return;
   }
