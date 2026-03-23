@@ -11,8 +11,8 @@ import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-
 import { materializeCanonicalFixtureQueue } from '@/services/coach/prompt-test-runner';
 
 describe('headless gate baseline fixture', () => {
-  it('is sourced from data/TestProgram.JSON', () => {
-    const fixturePath = path.resolve(__dirname, '../../data/TestProgram.JSON');
+  it('is sourced from data/TestProgram.json', () => {
+    const fixturePath = path.resolve(__dirname, '../../data/TestProgram.json');
 
     expect(existsSync(fixturePath)).toBe(true);
     if (!existsSync(fixturePath)) return;

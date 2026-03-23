@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { CanonicalFixtureDay } from '@/services/coach/prompt-test-runner';
 
-const TEST_PROGRAM_PATH = path.resolve(__dirname, '../../data/TestProgram.JSON');
+const TEST_PROGRAM_PATH = path.resolve(__dirname, '../../data/TestProgram.json');
 
 /**
  * Official headless gate baseline fixture approved for Task 11 Step 0.
