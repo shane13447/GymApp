@@ -1,0 +1,154 @@
+[
+  {
+    "id": "q0",
+    "dayNumber": 1,
+    "exercises": [
+      {
+        "name": "Dumbbell Press",
+        "variant": { "angle": "incline", "grip": "neutral" },
+        "reps": [8, 8, 8],
+        "weight": [32, 32, 32]
+      },
+      {
+        "name": "Chest-Supported Dumbbell Row",
+        "variant": { "grip": "neutral" },
+        "reps": [10, 10, 10],
+        "weight": [32, 32, 32]
+      },
+      {
+        "name": "Romanian Deadlift",
+        "reps": [8, 8, 8],
+        "weight": [90, 90, 90]
+      },
+      {
+        "name": "Barbell Hip Thrust",
+        "reps": [10, 10, 10],
+        "weight": [100, 100, 100]
+      },
+      {
+        "name": "Leg Press",
+        "reps": [12, 12, 12],
+        "weight": [160, 160, 160]
+      },
+      {
+        "name": "Leg Press Calf Raise",
+        "reps": [15, 15, 15],
+        "weight": [140, 140, 140]
+      },
+      {
+        "name": "Rope Pressdown",
+        "reps": [12, 12],
+        "weight": [25, 25]
+      },
+      {
+        "name": "Reverse Cable Curl",
+        "variant": { "grip": "neutral" },
+        "reps": [15, 15],
+        "weight": [20, 20]
+      }
+    ]
+  },
+  {
+    "id": "q1",
+    "dayNumber": 3,
+    "exercises": [
+      {
+        "name": "Dumbbell Press",
+        "variant": { "angle": "flat", "grip": "neutral" },
+        "reps": [8, 8, 8],
+        "weight": [34, 34, 34]
+      },
+      {
+        "name": "Chest-Supported Dumbbell Row",
+        "variant": { "grip": "neutral" },
+        "reps": [10, 10, 10],
+        "weight": [34, 34, 34]
+      },
+      {
+        "name": "Romanian Deadlift",
+        "reps": [8, 8, 8],
+        "weight": [92.5, 92.5, 92.5]
+      },
+      {
+        "name": "Barbell Hip Thrust",
+        "reps": [10, 10, 10],
+        "weight": [105, 105, 105]
+      },
+      {
+        "name": "Leg Press",
+        "reps": [12, 12],
+        "weight": [165, 165]
+      },
+      {
+        "name": "Leg Press Calf Raise",
+        "reps": [15, 15],
+        "weight": [145, 145]
+      },
+      {
+        "name": "Rope Face Pull",
+        "reps": [15, 15],
+        "weight": [20, 20]
+      },
+      {
+        "name": "Rope Hammer Curl",
+        "variant": { "grip": "neutral" },
+        "reps": [10, 10],
+        "weight": [22, 22]
+      }
+    ]
+  },
+  {
+    "id": "q2",
+    "dayNumber": 6,
+    "exercises": [
+      {
+        "name": "Dumbbell Press",
+        "variant": { "angle": "incline", "grip": "neutral" },
+        "reps": [10, 10],
+        "weight": [30, 30]
+      },
+      {
+        "name": "Chest-Supported Dumbbell Row",
+        "variant": { "grip": "neutral" },
+        "reps": [10, 10],
+        "weight": [30, 30]
+      },
+      {
+        "name": "Romanian Deadlift",
+        "reps": [10, 10],
+        "weight": [85, 85]
+      },
+      {
+        "name": "Barbell Hip Thrust",
+        "reps": [12, 12],
+        "weight": [95, 95]
+      },
+      {
+        "name": "Leg Press",
+        "reps": [12, 12, 12],
+        "weight": [155, 155, 155]
+      },
+      {
+        "name": "Leg Press Calf Raise",
+        "reps": [15, 15, 15],
+        "weight": [135, 135, 135]
+      },
+      {
+        "name": "Overhead Rope Triceps Extension",
+        "reps": [12, 12],
+        "weight": [20, 20]
+      },
+      {
+        "name": "Cable Curl",
+        "variant": { "grip": "neutral" },
+        "reps": [12, 12],
+        "weight": [22, 22]
+      },
+      {
+        "name": "Farmer Hold",
+        "reps": [45, 45],
+        "weight": [32, 32]
+      }
+    ]
+  }
+]
