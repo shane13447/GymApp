@@ -51,4 +51,77 @@ describe('database initialization', () => {
     await expect(getSeedLifecycleState('seed-test-program')).resolves.toBe('pending');
     await expect(getSeedLifecycleState('seed-3day-full-body')).resolves.toBe('pending');
   });
+
+  it('seeds both built-in programs on first initialization', async () => {
+    const programs: Array<{ id: string; name: string; created_at: string; updated_at: string }> = [];
+
+    const execAsync = jest.fn(async () => {});
+    const getFirstAsync = jest.fn(async () => null);
+    const getAllAsync = jest.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('SELECT id FROM programs WHERE id IN')) {
+        const seedIds = (params as string[]) ?? [];
+        return programs.filter((program) => seedIds.includes(program.id)).map((program) => ({ id: program.id }));
+      }
+
+      if (sql.includes('SELECT * FROM programs ORDER BY created_at DESC')) {
+        return programs;
+      }
+
+      if (sql.includes('SELECT * FROM workout_days WHERE program_id = ?')) {
+        return [];
+      }
+
+      if (sql.includes('SELECT * FROM program_exercises WHERE workout_day_id = ?')) {
+        return [];
+      }
+
+      return [];
+    });
+
+    const runAsync = jest.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('INSERT OR IGNORE INTO programs')) {
+        const [id, name, createdAt, updatedAt] = (params as [string, string, string, string]) ?? [
+          '',
+          '',
+          '',
+          '',
+        ];
+
+        if (programs.some((program) => program.id === id)) {
+          return { lastInsertRowId: 0, changes: 0 };
+        }
+
+        programs.push({ id, name, created_at: createdAt, updated_at: updatedAt });
+        return { lastInsertRowId: programs.length, changes: 1 };
+      }
+
+      if (sql.includes('INSERT INTO workout_days')) {
+        return { lastInsertRowId: 1, changes: 1 };
+      }
+
+      if (sql.includes('INSERT INTO program_exercises')) {
+        return { lastInsertRowId: 1, changes: 1 };
+      }
+
+      return { lastInsertRowId: 1, changes: 1 };
+    });
+
+    jest.doMock('expo-sqlite', () => ({
+      openDatabaseAsync: jest.fn(async () => ({
+        execAsync,
+        getAllAsync,
+        getFirstAsync,
+        runAsync,
+        getAllSync: jest.fn(),
+        getFirstSync: jest.fn(),
+      })),
+    }));
+
+    const { getAllPrograms } = await import('@/services/database');
+    const seededPrograms = await getAllPrograms();
+
+    expect(seededPrograms.find((program) => program.id === 'seed-test-program')?.name).toBe('Test Program');
+    expect(seededPrograms.find((program) => program.id === 'seed-3day-full-body')?.name).toBe('3 Day Full body');
+  });
 });
+
