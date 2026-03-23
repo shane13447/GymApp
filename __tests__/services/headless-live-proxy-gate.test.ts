@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 // Mock database module to avoid expo-sqlite ESM issues in transitive imports
 jest.mock('@/services/database', () => ({
   getWorkoutQueue: jest.fn(),
@@ -14,38 +16,8 @@ import {
 } from '@/services/coach/prompt-test-runner';
 import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-baseline';
 
-const TEST_PROMPTS: CoachPromptCase[] = [
-  { type: 'Single - Weight', prompt: 'I want to do 25kg for decline crunches today' },
-  { type: 'Single - Reps', prompt: 'can we bump leg extensions up to 15 reps?' },
-  { type: 'Single - Sets', prompt: 'sets of 5 for lat pulldowns please' },
-  { type: 'Single - Add', prompt: 'put barbell curls into my day 2 workout' },
-  { type: 'Single - Remove', prompt: 'get rid of fingertip curls' },
-  { type: 'Multi - Weight', prompt: 'up the crunches to 30 and bicep curls to 10' },
-  { type: 'Multi - Reps', prompt: 'make calf press 20 reps but drop leg extensions to 6' },
-  { type: 'Multi - Sets', prompt: 'I want 4 sets of pulldowns and 5 sets of triangle rows' },
-  { type: 'Multi - Add', prompt: 'can you add hammer curls to day 2 and also dumbbell flyes to day 3?' },
-  { type: 'Multi - Remove', prompt: 'delete fingertip curls and reverse forearm curls' },
-  { type: 'Single - Weight + Reps', prompt: 'change decline crunches weight to 15 and reps to 5' },
-  { type: 'Single - Reps + Weight', prompt: 'set leg extensions to 12 reps and 40kg' },
-  { type: 'Single - Weight + Sets', prompt: 'crunches at 20kg for 5 sets' },
-  { type: 'Single - Full Mod', prompt: 'make lat pulldowns 50kg, 10 reps, and 4 sets' },
-  { type: 'Muscle - Weight', prompt: 'put all my back exercises at 30kg' },
-  { type: 'Muscle - Reps', prompt: 'I want to do high volume legs today so set everything to 20 reps' },
-  { type: 'Muscle - Sets', prompt: 'can we do 5 sets for every chest exercise?' },
-  { type: 'Muscle - Remove', prompt: 'I hurt my wrists, take out all the forearm stuff' },
-  { type: 'Safety - Fuzzy Name', prompt: 'set deadlifts to a hundred' },
-  { type: 'Safety - Day Boundary', prompt: 'switch lat pulldowns to 50' },
-  { type: 'Logic - Relative Math', prompt: 'add 5kg to my decline crunches' },
-  { type: 'Logic - Ambiguity', prompt: 'leg extensions 12 reps' },
-  { type: 'Safety - Duplicate Add', prompt: 'hey add decline crunches to day 2 again' },
-  { type: 'Variant - Single', prompt: 'switch my lat pulldowns to close grip today' },
-  { type: 'Variant - Multi', prompt: 'make lat pulldowns and cable rows neutral grip for this workout' },
-  { type: 'Variant - Muscle', prompt: 'use incline variations for all chest moves today' },
-  { type: 'Variant - Safety', prompt: 'give me a wrist-friendly variant for barbell curls' },
-  { type: 'Injury - Mild', prompt: 'my shoulder feels a little irritated today, go easier on pressing' },
-  { type: 'Injury - Moderate', prompt: "my lower back is sore, adjust today's plan so it doesn't flare up" },
-  { type: 'Injury - Severe', prompt: 'I tweaked my knee badly, I cannot do any painful leg work today' },
-];
+const TEST_PROMPTS_PATH = path.resolve(__dirname, '../../data/TestPrompts30.JSON');
+const TEST_PROMPTS = JSON.parse(readFileSync(TEST_PROMPTS_PATH, 'utf8')) as CoachPromptCase[];
 
 const COACH_API_TIMEOUT_MS = 60000;
 

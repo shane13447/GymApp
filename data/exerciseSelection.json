@@ -135,7 +135,12 @@
     "name": "Lat Pulldowns",
     "equipment": "Cable",
     "muscle_groups_worked": ["lats"],
-    "isCompound": true
+    "isCompound": true,
+    "variantOptions": [
+      { "label": "Wide Grip", "field": "grip", "value": "wide", "aliases": ["wide grip"] },
+      { "label": "Close Grip", "field": "grip", "value": "close", "aliases": ["close grip"] },
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Leg Extensions",
@@ -153,7 +158,10 @@
     "name": "One-Arm Dumbbell Row",
     "equipment": "Dumbbell",
     "muscle_groups_worked": ["lats", "biceps", "shoulders"],
-    "isCompound": true
+    "isCompound": true,
+    "variantOptions": [
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Overhead Barbell Press",
@@ -222,15 +230,19 @@
     "isCompound": true,
     "variantOptions": [
       { "label": "Flat", "field": "angle", "value": "flat", "aliases": ["flat press"] },
-      { "label": "Incline", "field": "angle", "value": "incline", "aliases": ["inclined", "incline press"] }
+      { "label": "Incline", "field": "angle", "value": "incline", "aliases": ["inclined", "incline press"] },
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
     ],
-    "aliases": ["flat dumbbell press", "incline dumbbell press", "dumbbell bench press"]
+    "aliases": ["flat dumbbell press", "incline dumbbell press", "dumbbell bench press", "neutral-grip dumbbell press"]
   },
   {
     "name": "Chest-Supported Dumbbell Row",
     "equipment": "Dumbbell",
     "muscle_groups_worked": ["lats", "traps", "biceps", "forearms"],
-    "isCompound": true
+    "isCompound": true,
+    "variantOptions": [
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Leg Press Calf Raise",
@@ -254,19 +266,28 @@
     "name": "Reverse Cable Curl",
     "equipment": "Cable",
     "muscle_groups_worked": ["biceps", "forearms"],
-    "isCompound": false
+    "isCompound": false,
+    "variantOptions": [
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Rope Hammer Curl",
     "equipment": "Cable",
     "muscle_groups_worked": ["biceps", "forearms"],
-    "isCompound": false
+    "isCompound": false,
+    "variantOptions": [
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Cable Curl",
     "equipment": "Cable",
     "muscle_groups_worked": ["biceps", "forearms"],
-    "isCompound": false
+    "isCompound": false,
+    "variantOptions": [
+      { "label": "Neutral Grip", "field": "grip", "value": "neutral", "aliases": ["neutral grip"] }
+    ]
   },
   {
     "name": "Rope Face Pull",
