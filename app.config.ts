@@ -31,10 +31,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/images/android-icon-monochrome.png',
       backgroundColor: '#E6F4FE',
     },
-    usesCleartextTraffic: true,
-    networkSecurityConfig: {
-      cleartextTrafficPermitted: true,
-    },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
   } as any),
@@ -44,6 +40,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    'expo-web-browser',
     [
       'expo-splash-screen',
       {
