@@ -670,17 +670,31 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
  */
 export const resolveExerciseAlias = (userInput: string, queueExercises: string[]): string[] => {
   const lowerInput = userInput.toLowerCase().trim();
-  
+
+  if (!lowerInput) {
+    return [];
+  }
+
   // Check if input matches an alias
   const aliasMatches = EXERCISE_ALIASES[lowerInput];
   if (aliasMatches) {
     // Return only exercises that exist in the queue
-    return aliasMatches.filter(name => 
+    const matchedInQueue = aliasMatches.filter(name =>
       queueExercises.some(qe => qe.toLowerCase() === name.toLowerCase())
     );
+
+    if (matchedInQueue.length > 0) {
+      return matchedInQueue;
+    }
   }
-  
-  return [];
+
+  // Fallback to direct queue matching for canonical exercise names that are already in queue.
+  const directMatches = queueExercises.filter((exerciseName) => {
+    const lowerExerciseName = exerciseName.toLowerCase();
+    return lowerExerciseName === lowerInput || lowerExerciseName.includes(lowerInput) || lowerInput.includes(lowerExerciseName);
+  });
+
+  return directMatches;
 };
 
 // =============================================================================
