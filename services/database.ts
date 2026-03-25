@@ -539,6 +539,19 @@ export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): v
     if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
       throw new Error(`Invalid queue item "${item.id}": exercises must be a non-empty array.`);
     }
+
+    for (const exercise of item.exercises) {
+      if (!exercise) {
+        throw new Error(`Invalid queue item "${item.id}": exercise entry is missing.`);
+      }
+
+      if (exercise.hasCustomisedSets) {
+        const sets = Number.parseInt(exercise.sets, 10);
+        if (!Number.isInteger(sets) || sets < 1) {
+          throw new Error(`Invalid queue item "${item.id}": customised set semantics are invalid.`);
+        }
+      }
+    }
   }
 };
 
