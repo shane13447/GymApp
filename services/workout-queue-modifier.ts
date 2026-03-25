@@ -8,6 +8,35 @@ import { getExerciseVariantLabel } from '@/lib/utils';
 import * as db from '@/services/database';
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise, WorkoutQueueItem } from '@/types';
 
+interface CustomisedSetPayloadInput {
+  hasCustomisedSets: boolean;
+  repsBySet?: string[];
+  weightBySet?: string[];
+}
+
+export const normalizeCustomisedSetPayload = (payload: CustomisedSetPayloadInput): CustomisedSetPayloadInput => {
+  if (!payload.hasCustomisedSets) {
+    return {
+      ...payload,
+      repsBySet: payload.repsBySet ?? [],
+      weightBySet: payload.weightBySet ?? [],
+    };
+  }
+
+  const repsBySet = payload.repsBySet ?? [];
+  const weightBySet = payload.weightBySet ?? [];
+
+  if (repsBySet.length === 0 || weightBySet.length === 0 || repsBySet.length !== weightBySet.length) {
+    throw new Error('Invalid customised set payload');
+  }
+
+  return {
+    ...payload,
+    repsBySet,
+    weightBySet,
+  };
+};
+
 // =============================================================================
 // EXERCISE DATABASE - Uses exerciseSelection.json
 // =============================================================================
