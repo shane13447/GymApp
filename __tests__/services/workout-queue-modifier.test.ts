@@ -236,9 +236,20 @@ describe('resolveExerciseAlias', () => {
       expect(result).toContain('Leg Extensions');
     });
 
-    it('should resolve "curls" to matching exercises', () => {
-      const result = resolveExerciseAlias('curls', queueExercises);
-      expect(result).toContain('Seated Dumbbell Bicep Curl');
+    it('resolves aliases consistently across modify and generation resolvers', () => {
+      const queue = [
+        createQueueItem({
+          id: 'q-alias',
+          exercises: [createExercise({ name: 'Barbell Curls', exerciseInstanceId: 'q-alias:e0' })],
+        }),
+      ];
+
+      const queueExercises = queue.flatMap((item) => item.exercises.map((exercise) => exercise.name));
+      const modifyResolverMatches = resolveExerciseAlias('barbell curls', queueExercises);
+      const generationResolverMatches = extractTargetExercises('increase barbell curls weight by 5kg', queue);
+
+      expect(modifyResolverMatches).toEqual(generationResolverMatches);
+      expect(generationResolverMatches).toEqual(['Barbell Curls']);
     });
   });
 
