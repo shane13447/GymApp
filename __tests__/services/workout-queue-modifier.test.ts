@@ -29,6 +29,7 @@ import {
     fuzzyMatchExerciseName,
     getLastQueueParseFailureReason,
     getSimilarity,
+    normalizeCustomisedSetPayload,
     parseQueueFormatResponse,
     preprocessMuscleGroupRequest,
     repairQueue,
@@ -96,6 +97,67 @@ const createTestQueue = (): WorkoutQueueItem[] => [
     ],
   }),
 ];
+
+describe('customised set payload handling', () => {
+  it('preserves customised set intent through queue mutation apply path', () => {
+    const originalQueue = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Leg Press',
+            hasCustomisedSets: true,
+            weight: '120',
+            reps: '10',
+            sets: '4',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      }),
+    ];
+
+    const parsedQueue = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({
+            name: 'Leg Press',
+            hasCustomisedSets: false,
+            weight: '125',
+            reps: '10',
+            sets: '4',
+            exerciseInstanceId: 'q0:e0',
+          }),
+        ],
+      }),
+    ];
+
+    const repaired = repairQueueWithIntent(originalQueue, parsedQueue, 'increase leg press weight to 125', [
+      {
+        queueItemId: 'q0',
+        dayNumber: 1,
+        exerciseIndex: 0,
+        exerciseInstanceId: 'q0:e0',
+        name: 'Leg Press',
+        displayName: 'Leg Press',
+      },
+    ]);
+
+    expect(repaired[0].exercises[0].hasCustomisedSets).toBe(true);
+  });
+
+  it('rejects invalid customised-set payloads with mismatched set semantics', () => {
+    expect(() =>
+      normalizeCustomisedSetPayload({
+        hasCustomisedSets: true,
+        repsBySet: ['10', '10'],
+        weightBySet: ['80'],
+      })
+    ).toThrow();
+  });
+});
 
 // =============================================================================
 // findExerciseByName
