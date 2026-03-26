@@ -103,6 +103,8 @@ type SeedCatalogEntry = {
   isCompound?: boolean;
 };
 
+// Metro Android bundling failed to resolve these fixtures when they used uppercase .JSON extensions.
+// Fix: keep the fixture filenames and require paths in lowercase .json so Metro's resolver (which includes "json") can resolve them reliably.
 const testProgramFixtureRaw = require('../data/TestProgram.json') as unknown;
 const testProgram2FixtureRaw = require('../data/TestProgram2.json') as unknown;
 
