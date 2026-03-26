@@ -5,12 +5,20 @@ jest.mock('@/services/database', () => ({
   clearWorkoutQueue: jest.fn(),
 }));
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-baseline';
 import { materializeCanonicalFixtureQueue } from '@/services/coach/prompt-test-runner';
 
 describe('headless gate baseline fixture', () => {
+  it('uses lowercase json fixture filename on disk', () => {
+    const dataDir = path.resolve(__dirname, '../../data');
+    const entries = readdirSync(dataDir);
+
+    expect(entries).toContain('TestProgram.json');
+    expect(entries).not.toContain('TestProgram.JSON');
+  });
+
   it('is sourced from data/TestProgram.json', () => {
     const fixturePath = path.resolve(__dirname, '../../data/TestProgram.json');
 
