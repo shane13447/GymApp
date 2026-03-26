@@ -148,6 +148,8 @@ export enum TrainingGoal {
   ImproveOverallHealth = 'improve_overall_health',
 }
 
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+
 /**
  * User profile information for training preferences
  */
@@ -158,6 +160,9 @@ export interface UserProfile {
   goalWeight: number | null;
   trainingGoal: TrainingGoal | null;
   targetSetsPerWeek: number | null;
+  experienceLevel: ExperienceLevel | null;
+  trainingDaysPerWeek: number | null;
+  sessionDurationMinutes: number | null;
 }
 
 /**
@@ -188,6 +193,7 @@ export enum ProgramViewMode {
 export enum CoachMode {
   Chat = 'chat',
   ModifyWorkout = 'modify_workout',
+  GenerateProgram = 'generate_program',
 }
 
 /**
