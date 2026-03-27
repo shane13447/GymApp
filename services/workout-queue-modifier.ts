@@ -3,8 +3,39 @@
  * Handles AI-powered workout queue modifications using compressed encoding
  */
 
-import exercisesData from '@/data/exerciseSelection.json';
-import { getExerciseVariantLabel } from '@/lib/utils';
+import { JOINT_INJURY_MAP } from '@/constants/joint-injury-map';
+
+// =============================================================================
+// WEIGHT ROUNDING - Round to nearest 0.5kg for coach-modified queue items
+// =============================================================================
+
+/**
+ * Rounds a weight to the nearest 0.5kg increment.
+ * Example: 82.74 -> 82.5, 82.76 -> 83.0
+ * 
+ * Used only in the coach modify-workout queue flow.
+ * Does NOT apply to manual program creation, ActiveWorkout logging, or history.
+ */
+export const roundWeightToNearestHalfKg = (weight: number | string): string => {
+  const numericWeight = typeof weight === 'string' ? parseFloat(weight) : weight;
+  if (isNaN(numericWeight)) {
+    return String(weight);
+  }
+  // Round to nearest 0.5: multiply by 2, round, divide by 2
+  const rounded = Math.round(numericWeight * 2) / 2;
+  return rounded.toFixed(1);
+};
+
+/**
+ * Checks if rounding should be applied for a given modification context.
+ * Only applies to coach-initiated queue modifications.
+ */
+export const isCoachQueueModification = (context?: string): boolean => {
+  // Could check context string for "coach" or "modify-workout"
+  // For now, always round when called from coach flow
+  return true;
+};
+import exercisesData from '@/data/exerciseSelection.json';import { getExerciseVariantLabel } from '@/lib/utils';
 import * as db from '@/services/database';
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise, WorkoutQueueItem } from '@/types';
 
@@ -846,12 +877,7 @@ const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
   deadlifting: ['deadlift', 'rdl', 'romanian deadlift', 'hinge', 'good morning'],
 };
 
-const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, string[]> = {
-  wrist: ['forearms'],
-  shoulder: ['shoulders', 'chest', 'triceps'],
-  elbow: ['forearms', 'biceps', 'triceps'],
-  knee: ['quads', 'hamstrings', 'glutes', 'calves'],
-};
+const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, readonly string[]> = JOINT_INJURY_MAP;
 
 const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[] => {
   const candidateTokens = [
@@ -1250,6 +1276,53 @@ const preprocessLLMResponse = (response: string): string => {
   }
   
   return fixed;
+};
+
+export const normalizeCoachModifiedWeight = (weight: string): string => {
+  const numericWeight = Number(weight);
+  if (!Number.isFinite(numericWeight)) {
+    return weight;
+  }
+
+  return (Math.round(numericWeight * 2) / 2).toFixed(1);
+};
+
+export const roundCoachModifiedQueueWeights = (
+  originalQueue: WorkoutQueueItem[],
+  parsedQueue: WorkoutQueueItem[]
+): WorkoutQueueItem[] => {
+  return parsedQueue.map((parsedItem, itemIndex) => {
+    const originalItem = originalQueue.find((item) => item.id === parsedItem.id) ?? originalQueue[itemIndex];
+
+    return {
+      ...parsedItem,
+      exercises: parsedItem.exercises.map((exercise, exerciseIndex) => {
+        const originalExercise =
+          originalItem?.exercises.find(
+            (candidate) =>
+              candidate.exerciseInstanceId &&
+              exercise.exerciseInstanceId &&
+              candidate.exerciseInstanceId === exercise.exerciseInstanceId
+          ) ?? originalItem?.exercises[exerciseIndex];
+
+        if (!originalExercise) {
+          return {
+            ...exercise,
+            weight: normalizeCoachModifiedWeight(exercise.weight),
+          };
+        }
+
+        if (exercise.weight === originalExercise.weight) {
+          return exercise;
+        }
+
+        return {
+          ...exercise,
+          weight: normalizeCoachModifiedWeight(exercise.weight),
+        };
+      }),
+    };
+  });
 };
 
 export const parseQueueFormatResponse = (
