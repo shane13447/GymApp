@@ -113,6 +113,13 @@ const parseDraftInput = (input: unknown): unknown => {
   return input;
 };
 
+/**
+ * BUG (ChatGPT audit): isAllowedTopLevelKey rejects any JSON key not in {id, name, workoutDays}.
+ * If the LLM returns extra metadata (e.g., "version", "notes"), the draft is rejected entirely
+ * rather than ignoring unknown keys. This makes the validator fragile against LLM output
+ * variability. Fix: During the refactor, switch to ignoring unknown keys instead of rejecting,
+ * or expand the allowlist to include known metadata fields.
+ */
 const isAllowedTopLevelKey = (key: string): boolean => {
   return key === 'id' || key === 'name' || key === 'workoutDays';
 };
