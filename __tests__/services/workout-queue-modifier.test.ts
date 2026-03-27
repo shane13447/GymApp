@@ -29,6 +29,7 @@ import {
     fuzzyMatchExerciseName,
     getLastQueueParseFailureReason,
     getSimilarity,
+    normalizeCoachModifiedWeight,
     normalizeCustomisedSetPayload,
     parseQueueFormatResponse,
     preprocessMuscleGroupRequest,
@@ -36,6 +37,7 @@ import {
     repairQueueWithIntent,
     resolveExerciseAlias,
     restoreDroppedExercises,
+    roundCoachModifiedQueueWeights,
     validateChanges,
     validateQueueStructure,
 } from '@/services/workout-queue-modifier';
@@ -156,6 +158,42 @@ describe('customised set payload handling', () => {
         weightBySet: ['80'],
       })
     ).toThrow();
+  });
+});
+
+describe('coach modify-workout queue weight rounding', () => {
+  it('rounds coach-modified queue weights to nearest 0.5kg (82.74 -> 82.5, 82.76 -> 83.0)', () => {
+    expect(normalizeCoachModifiedWeight('82.74')).toBe('82.5');
+    expect(normalizeCoachModifiedWeight('82.76')).toBe('83.0');
+  });
+
+  it('only rounds changed weights and preserves untouched weights', () => {
+    const originalQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '80', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Dumbbell Flyes', weight: '15', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const parsedQueue: WorkoutQueueItem[] = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        exercises: [
+          createExercise({ name: 'Barbell Bench Press', weight: '82.74', exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Dumbbell Flyes', weight: '15', exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const rounded = roundCoachModifiedQueueWeights(originalQueue, parsedQueue);
+
+    expect(rounded[0].exercises[0].weight).toBe('82.5');
+    expect(rounded[0].exercises[1].weight).toBe('15');
   });
 });
 
@@ -3170,7 +3208,54 @@ describe('semantic outcome evaluators', () => {
   });
 });
 
-describe('evaluatePromptIntentOutcome', () => {
+describe('joint/body-part injury mapping', () => {
+  it('detects wrist injury request and targets wrist-loaded exercises', () => {
+    const queue = [
+      createQueueItem({
+        id: 'q0',
+        dayNumber: 1,
+        position: 0,
+        exercises: [
+          createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], exerciseInstanceId: 'q0:e0' }),
+          createExercise({ name: 'Barbell Back Squat', muscle_groups_worked: ['quads', 'glutes'], exerciseInstanceId: 'q0:e1' }),
+        ],
+      }),
+    ];
+
+    const targets = extractTargetExerciseRefs('my wrist is sore', queue);
+    const targetNames = targets.map((target) => target.name);
+
+    expect(targetNames).toContain('Barbell Curls');
+    expect(targetNames).not.toContain('Barbell Back Squat');
+  });
+
+  it('applies injury targeting across full queued workouts before slider phase', () => {
+    const queueOfFive: WorkoutQueueItem[] = [
+      createQueueItem({ id: 'q0', position: 0, exercises: [createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], weight: '40', exerciseInstanceId: 'q0:e0' })] }),
+      createQueueItem({ id: 'q1', position: 1, exercises: [createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], weight: '42', exerciseInstanceId: 'q1:e0' })] }),
+      createQueueItem({ id: 'q2', position: 2, exercises: [createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], weight: '44', exerciseInstanceId: 'q2:e0' })] }),
+      createQueueItem({ id: 'q3', position: 3, exercises: [createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], weight: '46', exerciseInstanceId: 'q3:e0' })] }),
+      createQueueItem({ id: 'q4', position: 4, exercises: [createExercise({ name: 'Barbell Curls', muscle_groups_worked: ['biceps', 'forearms'], weight: '48', exerciseInstanceId: 'q4:e0' })] }),
+    ];
+
+    const parsedQueue = queueOfFive.map((item) => ({
+      ...item,
+      exercises: item.exercises.map((exercise) => ({
+        ...exercise,
+        weight: exercise.weight,
+      })),
+    }));
+
+    const prompt = 'my wrist feels a little irritated today';
+    const targeted = extractTargetExerciseRefs(prompt, queueOfFive);
+    const repaired = repairQueueWithIntent(queueOfFive, parsedQueue, prompt, targeted);
+
+    expect(repaired.every((item) => item.exercises.length > 0)).toBe(true);
+    const modifiedWorkoutCount = repaired.filter((item, index) => item.exercises[0].weight !== queueOfFive[index].exercises[0].weight).length;
+    expect(modifiedWorkoutCount).toBe(5);
+  });
+});
+
   it('fails intent outcome when one requested multi-reps target is not satisfied', () => {
     const originalQueue: WorkoutQueueItem[] = [
       createQueueItem({
@@ -3617,8 +3702,6 @@ describe('evaluatePromptIntentOutcome', () => {
 
     expect(result.passed).toBe(true);
   });
-
-});
 
 describe('analyzeTestPromptQueueCoverage', () => {
   it('should report missing targets when prompt exercises are absent from the queue', () => {

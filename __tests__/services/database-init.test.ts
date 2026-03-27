@@ -30,6 +30,53 @@ describe('database initialization', () => {
     expect(execAsync).not.toHaveBeenCalledWith(expect.stringContaining('ALTER TABLE'));
   });
 
+  it('does not run seed reconciliation during getDatabase initialization', async () => {
+    const runAsync = jest.fn(async () => ({ lastInsertRowId: 1, changes: 1 }));
+
+    jest.doMock('expo-sqlite', () => ({
+      openDatabaseAsync: jest.fn(async () => ({
+        execAsync: jest.fn(async () => {}),
+        getAllAsync: jest.fn(async () => []),
+        getFirstAsync: jest.fn(async () => null),
+        runAsync,
+        getAllSync: jest.fn(),
+        getFirstSync: jest.fn(),
+      })),
+    }));
+
+    const { getDatabase } = await import('@/services/database');
+
+    await getDatabase();
+
+    expect(
+      runAsync.mock.calls.some((call) => String((call as unknown[])[0]).includes('INSERT OR IGNORE INTO programs'))
+    ).toBe(false);
+  });
+
+  it('runs seed reconciliation during deferred maintenance', async () => {
+    const runAsync = jest.fn(async () => ({ lastInsertRowId: 1, changes: 1 }));
+
+    jest.doMock('expo-sqlite', () => ({
+      openDatabaseAsync: jest.fn(async () => ({
+        execAsync: jest.fn(async () => {}),
+        getAllAsync: jest.fn(async () => []),
+        getFirstAsync: jest.fn(async () => null),
+        runAsync,
+        getAllSync: jest.fn(),
+        getFirstSync: jest.fn(),
+      })),
+    }));
+
+    const { getDatabase, runDeferredDatabaseMaintenance } = await import('@/services/database');
+
+    await getDatabase();
+    await runDeferredDatabaseMaintenance();
+
+    expect(
+      runAsync.mock.calls.some((call) => String((call as unknown[])[0]).includes('INSERT OR IGNORE INTO programs'))
+    ).toBe(true);
+  });
+
   it('initializes seed lifecycle states for both programs as pending when absent', async () => {
     const execAsync = jest.fn(async () => {});
     const getAllAsync = jest.fn(async () => []);
@@ -117,7 +164,8 @@ describe('database initialization', () => {
       })),
     }));
 
-    const { getAllPrograms } = await import('@/services/database');
+    const { getAllPrograms, runDeferredDatabaseMaintenance } = await import('@/services/database');
+    await runDeferredDatabaseMaintenance();
     const seededPrograms = await getAllPrograms();
 
     expect(seededPrograms.find((program) => program.id === 'seed-test-program')?.name).toBe('Test Program');
@@ -186,6 +234,7 @@ describe('database initialization', () => {
     }));
 
     const firstLoad = await import('@/services/database');
+    await firstLoad.runDeferredDatabaseMaintenance();
     await firstLoad.getAllPrograms();
 
     jest.resetModules();
@@ -195,6 +244,7 @@ describe('database initialization', () => {
     }));
 
     const secondLoad = await import('@/services/database');
+    await secondLoad.runDeferredDatabaseMaintenance();
     await secondLoad.getAllPrograms();
 
     expect(programs.filter((program) => program.id === 'seed-test-program')).toHaveLength(1);
@@ -347,7 +397,8 @@ describe('database initialization', () => {
       openDatabaseAsync: jest.fn(async () => db),
     }));
 
-    const { getAllPrograms } = await import('@/services/database');
+    const { getAllPrograms, runDeferredDatabaseMaintenance } = await import('@/services/database');
+    await runDeferredDatabaseMaintenance();
     const seededPrograms = await getAllPrograms();
 
     const repairedProgram = seededPrograms.find((program) => program.id === 'seed-test-program');
@@ -463,6 +514,7 @@ describe('database initialization', () => {
     }));
 
     const firstLoad = await import('@/services/database');
+    await firstLoad.runDeferredDatabaseMaintenance();
     await firstLoad.getAllPrograms();
 
     expect(programs.some((program) => program.id === 'seed-test-program')).toBe(true);
@@ -477,6 +529,7 @@ describe('database initialization', () => {
     }));
 
     const secondLoad = await import('@/services/database');
+    await secondLoad.runDeferredDatabaseMaintenance();
     await secondLoad.getAllPrograms();
 
     expect(programs.filter((program) => program.id === 'seed-test-program')).toHaveLength(1);
@@ -595,6 +648,7 @@ describe('database initialization', () => {
     }));
 
     const firstLoad = await import('@/services/database');
+    await firstLoad.runDeferredDatabaseMaintenance();
     await firstLoad.getAllPrograms();
     await firstLoad.deleteProgram('seed-test-program');
 
@@ -608,9 +662,11 @@ describe('database initialization', () => {
     }));
 
     const secondLoad = await import('@/services/database');
+    await secondLoad.runDeferredDatabaseMaintenance();
     await secondLoad.getAllPrograms();
 
     expect(programs.some((program) => program.id === 'seed-test-program')).toBe(false);
     expect(programs.filter((program) => program.id === 'seed-3day-full-body')).toHaveLength(1);
   });
 });
+

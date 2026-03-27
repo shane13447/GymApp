@@ -20,27 +20,23 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  
+
   // =============================================================================
-  // ORPHANED TIMER CLEANUP: Run on app startup
+  // STARTUP MAINTENANCE: Run deferred after shell mount
   // =============================================================================
-  // Problem: If the app is force-killed mid-workout, timer records remain in the
-  // database. When the user reopens the app, these stale timers could cause issues.
-  // Solution: Clean up expired/orphaned timers on every app launch.
+  // We still run seed reconciliation + orphaned timer cleanup on launch, but through
+  // deferred maintenance so startup responsibilities are centralized in the DB layer.
   useEffect(() => {
-    const cleanupTimers = async () => {
+    const runStartupMaintenance = async () => {
       try {
-        const deletedCount = await db.cleanupOrphanedTimers();
-        if (deletedCount > 0) {
-          console.log(`Cleaned up ${deletedCount} orphaned timer record(s)`);
-        }
+        await db.runDeferredDatabaseMaintenance();
       } catch (error) {
-        // Non-critical - just log and continue
-        console.error('Error cleaning up orphaned timers:', error);
+        // Non-critical - keep shell/navigation available even if maintenance fails
+        console.error('Error running deferred startup maintenance:', error);
       }
     };
-    
-    cleanupTimers();
+
+    runStartupMaintenance();
   }, []);
 
   return (

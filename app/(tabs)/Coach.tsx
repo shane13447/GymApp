@@ -248,6 +248,7 @@ export default function CoachScreen() {
   const [proposedChanges, setProposedChanges] = useState<ProposedChanges | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
+  const [queueHorizon, setQueueHorizon] = useState(3); // How many workouts can be modified (1-10)
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const [generatedProgramDraft, setGeneratedProgramDraft] = useState<Omit<Program, 'createdAt' | 'updatedAt'> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -595,6 +596,10 @@ export default function CoachScreen() {
           noMatchesFound,
         } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
 
+        // Apply queue horizon scope - limit to first N items for this request
+        const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
+        console.log(`[HORIZON] Modifying ${scopedWorkoutQueue.length} of ${workoutQueue.length} workouts (horizon: ${queueHorizon})`);
+
         // Store matched exercises for use in repair system
         // For muscle group requests, use matchedExercises from preprocessor
         // For other requests, extract from the original request
@@ -625,7 +630,7 @@ export default function CoachScreen() {
           );
         }
 
-        const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
+        const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
         console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
         console.log(
           `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
@@ -1018,6 +1023,40 @@ export default function CoachScreen() {
       </ThemedView>
 
       <ThemedView className="gap-4 mt-5">
+        {/* Queue Horizon Control - Only show in ModifyWorkout mode */}
+        {mode === CoachMode.ModifyWorkout && (
+          <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+            <ThemedText className="text-sm font-semibold mb-2">
+              Queue Modification Scope
+            </ThemedText>
+            <View className="flex-row items-center justify-between gap-2">
+              <Pressable
+                onPress={() => setQueueHorizon(Math.max(1, queueHorizon - 1))}
+                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
+                accessibilityLabel="Decrease queue horizon"
+              >
+                <ThemedText className="text-lg font-bold">−</ThemedText>
+              </Pressable>
+              <View className="flex-1 items-center">
+                <ThemedText className="text-xl font-bold">{queueHorizon}</ThemedText>
+                <ThemedText className="text-xs text-gray-500">
+                  {queueHorizon === 1 ? '1 workout' : `${queueHorizon} workouts`}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={() => setQueueHorizon(Math.min(10, queueHorizon + 1))}
+                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
+                accessibilityLabel="Increase queue horizon"
+              >
+                <ThemedText className="text-lg font-bold">+</ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText className="text-xs text-gray-500 mt-2 text-center">
+              Number of upcoming workouts the AI can modify
+            </ThemedText>
+          </View>
+        )}
+
         {/* Mode Selector */}
         <View className="flex-row gap-2">
           <Pressable
