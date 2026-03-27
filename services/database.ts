@@ -29,6 +29,17 @@ import * as SQLite from 'expo-sqlite';
 
 let db: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let maintenancePromise: Promise<void> | null = null;
+let maintenanceCompleted = false;
+
+const logStartupStage = (stage: string, detail?: Record<string, unknown>) => {
+  if (detail) {
+    console.log(`[startup][${stage}]`, detail);
+    return;
+  }
+
+  console.log(`[startup][${stage}]`);
+};
 
 /**
  * QUEUE GENERATION LOCK: Prevents race conditions when switching programs rapidly.
@@ -40,6 +51,61 @@ let currentQueueGenerationId = 0;
 const serializeVariant = (variant?: ExerciseVariant | null): string =>
   variant ? JSON.stringify(variant) : '';
 
+const parseStringArrayField = (
+  raw: string | null | undefined,
+  fieldName: string,
+  context: Record<string, unknown>
+): string[] => {
+  if (!raw || !raw.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      console.warn('[database][json_parse_fallback]', { field: fieldName, reason: 'not_array', ...context });
+      return [];
+    }
+
+    return parsed.filter((value): value is string => typeof value === 'string');
+  } catch (error) {
+    console.warn('[database][json_parse_fallback]', {
+      field: fieldName,
+      reason: 'parse_error',
+      detail: error instanceof Error ? error.message : String(error),
+      ...context,
+    });
+    return [];
+  }
+};
+
+const parseNumberArrayField = (
+  raw: string | null | undefined,
+  fieldName: string,
+  context: Record<string, unknown>
+): number[] => {
+  if (!raw || !raw.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      console.warn('[database][json_parse_fallback]', { field: fieldName, reason: 'not_array', ...context });
+      return [];
+    }
+
+    return parsed.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  } catch (error) {
+    console.warn('[database][json_parse_fallback]', {
+      field: fieldName,
+      reason: 'parse_error',
+      detail: error instanceof Error ? error.message : String(error),
+      ...context,
+    });
+    return [];
+  }
+};
 const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
   if (!variantJson || !variantJson.trim()) {
     return null;
@@ -81,14 +147,7 @@ const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
   }
 };
 
-
-
 type SeedFixtureExercise = {
-  name: string;
-  reps: number[];
-  weight: number[];
-  variant?: ExerciseVariant | null;
-};
 
 type SeedFixtureDay = {
   dayNumber: number;
@@ -103,6 +162,8 @@ type SeedCatalogEntry = {
   isCompound?: boolean;
 };
 
+// Keep fixture imports on lowercase .json extensions.
+// Metro's resolver extension list is lowercase-only (json), and .JSON can fail during Android bundling.
 const testProgramFixtureRaw = require('../data/TestProgram.json') as unknown;
 const testProgram2FixtureRaw = require('../data/TestProgram2.json') as unknown;
 
@@ -479,8 +540,14 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   // Start initialization and store the promise so other callers can wait
   initPromise = (async () => {
     try {
+      logStartupStage('db_open_start');
       const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      logStartupStage('db_open_end');
+
+      logStartupStage('db_schema_start');
       await initializeDatabase(database);
+      logStartupStage('db_schema_end');
+
       db = database;
       return database;
     } catch (error) {
@@ -491,6 +558,35 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   })();
 
   return initPromise;
+};
+
+export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
+  if (maintenanceCompleted) {
+    return;
+  }
+
+  if (maintenancePromise) {
+    return maintenancePromise;
+  }
+
+  maintenancePromise = (async () => {
+    const database = await getDatabase();
+
+    logStartupStage('seed_start');
+    await seedTestProgramsIfMissing(database);
+    logStartupStage('seed_end');
+
+    logStartupStage('timer_cleanup_start');
+    await cleanupOrphanedTimersWithDatabase(database);
+    logStartupStage('timer_cleanup_end');
+
+    maintenanceCompleted = true;
+  })().catch((error) => {
+    maintenancePromise = null;
+    throw error;
+  });
+
+  return maintenancePromise;
 };
 
 const runInTransaction = async <T>(
@@ -771,6 +867,9 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       goal_weight REAL,
       training_goal TEXT,
       target_sets_per_week INTEGER,
+      experience_level TEXT,
+      training_days_per_week INTEGER,
+      session_duration_minutes INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -812,8 +911,9 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
   await ensureColumnExists('queue_exercises', 'variant_json', "TEXT DEFAULT ''");
   await ensureColumnExists('user_preferences', 'seed_test_program_state', "TEXT DEFAULT 'pending'");
   await ensureColumnExists('user_preferences', 'seed_3day_full_body_state', "TEXT DEFAULT 'pending'");
-
-  await seedTestProgramsIfMissing(database);
+  await ensureColumnExists('user_profile', 'experience_level', 'TEXT');
+  await ensureColumnExists('user_profile', 'training_days_per_week', 'INTEGER');
+  await ensureColumnExists('user_profile', 'session_duration_minutes', 'INTEGER');
 };
 
 export type SeedLifecycleState = 'pending' | 'seeded' | 'deleted_by_user';
@@ -985,6 +1085,9 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     goal_weight: number | null;
     training_goal: string | null;
     target_sets_per_week: number | null;
+    experience_level: string | null;
+    training_days_per_week: number | null;
+    session_duration_minutes: number | null;
   }>('SELECT * FROM user_profile WHERE id = ?', ['default']);
 
   if (!result) {
@@ -996,6 +1099,9 @@ export const getUserProfile = async (): Promise<UserProfile> => {
       goalWeight: null,
       trainingGoal: null,
       targetSetsPerWeek: null,
+      experienceLevel: null,
+      trainingDaysPerWeek: null,
+      sessionDurationMinutes: null,
     };
   }
 
@@ -1006,6 +1112,9 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     goalWeight: result.goal_weight,
     trainingGoal: result.training_goal as TrainingGoal | null,
     targetSetsPerWeek: result.target_sets_per_week,
+    experienceLevel: (result.experience_level as UserProfile['experienceLevel']) ?? null,
+    trainingDaysPerWeek: result.training_days_per_week,
+    sessionDurationMinutes: result.session_duration_minutes,
   };
 };
 
@@ -1038,6 +1147,18 @@ export const updateUserProfile = async (
   if (profile.targetSetsPerWeek !== undefined) {
     updates.push('target_sets_per_week = ?');
     values.push(profile.targetSetsPerWeek);
+  }
+  if (profile.experienceLevel !== undefined) {
+    updates.push('experience_level = ?');
+    values.push(profile.experienceLevel);
+  }
+  if (profile.trainingDaysPerWeek !== undefined) {
+    updates.push('training_days_per_week = ?');
+    values.push(profile.trainingDaysPerWeek);
+  }
+  if (profile.sessionDurationMinutes !== undefined) {
+    updates.push('session_duration_minutes = ?');
+    values.push(profile.sessionDurationMinutes);
   }
 
   if (updates.length > 0) {
@@ -1237,7 +1358,10 @@ const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]
       exercises: exercises.map((ex) => ({
         name: ex.name,
         equipment: ex.equipment,
-        muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'program_exercises.muscle_groups', {
+          workout_day_id: day.id,
+          exercise: ex.name,
+        }),
         isCompound: !!ex.is_compound,
         weight: ex.weight.toString(),
         reps: ex.reps.toString(),
@@ -1365,6 +1489,61 @@ export const updateProgram = async (program: Program): Promise<void> => {
   });
 };
 
+const createDuplicateProgramId = (sourceProgramId: string): string => {
+  return `${sourceProgramId}-copy-${Date.now()}`;
+};
+
+const cloneProgramExerciseForDuplicate = (exercise: ProgramExercise): ProgramExercise => ({
+  ...exercise,
+  muscle_groups_worked: [...exercise.muscle_groups_worked],
+  variant: exercise.variant
+    ? {
+        ...exercise.variant,
+        extras: exercise.variant.extras ? [...exercise.variant.extras] : undefined,
+      }
+    : null,
+  variantOptions: exercise.variantOptions
+    ? exercise.variantOptions.map((option) => ({
+        ...option,
+        aliases: option.aliases ? [...option.aliases] : undefined,
+      }))
+    : undefined,
+  aliases: exercise.aliases ? [...exercise.aliases] : undefined,
+});
+
+const cloneProgramForDuplicate = (program: Program, duplicateName: string): Omit<Program, 'createdAt' | 'updatedAt'> => ({
+  id: createDuplicateProgramId(program.id),
+  name: duplicateName,
+  workoutDays: program.workoutDays.map((day) => ({
+    dayNumber: day.dayNumber,
+    exercises: day.exercises.map(cloneProgramExerciseForDuplicate),
+  })),
+});
+
+export const duplicateProgram = async (programId: string, duplicateNameRaw: string): Promise<Program> => {
+  const duplicateName = duplicateNameRaw.trim();
+  if (!duplicateName) {
+    throw new Error('Program name is required');
+  }
+
+  const sourceProgram = await getProgramById(programId);
+  if (!sourceProgram) {
+    throw new Error('Program not found');
+  }
+
+  const allPrograms = await getAllPrograms();
+  const hasNameCollision = allPrograms.some(
+    (program) => program.id !== programId && program.name.toLowerCase() === duplicateName.toLowerCase()
+  );
+
+  if (hasNameCollision) {
+    throw new Error('Program name already exists');
+  }
+
+  const duplicateDraft = cloneProgramForDuplicate(sourceProgram, duplicateName);
+  return createProgram(duplicateDraft);
+};
+
 /**
  * Delete a program
  */
@@ -1445,7 +1624,10 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
       exercises: exercises.map((ex) => ({
         name: ex.name,
         equipment: ex.equipment,
-        muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'workout_exercises.muscle_groups', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
         isCompound: !!ex.is_compound,
         weight: ex.weight.toString(),
         reps: ex.reps.toString(),
@@ -1456,8 +1638,14 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
         variant: parseVariant(ex.variant_json),
         loggedWeight: ex.logged_weight,
         loggedReps: ex.logged_reps,
-        loggedSetWeights: JSON.parse(ex.logged_set_weights ?? '[]') as number[],
-        loggedSetReps: JSON.parse(ex.logged_set_reps ?? '[]') as number[],
+        loggedSetWeights: parseNumberArrayField(ex.logged_set_weights ?? '[]', 'workout_exercises.logged_set_weights', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
+        loggedSetReps: parseNumberArrayField(ex.logged_set_reps ?? '[]', 'workout_exercises.logged_set_reps', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
       })),
     });
   }
@@ -1640,7 +1828,10 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
         exerciseInstanceId: `${item.id}:e${ex.position}`,
         name: ex.name,
         equipment: ex.equipment,
-        muscle_groups_worked: JSON.parse(ex.muscle_groups),
+        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'queue_exercises.muscle_groups', {
+          queue_item_id: item.id,
+          exercise: ex.name,
+        }),
         isCompound: !!ex.is_compound,
         weight: ex.weight.toString(),
         reps: ex.reps.toString(),
@@ -2222,23 +2413,34 @@ export const updateTimerSetsCompleted = async (
   );
 };
 
+const cleanupOrphanedTimersWithDatabase = async (database: SQLite.SQLiteDatabase): Promise<number> => {
+  const now = Date.now();
+
+  const result = await database.runAsync(
+    'DELETE FROM active_rest_timers WHERE end_timestamp < ?',
+    [now]
+  );
+
+  return result.changes;
+};
+
 /**
  * Clean up orphaned/expired timer records
  * ORPHANED TIMER FIX: Called on app startup to remove timers that:
  * 1. Have already expired (end_timestamp < now)
  * 2. Are unreasonably old (end_timestamp was set more than 15 min ago)
- * 
+ *
  * This handles scenarios where the app was force-killed mid-workout
  * and timer records were left in the database.
- * 
+ *
  * WHY WE ONLY USE end_timestamp:
- * Previously, we tried to use both end_timestamp (milliseconds) and 
+ * Previously, we tried to use both end_timestamp (milliseconds) and
  * created_at (text datetime). This didn't work because:
  * - end_timestamp is stored in milliseconds (e.g., 1705520400000)
  * - created_at is stored as text (e.g., "2025-01-17 10:00:00")
  * - SQLite datetime functions expect seconds, not milliseconds
  * - Comparing datetime strings with different formats is unreliable
- * 
+ *
  * The fix: Use end_timestamp for everything. We can derive "age" from it:
  * - A timer created at time T with duration D has end_timestamp = T + D
  * - So the timer was created at (end_timestamp - rest_duration * 1000)
@@ -2246,19 +2448,7 @@ export const updateTimerSetsCompleted = async (
  */
 export const cleanupOrphanedTimers = async (): Promise<number> => {
   const database = await getDatabase();
-  const now = Date.now();
-  
-  // Delete all timers that have already expired (end_timestamp in the past).
-  // Rest timers are only valid while counting down. Once expired, they're no longer
-  // useful and should be cleaned up to prevent stale data issues.
-  // 
-  // Note: end_timestamp is stored in milliseconds, consistent with Date.now()
-  const result = await database.runAsync(
-    'DELETE FROM active_rest_timers WHERE end_timestamp < ?',
-    [now]
-  );
-  
-  return result.changes;
+  return cleanupOrphanedTimersWithDatabase(database);
 };
 
 // =============================================================================
@@ -2313,5 +2503,7 @@ export const closeDatabase = async (): Promise<void> => {
     await db.closeAsync();
     db = null;
     initPromise = null;
+    maintenancePromise = null;
+    maintenanceCompleted = false;
   }
 };
