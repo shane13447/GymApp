@@ -565,6 +565,15 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   return initPromise;
 };
 
+/**
+ * Deferred database maintenance
+ *
+ * BUG (ChatGPT audit): runDeferredDatabaseMaintenance contains seed seeding and orphaned timer
+ * cleanup that could block first render if called synchronously. The deferred pattern is correct
+ * for startup performance, but the function currently has no error recovery for partial failures
+ * (e.g., seed succeeds but timer cleanup fails). Fix: Add per-step try/catch with fallback
+ * behaviour during the refactor; each maintenance step should be independently resilient.
+ */
 export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
   if (maintenanceCompleted) {
     return;

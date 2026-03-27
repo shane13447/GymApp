@@ -1,6 +1,11 @@
 /**
  * Home Screen
  * Dashboard with quick actions and workout summary
+ *
+ * BUG (ChatGPT audit): HomeLoadingSkeleton (line 75) is defined but never rendered.
+ * When loadState === 'initial_loading', a generic spinner is shown instead of the
+ * purpose-built skeleton. Fix: render HomeLoadingSkeleton during initial load; the
+ * UI update will integrate this naturally.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';

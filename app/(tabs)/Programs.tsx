@@ -500,6 +500,9 @@ export default function ProgramsScreen() {
     });
   };
 
+  // BUG (ChatGPT audit): Alert.prompt is iOS-only and crashes on Android.
+  // Fix: Replace with a cross-platform dialog (e.g., a modal with TextInput) when
+  // the refactor/UI update introduces shared dialog components.
   const handleDuplicateProgram = (programId: string, sourceName: string) => {
     const defaultName = `${sourceName} Copy`;
 
