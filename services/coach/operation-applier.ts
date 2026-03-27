@@ -102,7 +102,9 @@ const applyOperationToExercise = (
       break;
       
     case 'swap_variant':
-      // Variant handling would go here
+      // BUG: swap_variant is a stub - no variant swapping logic implemented.
+      // If wired into production, variant requests would silently no-op.
+      // TODO: Implement variant swapping using operation.value.variant
       break;
       
     default:
@@ -182,7 +184,10 @@ export const applyOperations = (
       }
       
       case 'add_exercise':
-        // Add exercise would require more context - would typically be provided by LLM
+        // BUG: add_exercise is explicitly "not fully implemented" - this is a shipped
+        // feature path stub. If wired into production, add requests would silently no-op
+        // while the console warns about it. Needs exercise name, weight, reps, sets from
+        // operation.value and insertion logic into the target queue item.
         console.warn(`[OPERATION APPLIER] add_exercise not fully implemented`);
         break;
         

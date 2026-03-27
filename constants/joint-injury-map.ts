@@ -50,7 +50,11 @@ export const JOINT_ALIASES: Record<string, string> = {
   lowerback: 'lower-back',
   lumbar: 'lower-back',
   spine: 'lower-back',
-  back: 'lower-back',
+  // BUG FIX: "back" -> "lower-back" alias is wrong. Generic "back pain" is not
+  // necessarily lower back - could be upper back, mid back, rhomboids, etc.
+  // Mapping it to lower-back drives the wrong substitutions and load reductions
+  // (glutes, hamstrings) when the user might mean chest/shoulders/upper back.
+  // Removed: back: 'lower-back',
 } as const;
 
 /**

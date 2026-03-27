@@ -105,9 +105,12 @@ const validateOperation = (op: unknown, index: number): string[] => {
     errors.push(`Operation ${index}: missing target`);
   } else {
     const target = operation.target as Record<string, unknown>;
-    const hasValidTarget = target.queueItemId || target.dayNumber || target.exerciseName;
+    // BUG FIX: Previously rejected targets with only exerciseInstanceId, even though
+    // operation-applier.ts explicitly supports exerciseInstanceId lookup first
+    // (findExerciseInQueue checks it before dayNumber/exerciseName). Added it here.
+    const hasValidTarget = target.queueItemId || target.dayNumber || target.exerciseName || target.exerciseInstanceId;
     if (!hasValidTarget) {
-      errors.push(`Operation ${index}: target must specify queueItemId, dayNumber, or exerciseName`);
+      errors.push(`Operation ${index}: target must specify queueItemId, dayNumber, exerciseName, or exerciseInstanceId`);
     }
   }
   
@@ -156,9 +159,16 @@ export const validateOperationResponse = (responseText: string): OperationValida
   
   const response = parsed as Record<string, unknown>;
   
-  // Check version
+  // BUG FIX: Previously only warned on version mismatch, making future contract
+  // drift easy to accept partially and misapply. Now fails hard so incompatible
+  // versions are caught immediately rather than silently producing wrong results.
   if (response.version !== 1) {
-    warnings.push(`Expected version 1, got ${response.version}`);
+    return {
+      isValid: false,
+      errors: [`Expected schema version 1, got ${response.version}`],
+      warnings,
+      validatedOperations: [],
+    };
   }
   
   // Validate operations array
