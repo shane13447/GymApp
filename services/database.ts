@@ -148,6 +148,11 @@ const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
 };
 
 type SeedFixtureExercise = {
+  name: string;
+  variant?: Record<string, string | string[]>;
+  reps: number[];
+  weight: number[];
+};
 
 type SeedFixtureDay = {
   dayNumber: number;
