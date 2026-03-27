@@ -1287,6 +1287,12 @@ export const normalizeCoachModifiedWeight = (weight: string): string => {
   return (Math.round(numericWeight * 2) / 2).toFixed(1);
 };
 
+// BUG: roundCoachModifiedQueueWeights is defined and tested but never called in the
+// live modify-workout path. The parseQueueFormatResponse path in Coach.tsx parses TOON
+// directly without calling this function, so the documented rounding behavior
+// (nearest 0.5kg for coach-modified weights) is not actually enforced in production.
+// Fix: call this function after parseQueueFormatResponse and before compareWorkoutQueues
+// in the Coach.tsx modify flow.
 export const roundCoachModifiedQueueWeights = (
   originalQueue: WorkoutQueueItem[],
   parsedQueue: WorkoutQueueItem[]
@@ -3267,9 +3273,16 @@ const inferTargetedNumericIntent = (
         /sets?\s*from\s*\d+\s*to\s*(\d+)/i,
         /from\s*\d+\s*to\s*(\d+)\s*sets?/i,
       ],
+      // BUG FIX: Original patterns used (?:kg)? before "to" which could fail to bind
+      // the "kg" token in some string positions, causing the regex to miss "from X to Y"
+      // and fall back to the first number in the clause (the source value).
+      // E.g. "change weight from 80kg to 100" would match "80" instead of "100".
+      // Fix: explicit "kg to" variants checked first.
       weight: [
-        /weight\s*from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)/i,
-        /from\s*\d+(?:\.\d+)?\s*(?:kg)?\s*to\s*(\d+(?:\.\d+)?)(?:\s*kg)?\s*weight/i,
+        /weight\s*from\s*\d+(?:\.\d+)?\s*kg\s*to\s*(\d+(?:\.\d+)?)/i,
+        /weight\s*from\s*\d+(?:\.\d+)?\s*to\s*(\d+(?:\.\d+)?)/i,
+        /from\s*\d+(?:\.\d+)?\s*kg\s*to\s*(\d+(?:\.\d+)?)(?:\s*kg)?\s*weight/i,
+        /from\s*\d+(?:\.\d+)?\s*to\s*(\d+(?:\.\d+)?)(?:\s*kg)?\s*weight/i,
       ],
     };
 
