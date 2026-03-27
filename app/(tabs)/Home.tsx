@@ -181,12 +181,16 @@ const getMuscleGroupSummary = (workout: WorkoutQueueItem): string => {
   return `${groups.slice(0, 3).join(', ')} +${groups.length - 3}`;
 };
 
+type HomeLoadState = 'initial_loading' | 'refreshing' | 'loaded' | 'failed';
+
 export default function HomeScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadState, setLoadState] = useState<HomeLoadState>('initial_loading');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestIdRef = useRef(0);
   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
   const [nextWorkout, setNextWorkout] = useState<WorkoutQueueItem | null>(null);
   const [recentWorkouts, setRecentWorkouts] = useState<Workout[]>([]);
@@ -198,24 +202,48 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      loadData('initial');
     }, [])
   );
 
-  const loadData = async () => {
+  const loadData = async (mode: 'initial' | 'refresh') => {
+    const requestId = ++loadRequestIdRef.current;
+
+    if (mode === 'refresh') {
+      setIsRefreshing(true);
+      setLoadState('refreshing');
+    } else if (loadState !== 'loaded') {
+      setLoadState('initial_loading');
+    }
+
+    console.log('[startup][home_load_start]', { mode, requestId });
+
     try {
       const currentProgramId = await db.getCurrentProgramId();
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+
       if (currentProgramId) {
         const program = await db.getProgramById(currentProgramId);
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
         setCurrentProgram(program);
       } else {
         setCurrentProgram(null);
       }
 
       const queue = await db.getWorkoutQueue();
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
       setNextWorkout(queue.length > 0 ? queue[0] : null);
 
       const workouts = await db.getAllWorkouts();
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
       setRecentWorkouts(workouts.slice(0, 3));
 
       const now = new Date();
@@ -256,17 +284,27 @@ export default function HomeScreen() {
         thisWeek: thisWeekWorkouts.length,
         streak,
       });
+      setLoadError(null);
+      setLoadState('loaded');
+      console.log('[startup][home_load_end]', { mode, requestId, status: 'ok' });
     } catch (error) {
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+
       console.error('Error loading home data:', error);
+      setLoadError('Unable to load dashboard data right now.');
+      setLoadState('failed');
+      console.log('[startup][home_load_end]', { mode, requestId, status: 'error' });
     } finally {
-      setIsLoading(false);
+      if (loadRequestIdRef.current === requestId && mode === 'refresh') {
+        setIsRefreshing(false);
+      }
     }
   };
 
   const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadData();
-    setIsRefreshing(false);
+    await loadData('refresh');
   }, []);
 
   const formatDate = (dateString: string): string => {
@@ -281,8 +319,46 @@ export default function HomeScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  if (isLoading) {
-    return <HomeLoadingSkeleton theme={theme} />;
+  if (loadState === 'failed') {
+    return (
+      <ParallaxScrollView
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+      >
+        <ThemedView
+          lightColor="#FFFFFF"
+          darkColor="#10151D"
+          className="rounded-3xl border px-5 py-5 mb-5"
+          style={{ borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8' }}
+        >
+          <ThemedText className="text-2xl font-bold">Dashboard unavailable</ThemedText>
+          <ThemedText className="text-sm mt-2 text-gray-600 dark:text-gray-400">
+            {loadError ?? 'Unable to load dashboard data right now.'}
+          </ThemedText>
+
+          <Pressable
+            onPress={() => loadData('initial')}
+            accessibilityRole="button"
+            accessibilityLabel="Retry dashboard load"
+            className="mt-4"
+          >
+            {({ pressed }) => (
+              <View
+                className="rounded-full py-4 px-5"
+                style={{
+                  backgroundColor: '#007AFF',
+                  opacity: pressed ? 0.92 : 1,
+                  ...(pressed ? { transform: [{ scale: 0.99 }] } : {}),
+                }}
+              >
+                <ThemedText className="text-center text-white font-semibold text-base">
+                  Retry
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+        </ThemedView>
+      </ParallaxScrollView>
+    );
   }
 
   return (
