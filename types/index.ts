@@ -47,6 +47,11 @@ export interface ProgramExercise extends Exercise {
   restTime: string;
   progression: string;
   hasCustomisedSets: boolean;
+  // Double progression fields
+  repRangeMin?: number;
+  repRangeMax?: number;
+  progressionThreshold?: number;
+  timesRepsHitInARow?: number;
 }
 
 /**
