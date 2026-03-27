@@ -5,7 +5,7 @@
 
 import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -44,6 +44,87 @@ import {
 } from '@/services/workout-queue-modifier';
 import type { Program, WorkoutQueueItem } from '@/types';
 import { CoachMode } from '@/types';
+
+/**
+ * Custom slider component for integer value selection.
+ * Uses PanResponder for drag gestures with smooth animation.
+ */
+function SliderTrack({
+  value,
+  min,
+  max,
+  onValueChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onValueChange: (val: number) => void;
+}) {
+  const sliderRef = useRef<View>(null);
+  const animatedValue = useRef(new Animated.Value(value)).current;
+  const isDragging = useRef(false);
+
+  useEffect(() => {
+    if (!isDragging.current) {
+      Animated.spring(animatedValue, {
+        toValue: value,
+        useNativeDriver: false,
+        tension: 300,
+        friction: 30,
+      }).start();
+    }
+  }, [value, animatedValue]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        isDragging.current = true;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        sliderRef.current?.measure((_x, _y, width) => {
+          if (width && width > 0) {
+            const rawProgress = (gestureState.x0 + gestureState.dx) / width;
+            const clampedProgress = Math.max(0, Math.min(1, rawProgress));
+            const newValue = Math.round(min + clampedProgress * (max - min));
+            if (newValue !== value) {
+              onValueChange(newValue);
+            }
+          }
+        });
+      },
+      onPanResponderRelease: () => {
+        isDragging.current = false;
+      },
+    })
+  ).current;
+
+  const thumbLeft = animatedValue.interpolate({
+    inputRange: [min, max],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View
+      ref={sliderRef}
+      className="absolute inset-0"
+      {...panResponder.panHandlers}
+    >
+      <Animated.View
+        className="absolute w-6 h-6 bg-blue-500 rounded-full -ml-3 top-1"
+        style={{
+          left: thumbLeft,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 2,
+          elevation: 4,
+        }}
+      />
+    </View>
+  );
+}
 
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
@@ -1026,29 +1107,39 @@ export default function CoachScreen() {
         {/* Queue Horizon Control - Only show in ModifyWorkout mode */}
         {mode === CoachMode.ModifyWorkout && (
           <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-            <ThemedText className="text-sm font-semibold mb-2">
-              Queue Modification Scope
-            </ThemedText>
-            <View className="flex-row items-center justify-between gap-2">
+            <View className="flex-row items-center justify-between mb-2">
+              <ThemedText className="text-sm font-semibold">
+                Queue Modification Scope
+              </ThemedText>
+              <ThemedText className="text-sm font-bold text-blue-500">
+                {queueHorizon} {queueHorizon === 1 ? 'workout' : 'workouts'}
+              </ThemedText>
+            </View>
+            <View className="flex-row items-center gap-2">
               <Pressable
-                onPress={() => setQueueHorizon(Math.max(1, queueHorizon - 1))}
-                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
-                accessibilityLabel="Decrease queue horizon"
+                onPress={() => setQueueHorizon(1)}
+                className="bg-gray-200 dark:bg-gray-700 w-8 h-8 rounded-full items-center justify-center"
+                accessibilityLabel="Set to minimum"
               >
-                <ThemedText className="text-lg font-bold">−</ThemedText>
+                <ThemedText className="text-xs font-bold">1</ThemedText>
               </Pressable>
-              <View className="flex-1 items-center">
-                <ThemedText className="text-xl font-bold">{queueHorizon}</ThemedText>
-                <ThemedText className="text-xs text-gray-500">
-                  {queueHorizon === 1 ? '1 workout' : `${queueHorizon} workouts`}
-                </ThemedText>
+              <View className="flex-1 h-8 relative">
+                <View className="absolute inset-0 flex-row items-center">
+                  <View className="flex-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
+                </View>
+                <SliderTrack 
+                  value={queueHorizon} 
+                  min={1} 
+                  max={10} 
+                  onValueChange={setQueueHorizon}
+                />
               </View>
               <Pressable
-                onPress={() => setQueueHorizon(Math.min(10, queueHorizon + 1))}
-                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
-                accessibilityLabel="Increase queue horizon"
+                onPress={() => setQueueHorizon(10)}
+                className="bg-gray-200 dark:bg-gray-700 w-8 h-8 rounded-full items-center justify-center"
+                accessibilityLabel="Set to maximum"
               >
-                <ThemedText className="text-lg font-bold">+</ThemedText>
+                <ThemedText className="text-xs font-bold">10</ThemedText>
               </Pressable>
             </View>
             <ThemedText className="text-xs text-gray-500 mt-2 text-center">
@@ -1233,7 +1324,8 @@ export default function CoachScreen() {
           </ThemedView>
         ) : null}
 
-        {/* Error Display - Dismissable */}        {error ? (
+        {/* Error Display - Dismissable */}
+        {error ? (
           <ThemedView className="bg-red-100 dark:bg-red-900/30 p-3 rounded-lg border border-red-300 dark:border-red-700">
             <View className="flex-row items-start justify-between gap-2">
               <ThemedText className="text-red-800 dark:text-red-200 text-sm flex-1">{error}</ThemedText>
