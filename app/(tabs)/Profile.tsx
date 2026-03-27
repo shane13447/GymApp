@@ -17,13 +17,19 @@ import { TRAINING_GOAL_LABELS, MUSCLE_GROUPS } from '@/constants';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { validatePositiveDecimal, validatePositiveInteger } from '@/lib/validation';
 import * as db from '@/services/database';
-import { TrainingGoal, type MuscleGroupTarget, type UserProfile } from '@/types';
+import { TrainingGoal, type ExperienceLevel, type MuscleGroupTarget, type UserProfile } from '@/types';
 
 // Training goal options for button selection
 const TRAINING_GOALS = [
   { value: TrainingGoal.Strength, label: TRAINING_GOAL_LABELS.strength },
   { value: TrainingGoal.Hypertrophy, label: TRAINING_GOAL_LABELS.hypertrophy },
   { value: TrainingGoal.ImproveOverallHealth, label: TRAINING_GOAL_LABELS.improve_overall_health },
+];
+
+const EXPERIENCE_LEVELS: Array<{ value: ExperienceLevel; label: string }> = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
 ];
 
 /**
@@ -82,6 +88,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [muscleGroupTargets, setMuscleGroupTargets] = useState<MuscleGroupTarget[]>([]);
   const [showMuscleTargetsModal, setShowMuscleTargetsModal] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [stats, setStats] = useState({
     totalWorkouts: 0,
     totalPrograms: 0,
@@ -164,6 +171,34 @@ export default function ProfileScreen() {
       setProfile((prev) => prev ? { ...prev, goalWeight: value } : null);
     }
   );
+
+  const trainingDaysInput = useNumericInput(
+    profile?.trainingDaysPerWeek ?? null,
+    validatePositiveInteger,
+    async (value) => {
+      await db.updateUserProfile({ trainingDaysPerWeek: value });
+      setProfile((prev) => prev ? { ...prev, trainingDaysPerWeek: value } : null);
+    }
+  );
+
+  const sessionDurationInput = useNumericInput(
+    profile?.sessionDurationMinutes ?? null,
+    validatePositiveInteger,
+    async (value) => {
+      await db.updateUserProfile({ sessionDurationMinutes: value });
+      setProfile((prev) => prev ? { ...prev, sessionDurationMinutes: value } : null);
+    }
+  );
+
+  const handleExperienceLevelSelect = useCallback(async (experienceLevel: ExperienceLevel) => {
+    try {
+      await db.updateUserProfile({ experienceLevel });
+      setProfile((prev) => prev ? { ...prev, experienceLevel } : null);
+    } catch (error) {
+      console.error('Error saving experience level:', error);
+      Alert.alert('Error', 'Failed to save experience level');
+    }
+  }, []);
 
   const targetSetsInput = useNumericInput(
     profile?.targetSetsPerWeek ?? null,
@@ -343,56 +378,154 @@ export default function ProfileScreen() {
           </ThemedView>
         </ThemedView>
 
+        {/* Training Context Section */}
+        <ThemedView className="gap-4">
+          <ThemedText type="subtitle">Training Context</ThemedText>
+
+          <ThemedView className="gap-2">
+            <ThemedText className="text-sm font-semibold">Experience Level</ThemedText>
+            {EXPERIENCE_LEVELS.map((level) => (
+              <Pressable
+                key={level.value}
+                onPress={() => handleExperienceLevelSelect(level.value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: profile?.experienceLevel === level.value }}
+              >
+                {({ pressed }) => (
+                  <View
+                    className={`p-4 rounded-full border-2 ${
+                      profile?.experienceLevel === level.value
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600'
+                    } ${pressed ? 'opacity-80' : ''}`}
+                  >
+                    <ThemedText
+                      className={`font-semibold text-center ${
+                        profile?.experienceLevel === level.value ? 'text-white' : ''
+                      }`}
+                    >
+                      {level.label}
+                    </ThemedText>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ThemedView>
+
+          <ThemedView className="gap-1">
+            <ThemedText className="text-sm font-semibold">Training Days per Week</ThemedText>
+            <TextInput
+              className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
+                trainingDaysInput.error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+              }`}
+              placeholder="e.g., 4"
+              placeholderTextColor="#999"
+              value={trainingDaysInput.localValue}
+              onFocus={trainingDaysInput.handleFocus}
+              onChangeText={trainingDaysInput.handleChange}
+              onBlur={trainingDaysInput.handleBlur}
+              keyboardType="number-pad"
+              style={{ color: textColor }}
+              accessibilityLabel="Training days per week"
+            />
+            {trainingDaysInput.error && (
+              <ThemedText className="text-xs text-red-500">{trainingDaysInput.error}</ThemedText>
+            )}
+          </ThemedView>
+
+          <ThemedView className="gap-1">
+            <ThemedText className="text-sm font-semibold">Session Duration (minutes)</ThemedText>
+            <TextInput
+              className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
+                sessionDurationInput.error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+              }`}
+              placeholder="e.g., 60"
+              placeholderTextColor="#999"
+              value={sessionDurationInput.localValue}
+              onFocus={sessionDurationInput.handleFocus}
+              onChangeText={sessionDurationInput.handleChange}
+              onBlur={sessionDurationInput.handleBlur}
+              keyboardType="number-pad"
+              style={{ color: textColor }}
+              accessibilityLabel="Session duration in minutes"
+            />
+            {sessionDurationInput.error && (
+              <ThemedText className="text-xs text-red-500">{sessionDurationInput.error}</ThemedText>
+            )}
+          </ThemedView>
+        </ThemedView>
+
         {/* Weekly Volume Section */}
         <ThemedView className="gap-4">
           <ThemedText type="subtitle">Weekly Volume</ThemedText>
 
-          {/* Target Sets Per Week */}
-          <ThemedView className="gap-1">
-            <ThemedText className="text-sm font-semibold">Target Sets Per Week (Global)</ThemedText>
-            <TextInput
-              className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
-                targetSetsInput.error 
-                  ? 'border-red-500' 
-                  : 'border-gray-300 dark:border-gray-600'
-              }`}
-              placeholder="e.g., 10"
-              placeholderTextColor="#999"
-              value={targetSetsInput.localValue}
-              onFocus={targetSetsInput.handleFocus}
-              onChangeText={targetSetsInput.handleChange}
-              onBlur={targetSetsInput.handleBlur}
-              keyboardType="number-pad"
-              style={{ color: textColor }}
-              accessibilityLabel="Target sets per week"
-            />
-            {targetSetsInput.error && (
-              <ThemedText className="text-xs text-red-500">{targetSetsInput.error}</ThemedText>
-            )}
-            <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              This is the default target for all muscle groups
-            </ThemedText>
-          </ThemedView>
-
-          {/* Customize Per Muscle Group Button */}
-          <Pressable onPress={handleOpenMuscleTargets} accessibilityRole="button">
+          <Pressable
+            onPress={() => setShowAdvancedSettings((prev) => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle advanced settings"
+          >
             {({ pressed }) => (
-              <View
-                className={`p-4 bg-gray-200 dark:bg-gray-700 rounded-full ${pressed ? 'opacity-80' : ''}`}
-              >
+              <View className={`p-4 bg-gray-200 dark:bg-gray-700 rounded-full ${pressed ? 'opacity-80' : ''}`}>
                 <View className="flex-row items-center justify-between">
-                  <ThemedText className="font-semibold">
-                    Customize Target Sets Per Muscle Group
-                  </ThemedText>
+                  <ThemedText className="font-semibold">Advanced Settings</ThemedText>
                   <ThemedText className="text-gray-500 dark:text-gray-400">
-                    {muscleGroupTargets.length > 0 
-                      ? `${muscleGroupTargets.length} custom` 
-                      : '→'}
+                    {showAdvancedSettings ? 'Hide' : 'Show'}
                   </ThemedText>
                 </View>
               </View>
             )}
           </Pressable>
+
+          {showAdvancedSettings && (
+            <>
+              {/* Target Sets Per Week */}
+              <ThemedView className="gap-1">
+                <ThemedText className="text-sm font-semibold">Target Sets Per Week (Global)</ThemedText>
+                <TextInput
+                  className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
+                    targetSetsInput.error
+                      ? 'border-red-500'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                  placeholder="e.g., 10"
+                  placeholderTextColor="#999"
+                  value={targetSetsInput.localValue}
+                  onFocus={targetSetsInput.handleFocus}
+                  onChangeText={targetSetsInput.handleChange}
+                  onBlur={targetSetsInput.handleBlur}
+                  keyboardType="number-pad"
+                  style={{ color: textColor }}
+                  accessibilityLabel="Target sets per week"
+                />
+                {targetSetsInput.error && (
+                  <ThemedText className="text-xs text-red-500">{targetSetsInput.error}</ThemedText>
+                )}
+                <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  This is the default target for all muscle groups
+                </ThemedText>
+              </ThemedView>
+
+              {/* Customize Per Muscle Group Button */}
+              <Pressable onPress={handleOpenMuscleTargets} accessibilityRole="button">
+                {({ pressed }) => (
+                  <View
+                    className={`p-4 bg-gray-200 dark:bg-gray-700 rounded-full ${pressed ? 'opacity-80' : ''}`}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <ThemedText className="font-semibold">
+                        Customize Target Sets Per Muscle Group
+                      </ThemedText>
+                      <ThemedText className="text-gray-500 dark:text-gray-400">
+                        {muscleGroupTargets.length > 0
+                          ? `${muscleGroupTargets.length} custom`
+                          : '→'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                )}
+              </Pressable>
+            </>
+          )}
         </ThemedView>
 
         {/* Stats Section */}

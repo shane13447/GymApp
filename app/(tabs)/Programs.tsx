@@ -500,6 +500,48 @@ export default function ProgramsScreen() {
     });
   };
 
+  const handleDuplicateProgram = (programId: string, sourceName: string) => {
+    const defaultName = `${sourceName} Copy`;
+
+    Alert.prompt(
+      'Duplicate Program',
+      'Enter the new program name:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Duplicate',
+          onPress: async (inputName) => {
+            const proposedName = (inputName ?? '').trim() || defaultName;
+
+            try {
+              await db.duplicateProgram(programId, proposedName);
+              await loadPrograms();
+              Alert.alert('Success', 'Program duplicated successfully!');
+            } catch (error) {
+              if (error instanceof Error && error.message === 'Program name already exists') {
+                Alert.alert('Name Already Exists', 'Program name already exists. Please choose a different name.', [
+                  {
+                    text: 'Rename',
+                    onPress: () => handleDuplicateProgram(programId, sourceName),
+                  },
+                ]);
+                return;
+              }
+
+              console.error('Error duplicating program:', error);
+              Alert.alert('Error', 'Failed to duplicate program');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      defaultName
+    );
+  };
+
   const viewProgram = (programId: string) => {
     setSelectedProgramId(programId);
     setViewMode(ProgramViewMode.View);
@@ -1000,6 +1042,18 @@ export default function ProgramsScreen() {
                   >
                     <ThemedText className="text-white text-center font-semibold">
                       Edit Program
+                    </ThemedText>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={() => handleDuplicateProgram(selectedProgram.id, selectedProgram.name)}>
+                {({ pressed }) => (
+                  <View
+                    className="bg-blue-500 px-4 py-3 rounded-full"
+                    style={pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }}
+                  >
+                    <ThemedText className="text-white text-center font-semibold">
+                      Duplicate Program
                     </ThemedText>
                   </View>
                 )}
