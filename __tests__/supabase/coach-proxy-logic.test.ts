@@ -113,7 +113,7 @@ describe('coach proxy logic', () => {
   });
 
   describe('proxy debug logging', () => {
-    it('formats a log line that includes both input and output', () => {
+    it('formats a sanitized log line with metadata only (no PII)', () => {
       const logLine = formatProxyDebugLog(
         [
           { role: 'system', content: 'Output TOON only' },
@@ -122,23 +122,30 @@ describe('coach proxy logic', () => {
         'Q0:D1:Bench|70|8|3'
       );
 
-      expect(logLine).toContain('input=');
-      expect(logLine).toContain('output=');
-      expect(logLine).toContain('Queue: Q0:D1:Bench|80|8|3');
-      expect(logLine).toContain('Q0:D1:Bench|70|8|3');
+      expect(logLine).toContain('[coach-proxy] messages=[');
+      expect(logLine).toContain('output_len=');
+      expect(logLine).toContain('system:16chars');
+      expect(logLine).toContain('user:47chars');
+      // Must NOT contain raw queue data or prompts
+      expect(logLine).not.toContain('Bench|80');
+      expect(logLine).not.toContain('Bench|70');
+      expect(logLine).not.toContain('Request: lower weight');
     });
   });
 
   describe('invalid TOON diagnostics', () => {
-    it('includes first and retry outputs for strict TOON failures', () => {
+    it('formats a sanitized log line with lengths only (no PII)', () => {
       const line = formatInvalidToonDiagnostics(
         'Q0:D1:Bench Press|80|8-10|3',
         'Q0:D1:Bench Press|80|8-10|3\nI changed the queue as requested.'
       );
 
       expect(line).toContain('[coach-proxy] invalid_toon');
-      expect(line).toContain('first_output=Q0:D1:Bench Press|80|8-10|3');
-      expect(line).toContain('retry_output=Q0:D1:Bench Press|80|8-10|3\\nI changed the queue as requested.');
+      expect(line).toContain('first_output_len=');
+      expect(line).toContain('retry_output_len=');
+      // Must NOT contain raw queue data
+      expect(line).not.toContain('Bench Press');
+      expect(line).not.toContain('8-10');
     });
   });
 });
