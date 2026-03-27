@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Slider } from '@/components/nativewindui/Slider';
+import { ThemedSlider } from '@/components/nativewindui/Slider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
@@ -1037,13 +1037,12 @@ export default function CoachScreen() {
             </View>
             <View className="flex-row items-center gap-2">
               <ThemedText className="text-xs font-bold w-6 text-center">1</ThemedText>
-              <Slider
+              <ThemedSlider
                 value={queueHorizon}
                 minimumValue={1}
                 maximumValue={10}
                 step={1}
                 onValueChange={setQueueHorizon}
-                className="flex-1"
               />
               <ThemedText className="text-xs font-bold w-6 text-center">10</ThemedText>
             </View>
