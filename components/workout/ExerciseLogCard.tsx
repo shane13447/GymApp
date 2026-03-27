@@ -204,6 +204,10 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // =============================================================================
   // Problem: Vibration logic was duplicated in 3 places with identical patterns.
   // Solution: Single function that handles vibration with the hasVibratedRef guard.
+  // BUG (ChatGPT audit): Rest timer uses Vibration only; no audio/sound feedback on completion.
+  // Audio feedback is critical for gym environments where the phone may be in a pocket and
+  // vibration is easily missed. Fix: Add expo-av audio playback when the planned UI update
+  // introduces sound/notification integration.
   const notifyTimerComplete = useCallback(() => {
     if (!hasVibratedRef.current && isMountedRef.current) {
       hasVibratedRef.current = true;
