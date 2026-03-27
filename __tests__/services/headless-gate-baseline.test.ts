@@ -11,6 +11,14 @@ import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-
 import { materializeCanonicalFixtureQueue } from '@/services/coach/prompt-test-runner';
 
 describe('headless gate baseline fixture', () => {
+  it('uses lowercase json fixture filename on disk', () => {
+    const dataDir = path.resolve(__dirname, '../../data');
+    const entries = readdirSync(dataDir);
+
+    expect(entries).toContain('TestProgram.json');
+    expect(entries).not.toContain('TestProgram.JSON');
+  });
+
   it('is sourced from data/TestProgram.json', () => {
     const dataFiles = readdirSync(path.resolve(__dirname, '../../data'));
     expect(dataFiles).toContain('TestProgram.json');

@@ -15,7 +15,8 @@
     "name": "Barbell Curls",
     "equipment": "Barbell",
     "muscle_groups_worked": ["biceps", "forearms"],
-    "isCompound": false
+    "isCompound": false,
+    "aliases": ["barbell curl", "barbell curls"]
   },
   {
     "name": "Barbell Deadlift",

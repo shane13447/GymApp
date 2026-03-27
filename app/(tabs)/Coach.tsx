@@ -18,6 +18,10 @@ import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
 import {
+  buildProgramDraftRequest,
+  prepareProgramDraftFromModelResponse,
+} from '@/services/coach/program-draft';
+import {
   executePromptThroughCoachPipeline,
   runCoachPromptSuite,
   type CoachPromptCase,
@@ -38,7 +42,7 @@ import {
   validateQueueStructure,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
-import type { WorkoutQueueItem } from '@/types';
+import type { Program, WorkoutQueueItem } from '@/types';
 import { CoachMode } from '@/types';
 
 // Test prompts for automated testing
@@ -244,7 +248,9 @@ export default function CoachScreen() {
   const [proposedChanges, setProposedChanges] = useState<ProposedChanges | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
+  const [queueHorizon, setQueueHorizon] = useState(3); // How many workouts can be modified (1-10)
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
+  const [generatedProgramDraft, setGeneratedProgramDraft] = useState<Omit<Program, 'createdAt' | 'updatedAt'> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [proxyResponse, setProxyResponse] = useState('');
   const [proxyError, setProxyError] = useState('');
@@ -567,9 +573,7 @@ export default function CoachScreen() {
     setProxyError('');
     setResponse('');
     setProxyResponse('');
-    setGeneratedQueue(null);
-    targetedExercisesRef.current = []; // Reset ref too
-    lastProcessedResponseRef.current = '';
+    setGeneratedProgramDraft(null);
 
     try {
       const accessToken = await getSupabaseAccessToken();
@@ -592,6 +596,10 @@ export default function CoachScreen() {
           noMatchesFound,
         } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
 
+        // Apply queue horizon scope - limit to first N items for this request
+        const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
+        console.log(`[HORIZON] Modifying ${scopedWorkoutQueue.length} of ${workoutQueue.length} workouts (horizon: ${queueHorizon})`);
+
         // Store matched exercises for use in repair system
         // For muscle group requests, use matchedExercises from preprocessor
         // For other requests, extract from the original request
@@ -604,7 +612,7 @@ export default function CoachScreen() {
           exercisesToStore.map((exercise) => exercise.displayName)
         );
         targetedExercisesRef.current = exercisesToStore; // Sync update for immediate use
-        
+
         // Check if user mentioned a muscle group but no matching exercises exist in queue
         if (noMatchesFound && muscleGroupDetected) {
           setError(
@@ -622,7 +630,7 @@ export default function CoachScreen() {
           );
         }
 
-        const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
+        const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
         console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
         console.log(
           `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
@@ -638,6 +646,32 @@ export default function CoachScreen() {
           return;
         }
         setProxyResponse(generatedText);
+      } else if (mode === CoachMode.GenerateProgram) {
+        const profile = await db.getUserProfile();
+        const { prompt, llmInput } = buildProgramDraftRequest({
+          experienceLevel: profile.experienceLevel,
+          trainingDaysPerWeek: profile.trainingDaysPerWeek,
+          sessionDurationMinutes: profile.sessionDurationMinutes,
+          trainingGoal: profile.trainingGoal,
+        });
+
+        const messages: CoachProxyMessage[] = [
+          { role: 'system', content: prompt },
+          {
+            role: 'user',
+            content: JSON.stringify({ ...llmInput, user_request: trimmedInput }),
+          },
+        ];
+
+        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
+        if (activeRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const draft = prepareProgramDraftFromModelResponse(generatedText);
+        setGeneratedProgramDraft(draft);
+        setResponse(JSON.stringify(draft, null, 2));
+        setError('');
       } else {
         const messages: CoachProxyMessage[] = [
           {
@@ -670,7 +704,7 @@ export default function CoachScreen() {
       if (activeRequestIdRef.current === requestId) {
         activeRequestIdRef.current = null;
         setIsGenerating(false);
-        if (mode === CoachMode.Chat) {
+        if (mode !== CoachMode.ModifyWorkout) {
           setLoading(false);
         }
       }
@@ -911,6 +945,24 @@ export default function CoachScreen() {
     }
   };
 
+  const handleSaveGeneratedProgram = async () => {
+    if (!generatedProgramDraft) {
+      Alert.alert('Error', 'No generated draft program to save.');
+      return;
+    }
+
+    try {
+      const createdProgram = await db.createProgram(generatedProgramDraft);
+      await db.setCurrentProgramId(createdProgram.id);
+      Alert.alert('Success', 'Draft program saved and set as current program.');
+      setGeneratedProgramDraft(null);
+      setInputText('');
+    } catch (err) {
+      console.error('Error saving generated program:', err);
+      Alert.alert('Error', 'Failed to save generated draft program.');
+    }
+  };
+
   const handleCancelChanges = () => {
     setShowModal(false);
     setProposedChanges(null);
@@ -922,6 +974,7 @@ export default function CoachScreen() {
     setInputText('');
     setResponse('');
     setError('');
+    setGeneratedProgramDraft(null);
     if (newMode === CoachMode.ModifyWorkout) {
       const queue = await db.getWorkoutQueue();
       setWorkoutQueue(queue);
@@ -970,6 +1023,40 @@ export default function CoachScreen() {
       </ThemedView>
 
       <ThemedView className="gap-4 mt-5">
+        {/* Queue Horizon Control - Only show in ModifyWorkout mode */}
+        {mode === CoachMode.ModifyWorkout && (
+          <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+            <ThemedText className="text-sm font-semibold mb-2">
+              Queue Modification Scope
+            </ThemedText>
+            <View className="flex-row items-center justify-between gap-2">
+              <Pressable
+                onPress={() => setQueueHorizon(Math.max(1, queueHorizon - 1))}
+                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
+                accessibilityLabel="Decrease queue horizon"
+              >
+                <ThemedText className="text-lg font-bold">−</ThemedText>
+              </Pressable>
+              <View className="flex-1 items-center">
+                <ThemedText className="text-xl font-bold">{queueHorizon}</ThemedText>
+                <ThemedText className="text-xs text-gray-500">
+                  {queueHorizon === 1 ? '1 workout' : `${queueHorizon} workouts`}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={() => setQueueHorizon(Math.min(10, queueHorizon + 1))}
+                className="bg-gray-200 dark:bg-gray-700 w-10 h-10 rounded-full items-center justify-center"
+                accessibilityLabel="Increase queue horizon"
+              >
+                <ThemedText className="text-lg font-bold">+</ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText className="text-xs text-gray-500 mt-2 text-center">
+              Number of upcoming workouts the AI can modify
+            </ThemedText>
+          </View>
+        )}
+
         {/* Mode Selector */}
         <View className="flex-row gap-2">
           <Pressable
@@ -992,6 +1079,26 @@ export default function CoachScreen() {
                   }`}
                 >
                   Modify Workouts
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => switchMode(CoachMode.GenerateProgram)}
+            className="flex-1"
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === CoachMode.GenerateProgram }}
+          >
+            {({ pressed }) => (
+              <View
+                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
+                  mode === CoachMode.GenerateProgram ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
+                } ${pressed ? 'opacity-70' : ''}`}
+              >
+                <ThemedText
+                  className={`text-sm font-semibold ${mode === CoachMode.GenerateProgram ? 'text-white' : ''}`}
+                >
+                  Generate Program
                 </ThemedText>
               </View>
             )}
@@ -1021,7 +1128,9 @@ export default function CoachScreen() {
         <ThemedText type="subtitle">
           {mode === CoachMode.ModifyWorkout
             ? 'Request workout modifications:'
-            : 'Ask your AI Coach:'}
+            : mode === CoachMode.GenerateProgram
+              ? 'Generate a complete draft program:'
+              : 'Ask your AI Coach:'}
         </ThemedText>
 
         {/* Input - Moved to top */}
@@ -1029,7 +1138,11 @@ export default function CoachScreen() {
           className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-white dark:bg-gray-800"
           value={inputText}
           onChangeText={setInputText}
-          placeholder="Enter your question or message..."
+          placeholder={
+            mode === CoachMode.GenerateProgram
+              ? 'Describe your goal (e.g., 3-day hypertrophy with low injury risk)...'
+              : 'Enter your question or message...'
+          }
           placeholderTextColor="#999"
           multiline
           numberOfLines={4}
@@ -1044,7 +1157,7 @@ export default function CoachScreen() {
           onPress={sendToCoach}
           disabled={loading || isGenerating || !coachProxyUrl.current}
           accessibilityRole="button"
-          accessibilityLabel="Send message"
+          accessibilityLabel={mode === CoachMode.GenerateProgram ? 'Generate draft program' : 'Send message'}
         >
           {({ pressed }) => (
             <View
@@ -1055,11 +1168,14 @@ export default function CoachScreen() {
               {loading || isGenerating ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <ThemedText className="text-white font-semibold">Send</ThemedText>
+                <ThemedText className="text-white font-semibold">
+                  {mode === CoachMode.GenerateProgram ? 'Generate Draft Program' : 'Send'}
+                </ThemedText>
               )}
             </View>
           )}
         </Pressable>
+
 
         {/* Test Button - Only show in ModifyWorkout mode */}
         {mode === CoachMode.ModifyWorkout && (
@@ -1090,8 +1206,34 @@ export default function CoachScreen() {
           </Pressable>
         )}
 
-        {/* Error Display - Dismissable */}
-        {error ? (
+        {mode === CoachMode.GenerateProgram && generatedProgramDraft ? (
+          <ThemedView className="gap-3 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-3">
+            <ThemedText className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+              Draft ready: {generatedProgramDraft.name}
+            </ThemedText>
+            <ThemedText className="text-xs text-blue-800 dark:text-blue-200">
+              {generatedProgramDraft.workoutDays.length} training days generated. Review then save.
+            </ThemedText>
+            <Pressable
+              onPress={handleSaveGeneratedProgram}
+              disabled={loading || isGenerating}
+              accessibilityRole="button"
+              accessibilityLabel="Save draft program"
+            >
+              {({ pressed }) => (
+                <View
+                  className={`bg-blue-500 px-4 py-2 rounded-full items-center justify-center ${
+                    loading || isGenerating ? 'opacity-50' : ''
+                  } ${pressed ? 'opacity-70' : ''}`}
+                >
+                  <ThemedText className="text-white text-sm font-semibold">Save Draft Program</ThemedText>
+                </View>
+              )}
+            </Pressable>
+          </ThemedView>
+        ) : null}
+
+        {/* Error Display - Dismissable */}        {error ? (
           <ThemedView className="bg-red-100 dark:bg-red-900/30 p-3 rounded-lg border border-red-300 dark:border-red-700">
             <View className="flex-row items-start justify-between gap-2">
               <ThemedText className="text-red-800 dark:text-red-200 text-sm flex-1">{error}</ThemedText>

@@ -75,4 +75,19 @@ describe('validateWorkoutQueueForPersistence', () => {
 
     expect(() => validateWorkoutQueueForPersistence(queue)).toThrow('exercises must be a non-empty array');
   });
+
+  it('throws when customised sets are enabled but set semantics are invalid', () => {
+    const queue = [
+      createQueueItem({
+        exercises: [
+          createExercise({
+            hasCustomisedSets: true,
+            sets: '0',
+          }),
+        ],
+      }),
+    ];
+
+    expect(() => validateWorkoutQueueForPersistence(queue)).toThrow('customised set semantics');
+  });
 });
