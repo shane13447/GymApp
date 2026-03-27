@@ -76,6 +76,10 @@ export const applyProgression = (
   
   // Check if threshold is met
   if (timesRepsHitInARow >= progressionThreshold) {
+    // BUG: parseFloat(exercise.weight) breaks if exercise.weight is array-style
+    // (e.g. "[80,80,80]" for customized sets with different weights per set).
+    // Currently latent dead code - this file is not imported anywhere in the codebase.
+    // If integrated, needs to handle both string and array weight formats.
     const currentWeight = parseFloat(exercise.weight) || 0;
     const currentProgression = parseFloat(exercise.progression) || progressionAmt;
     

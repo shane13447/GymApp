@@ -9,7 +9,6 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedSlider } from '@/components/nativewindui/Slider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
@@ -568,6 +567,13 @@ export default function CoachScreen() {
     requestCounterRef.current = requestId;
     activeRequestIdRef.current = requestId;
 
+    // BUG FIX: Reset lastProcessedResponseRef so the modify-only effect doesn't skip
+    // identical consecutive responses from the model. Without this, if the model returns
+    // the same TOON string twice, the second response is ignored (the effect checks
+    // proxyResponse !== lastProcessedResponseRef.current) and loading stays true forever,
+    // blocking all future sends. The ref was previously only cleared in runNextTest().
+    lastProcessedResponseRef.current = '';
+
     setLoading(true);
     setIsGenerating(true);
     setError('');
@@ -705,9 +711,12 @@ export default function CoachScreen() {
       if (activeRequestIdRef.current === requestId) {
         activeRequestIdRef.current = null;
         setIsGenerating(false);
-        if (mode !== CoachMode.ModifyWorkout) {
-          setLoading(false);
-        }
+        // BUG FIX: Previously only cleared loading when mode !== CoachMode.ModifyWorkout,
+        // relying on the modify-only useEffect to clear it. But that closure captures the
+        // old mode, and if the effect doesn't fire (e.g. duplicate response), loading stays
+        // true forever, blocking all future sends. Always clear here as the definitive
+        // cleanup; the modify effect can still override if it needs to show modal first.
+        setLoading(false);
       }
       sendLockRef.current = false;
     }
@@ -1027,27 +1036,31 @@ export default function CoachScreen() {
         {/* Queue Horizon Control - Only show in ModifyWorkout mode */}
         {mode === CoachMode.ModifyWorkout && (
           <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-            <View className="flex-row items-center justify-between mb-2">
-              <ThemedText className="text-sm font-semibold">
-                Queue Modification Scope
-              </ThemedText>
-              <ThemedText className="text-sm font-bold text-blue-500">
-                {queueHorizon} {queueHorizon === 1 ? 'workout' : 'workouts'}
-              </ThemedText>
-            </View>
             <View className="flex-row items-center gap-2">
-              <ThemedText className="text-xs font-bold w-6 text-center">1</ThemedText>
-              <ThemedSlider
-                value={queueHorizon}
-                minimumValue={1}
-                maximumValue={10}
-                step={1}
-                onValueChange={setQueueHorizon}
+              <ThemedText className="text-sm font-semibold">
+                Workout Queue Length:
+              </ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 w-16 text-center text-lg font-bold"
+                value={String(queueHorizon)}
+                onChangeText={(text) => {
+                  const digit = text.replace(/[^1-9]/g, '').slice(0, 1);
+                  if (digit) {
+                    setQueueHorizon(parseInt(digit, 10));
+                  }
+                }}
+                onBlur={() => {
+                  if (queueHorizon < 1) setQueueHorizon(1);
+                  if (queueHorizon > 9) setQueueHorizon(9);
+                }}
+                keyboardType="numeric"
+                maxLength={1}
+                style={{ color: textColor }}
+                accessibilityLabel="Workout queue length (1-9)"
               />
-              <ThemedText className="text-xs font-bold w-6 text-center">10</ThemedText>
             </View>
-            <ThemedText className="text-xs text-gray-500 mt-2 text-center">
-              Number of upcoming workouts the AI can modify
+            <ThemedText className="text-xs text-gray-500 mt-2">
+              Number of upcoming workouts the AI can modify (1-9)
             </ThemedText>
           </View>
         )}

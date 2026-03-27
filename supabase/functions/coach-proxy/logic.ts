@@ -5,23 +5,26 @@ type CoachProxyMessage = {
   content: string;
 };
 
-const sanitizeForSingleLineLog = (value: string): string => {
-  return value.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-};
-
+// BUG FIX: Previously logged full message contents and model output including
+// encoded queues, user prompts, and system instructions. This was a privacy/security
+// regression - server logs should never contain PII or workout data. Now logs only
+// metadata: message count, roles, and content length.
 export const formatProxyDebugLog = (
   messages: CoachProxyMessage[],
   output: string
 ): string => {
-  const input = messages.map((message) => `${message.role}:${message.content}`).join(' | ');
-  return `[coach-proxy] input=${input} output=${output}`;
+  const roleSummary = messages.map((m) => `${m.role}:${m.content.length}chars`).join(', ');
+  return `[coach-proxy] messages=[${roleSummary}] output_len=${output.length}`;
 };
 
+// BUG FIX: Previously logged full first and retry model outputs including raw TOON
+// queue data with exercise names, weights, reps, and sets. Now logs only lengths
+// to preserve debugging capability without leaking workout data into server logs.
 export const formatInvalidToonDiagnostics = (
   firstOutput: string,
   retryOutput: string
 ): string => {
-  return `[coach-proxy] invalid_toon first_output=${sanitizeForSingleLineLog(firstOutput)} retry_output=${sanitizeForSingleLineLog(retryOutput)}`;
+  return `[coach-proxy] invalid_toon first_output_len=${firstOutput.length} retry_output_len=${retryOutput.length}`;
 };
 
 export const parseAuthModeFromValue = (modeRaw?: string | null): AuthMode => {

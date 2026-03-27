@@ -331,7 +331,11 @@ export const executePromptThroughCoachPipeline = async (
     };
   }
 
-  differencesToProposedChanges(differences);
+  // BUG: differencesToProposedChanges is called but its return value is discarded.
+  // The new headless gate never validates the user-facing proposal mapping it appears
+  // to be exercising. The result should be used for validation or the call removed.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _proposedChanges = differencesToProposedChanges(differences);
   const validation = validateChanges(promptCase.prompt, differences);
   const isVariantTest = promptCase.type.startsWith('Variant -');
   const isInjuryTest = promptCase.type.startsWith('Injury -');
