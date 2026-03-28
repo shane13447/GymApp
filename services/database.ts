@@ -209,6 +209,11 @@ const SEED_STATE_KEY_BY_ID: Record<string, 'seed_test_program_state' | 'seed_3da
   'seed-3day-full-body': 'seed_3day_full_body_state',
 };
 
+const ALLOWLISTED_SEED_STATE_COLUMNS = new Set<string>([
+  'seed_test_program_state',
+  'seed_3day_full_body_state',
+]);
+
 const getSeedStateColumn = (seedId: string): 'seed_test_program_state' | 'seed_3day_full_body_state' | null =>
   SEED_STATE_KEY_BY_ID[seedId] ?? null;
 
@@ -235,50 +240,52 @@ const createProgramWithDatabase = async (
 ): Promise<boolean> => {
   const now = new Date().toISOString();
 
-  const result = await database.runAsync(
-    'INSERT OR IGNORE INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-    [program.id, program.name, now, now]
-  );
-
-  const insertChanges = typeof result?.changes === 'number' ? result.changes : 1;
-  if (insertChanges === 0) {
-    return false;
-  }
-
-  for (const day of program.workoutDays) {
-    const dayResult = await database.runAsync(
-      'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-      [program.id, day.dayNumber]
+  return runInTransaction(database, async () => {
+    const result = await database.runAsync(
+      'INSERT OR IGNORE INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+      [program.id, program.name, now, now]
     );
 
-    const dayId = dayResult?.lastInsertRowId ?? null;
-
-    for (let i = 0; i < day.exercises.length; i++) {
-      const exercise = day.exercises[i];
-      await database.runAsync(
-        `INSERT INTO program_exercises
-         (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          dayId,
-          exercise.name ?? '',
-          exercise.equipment ?? '',
-          JSON.stringify(exercise.muscle_groups_worked ?? []),
-          exercise.isCompound ? 1 : 0,
-          parseFloat(exercise.weight) || 0,
-          parseInt(exercise.reps, 10) || 8,
-          parseInt(exercise.sets, 10) || 3,
-          parseInt(exercise.restTime, 10) || 180,
-          parseFloat(exercise.progression) || 0,
-          exercise.hasCustomisedSets ? 1 : 0,
-          serializeVariant(exercise.variant),
-          i,
-        ]
-      );
+    const insertChanges = typeof result?.changes === 'number' ? result.changes : 1;
+    if (insertChanges === 0) {
+      return false;
     }
-  }
 
-  return true;
+    for (const day of program.workoutDays) {
+      const dayResult = await database.runAsync(
+        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
+        [program.id, day.dayNumber]
+      );
+
+      const dayId = dayResult?.lastInsertRowId ?? null;
+
+      for (let i = 0; i < day.exercises.length; i++) {
+        const exercise = day.exercises[i];
+        await database.runAsync(
+          `INSERT INTO program_exercises
+           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dayId,
+            exercise.name ?? '',
+            exercise.equipment ?? '',
+            JSON.stringify(exercise.muscle_groups_worked ?? []),
+            exercise.isCompound ? 1 : 0,
+            parseFloat(exercise.weight) || 0,
+            parseInt(exercise.reps, 10) || 8,
+            parseInt(exercise.sets, 10) || 3,
+            parseInt(exercise.restTime, 10) || 180,
+            parseFloat(exercise.progression) || 0,
+            exercise.hasCustomisedSets ? 1 : 0,
+            serializeVariant(exercise.variant),
+            i,
+          ]
+        );
+      }
+    }
+
+    return true;
+  });
 };
 
 const setSeedLifecycleStateWithDatabase = async (
@@ -287,7 +294,7 @@ const setSeedLifecycleStateWithDatabase = async (
   state: SeedLifecycleState
 ): Promise<void> => {
   const column = getSeedStateColumn(seedId);
-  if (!column) {
+  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
     return;
   }
 
@@ -302,7 +309,7 @@ const getSeedLifecycleStateWithDatabase = async (
   seedId: string
 ): Promise<SeedLifecycleState> => {
   const column = getSeedStateColumn(seedId);
-  if (!column) {
+  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
     return 'pending';
   }
 
@@ -934,7 +941,7 @@ export type SeedLifecycleState = 'pending' | 'seeded' | 'deleted_by_user';
 
 export const getSeedLifecycleState = async (seedId: string): Promise<SeedLifecycleState> => {
   const column = getSeedStateColumn(seedId);
-  if (!column) {
+  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
     return 'pending';
   }
 
@@ -957,7 +964,7 @@ export const setSeedLifecycleState = async (
   state: SeedLifecycleState
 ): Promise<void> => {
   const column = getSeedStateColumn(seedId);
-  if (!column) {
+  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
     return;
   }
 
