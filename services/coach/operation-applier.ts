@@ -5,12 +5,53 @@
  * This is the sole mutation authority - operations are applied deterministically.
  */
 
-import type { ProgramExercise, WorkoutQueueItem } from '@/types';
+import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
 import type { QueueOperation } from './operation-contract';
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+const parseVariantString = (value: string): ExerciseVariant | null => {
+  const segments = value
+    .split(/[\/,]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const variant: ExerciseVariant = {};
+  for (const segment of segments) {
+    const lower = segment.toLowerCase();
+    if (lower.includes('incline') || lower.includes('decline')) {
+      variant.angle = segment;
+    } else if (
+      lower.includes('grip') || lower.includes('neutral') || lower.includes('supinated') ||
+      lower.includes('pronated') || lower.includes('reverse') || lower.includes('close') ||
+      lower.includes('wide') || lower.includes('narrow')
+    ) {
+      variant.grip = segment;
+    } else if (
+      lower.includes('seated') || lower.includes('standing') ||
+      lower.includes('supported') || lower.includes('bent')
+    ) {
+      variant.posture = segment;
+    } else if (
+      lower.includes('one-arm') || lower.includes('single arm') ||
+      lower.includes('one leg') || lower.includes('single leg')
+    ) {
+      variant.laterality = segment;
+    } else {
+      const extras = variant.extras ?? [];
+      extras.push(segment);
+      variant.extras = extras;
+    }
+  }
+
+  return Object.keys(variant).length > 0 ? variant : null;
+};
 
 const findExerciseInQueue = (
   queue: WorkoutQueueItem[],
@@ -102,9 +143,9 @@ const applyOperationToExercise = (
       break;
       
     case 'swap_variant':
-      // BUG: swap_variant is a stub - no variant swapping logic implemented.
-      // If wired into production, variant requests would silently no-op.
-      // TODO: Implement variant swapping using operation.value.variant
+      if (operation.value?.variant !== undefined) {
+        updated.variant = parseVariantString(operation.value.variant);
+      }
       break;
       
     default:
@@ -183,13 +224,31 @@ export const applyOperations = (
         break;
       }
       
-      case 'add_exercise':
-        // BUG: add_exercise is explicitly "not fully implemented" - this is a shipped
-        // feature path stub. If wired into production, add requests would silently no-op
-        // while the console warns about it. Needs exercise name, weight, reps, sets from
-        // operation.value and insertion logic into the target queue item.
-        console.warn(`[OPERATION APPLIER] add_exercise not fully implemented`);
+      case 'add_exercise': {
+        const targetDay = currentQueue.find((qi) => qi.dayNumber === operation.target.dayNumber);
+        if (targetDay && operation.value?.exerciseName) {
+          const newExercise: ProgramExercise = {
+            name: operation.value.exerciseName,
+            equipment: '',
+            muscle_groups_worked: [],
+            isCompound: false,
+            weight: String(operation.value.weight ?? 0),
+            reps: String(operation.value.reps ?? 8),
+            sets: String(operation.value.sets ?? 3),
+            restTime: String(operation.value.restTime ?? 180),
+            progression: '0',
+            hasCustomisedSets: false,
+            variant: null,
+          };
+          currentQueue = currentQueue.map((qi) => {
+            if (qi.id === targetDay.id) {
+              return { ...qi, exercises: [...qi.exercises, newExercise] };
+            }
+            return qi;
+          });
+        }
         break;
+      }
         
       default:
         console.warn(`[OPERATION APPLIER] Unknown operation type:`, operation.type);
@@ -214,7 +273,7 @@ export const validateOperationApplicability = (
       if (!found) {
         missingTargets.push(`Cannot remove: ${operation.target.exerciseName || 'unknown'}`);
       }
-    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'modify_rest'].includes(operation.type)) {
+    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'modify_rest', 'swap_variant'].includes(operation.type)) {
       const found = findExerciseInQueue(queue, operation.target);
       if (!found) {
         missingTargets.push(`Cannot modify: ${operation.target.exerciseName || 'unknown'}`);
