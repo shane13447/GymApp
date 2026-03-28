@@ -113,7 +113,7 @@ const setLastQueueParseFailureReason = (reason: QueueParseFailureReason): void =
   lastQueueParseFailureReason = reason;
 };
 
-const parseVariantLabel = (value: string): ExerciseVariant | null => {
+export const parseVariantLabel = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)
     .map((segment) => segment.trim())
@@ -3805,6 +3805,23 @@ export const evaluateInjurySemanticOutcome = (
 /**
  * Load current workout queue from database
  */
+/**
+ * Merges horizon-scoped queue modifications back into the full queue.
+ * The scopedModified queue contains only the first `horizon` items (possibly modified by the LLM).
+ * This function replaces the first `horizon` items in fullQueue with scopedModified,
+ * preserving any items beyond the horizon unchanged.
+ */
+export const mergeScopedQueueChanges = (
+  fullQueue: WorkoutQueueItem[],
+  scopedModified: WorkoutQueueItem[],
+  horizon: number
+): WorkoutQueueItem[] => {
+  if (scopedModified.length === 0) {
+    return fullQueue;
+  }
+  return [...scopedModified, ...fullQueue.slice(horizon)];
+};
+
 export const loadWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
   try {
     return await db.getWorkoutQueue();
