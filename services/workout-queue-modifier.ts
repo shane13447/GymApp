@@ -1972,6 +1972,14 @@ export const repairQueueWithIntent = (
         continue;
       }
 
+      // Only remove if the LLM also removed this exercise (it was already missing from parsed output).
+      // This prevents over-broad targeting from removing exercises the LLM correctly kept.
+      const llmAlsoRemoved = !parsedQueue
+        .find((item) => item.id === target.queueItemId)
+        ?.exercises.some((ex) => doesExerciseTextMatch(ex, target.displayName));
+
+      if (!llmAlsoRemoved) continue;
+
       healedQueue[queueItemIndex] = {
         ...healedQueue[queueItemIndex],
         exercises: healedQueue[queueItemIndex].exercises.filter((exercise) => {
