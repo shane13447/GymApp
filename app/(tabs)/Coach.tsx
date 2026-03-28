@@ -35,6 +35,7 @@ import {
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
   extractTargetExerciseRefs,
+  mergeScopedQueueChanges,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
   type TargetedExerciseRef,
@@ -255,7 +256,9 @@ export default function CoachScreen() {
   const [proxyResponse, setProxyResponse] = useState('');
   const [proxyError, setProxyError] = useState('');
   const targetedExercisesRef = useRef<TargetedExerciseRef[]>([]); // Sync ref for race condition fix
+  const scopedQueueRef = useRef<WorkoutQueueItem[]>([]); // Queue items sent to LLM (horizon-scoped)
   const lastProcessedResponseRef = useRef<string>('');
+  const responseVersionRef = useRef(0); // Forces useEffect re-fire even for identical proxyResponse strings
   const coachProxyUrl = useRef(getCoachProxyUrl());
   const requestCounterRef = useRef(0);
   const activeRequestIdRef = useRef<number | null>(null);
@@ -320,10 +323,10 @@ export default function CoachScreen() {
 
       // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
       // Use ref to avoid race condition with async state updates
-      const parsedQueue = parseQueueFormatResponse(proxyResponse, workoutQueue, inputText, targetedExercisesRef.current);
+      const parsedQueue = parseQueueFormatResponse(proxyResponse, scopedQueueRef.current, inputText, targetedExercisesRef.current);
 
       if (parsedQueue && parsedQueue.length > 0) {
-        const structureValidation = validateQueueStructure(workoutQueue, parsedQueue);
+        const structureValidation = validateQueueStructure(scopedQueueRef.current, parsedQueue);
         if (!structureValidation.valid) {
           console.warn('[QUEUE FORMAT] Structure validation failed:', structureValidation.errors);
 
@@ -359,9 +362,10 @@ export default function CoachScreen() {
 
         console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
 
-        setGeneratedQueue(parsedQueue);
+        const differences = compareWorkoutQueues(scopedQueueRef.current, parsedQueue);
 
-        const differences = compareWorkoutQueues(workoutQueue, parsedQueue);
+        const mergedQueue = mergeScopedQueueChanges(workoutQueue, parsedQueue, scopedQueueRef.current.length);
+        setGeneratedQueue(mergedQueue);
 
         if (differences.length > 0) {
           const formatted = differencesToProposedChanges(differences);
@@ -581,6 +585,8 @@ export default function CoachScreen() {
     setResponse('');
     setProxyResponse('');
     setGeneratedProgramDraft(null);
+    setGeneratedQueue(null);
+    setProposedChanges(null);
 
     try {
       const accessToken = await getSupabaseAccessToken();
@@ -605,6 +611,7 @@ export default function CoachScreen() {
 
         // Apply queue horizon scope - limit to first N items for this request
         const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
+        scopedQueueRef.current = scopedWorkoutQueue;
         console.log(`[HORIZON] Modifying ${scopedWorkoutQueue.length} of ${workoutQueue.length} workouts (horizon: ${queueHorizon})`);
 
         // Store matched exercises for use in repair system
@@ -1045,13 +1052,12 @@ export default function CoachScreen() {
                 value={String(queueHorizon)}
                 onChangeText={(text) => {
                   const digit = text.replace(/[^1-9]/g, '').slice(0, 1);
-                  if (digit) {
-                    setQueueHorizon(parseInt(digit, 10));
-                  }
+                  setQueueHorizon(digit ? parseInt(digit, 10) : 3);
                 }}
                 onBlur={() => {
-                  if (queueHorizon < 1) setQueueHorizon(1);
-                  if (queueHorizon > 9) setQueueHorizon(9);
+                  if (queueHorizon < 1 || queueHorizon > 9) {
+                    setQueueHorizon(3);
+                  }
                 }}
                 keyboardType="numeric"
                 maxLength={1}
