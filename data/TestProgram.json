@@ -102,7 +102,7 @@
       {
         "name": "Leg Extensions",
         "variant": { "posture": "Seated" },
-        "reps": [15, 15, 15],
+        "reps": [10, 10, 10],
         "weight": [55, 55, 55]
       },
       {
