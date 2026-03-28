@@ -1,37 +1,11 @@
-import { PROGRAM_GENERATION_DEFAULTS } from '@/constants/program-generation-defaults';
 import exerciseSelectionCatalog from '@/data/exerciseSelection.json';
 import { buildProgramDraftContext } from '@/services/coach/program-draft-context';
 import {
   buildProgramDraftRequest,
-  generateProgramDraft,
   prepareProgramDraftFromModelResponse,
 } from '@/services/coach/program-draft';
-import type { WorkoutDay } from '@/types';
 
-describe('generateProgramDraft', () => {
-  it('generates draft with partial profile inputs using defaults', () => {
-    const draft = generateProgramDraft({
-      trainingDaysPerWeek: null,
-      sessionDurationMinutes: null,
-      experienceLevel: null,
-    });
-
-    expect(draft.workoutDays.length).toBe(PROGRAM_GENERATION_DEFAULTS.trainingDaysPerWeek);
-    expect(draft.workoutDays.every((day: WorkoutDay) => day.exercises.length > 0)).toBe(true);
-  });
-
-  it('uses provided profile inputs when present', () => {
-    const draft = generateProgramDraft({
-      trainingDaysPerWeek: 3,
-      sessionDurationMinutes: 40,
-      experienceLevel: 'beginner',
-    });
-
-    expect(draft.workoutDays).toHaveLength(3);
-    expect(draft.workoutDays.every((day: WorkoutDay) => day.exercises.length > 0)).toBe(true);
-    expect(draft.workoutDays.every((day: WorkoutDay) => day.exercises.length <= 4)).toBe(true);
-  });
-
+describe('program-draft', () => {
   it('builds generation context using user profile fields and exerciseSelection catalog entries only', () => {
     const context = buildProgramDraftContext(
       {
