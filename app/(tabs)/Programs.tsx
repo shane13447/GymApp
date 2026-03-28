@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Keyboard, Pressable, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Modal, Pressable, TextInput, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ExerciseConfigCard } from '@/components/programs/ExerciseConfigCard';
@@ -153,6 +153,12 @@ export default function ProgramsScreen() {
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const [selectedExercises, setSelectedExercises] = useState<ProgramExercise[]>([]);
   const [showExerciseList, setShowExerciseList] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState<{ visible: boolean; programId: string; sourceName: string; newName: string }>({
+    visible: false,
+    programId: '',
+    sourceName: '',
+    newName: '',
+  });
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
@@ -500,49 +506,33 @@ export default function ProgramsScreen() {
     });
   };
 
-  // BUG (ChatGPT audit): Alert.prompt is iOS-only and crashes on Android.
-  // Fix: Replace with a cross-platform dialog (e.g., a modal with TextInput) when
-  // the refactor/UI update introduces shared dialog components.
   const handleDuplicateProgram = (programId: string, sourceName: string) => {
     const defaultName = `${sourceName} Copy`;
+    setDuplicateModal({ visible: true, programId, sourceName, newName: defaultName });
+  };
 
-    Alert.prompt(
-      'Duplicate Program',
-      'Enter the new program name:',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Duplicate',
-          onPress: async (inputName) => {
-            const proposedName = (inputName ?? '').trim() || defaultName;
+  const confirmDuplicateProgram = async () => {
+    const proposedName = duplicateModal.newName.trim() || `${duplicateModal.sourceName} Copy`;
+    setDuplicateModal((prev) => ({ ...prev, visible: false }));
 
-            try {
-              await db.duplicateProgram(programId, proposedName);
-              await loadPrograms();
-              Alert.alert('Success', 'Program duplicated successfully!');
-            } catch (error) {
-              if (error instanceof Error && error.message === 'Program name already exists') {
-                Alert.alert('Name Already Exists', 'Program name already exists. Please choose a different name.', [
-                  {
-                    text: 'Rename',
-                    onPress: () => handleDuplicateProgram(programId, sourceName),
-                  },
-                ]);
-                return;
-              }
-
-              console.error('Error duplicating program:', error);
-              Alert.alert('Error', 'Failed to duplicate program');
-            }
+    try {
+      await db.duplicateProgram(duplicateModal.programId, proposedName);
+      await loadPrograms();
+      Alert.alert('Success', 'Program duplicated successfully!');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Program name already exists') {
+        Alert.alert('Name Already Exists', 'Program name already exists. Please choose a different name.', [
+          {
+            text: 'Rename',
+            onPress: () => handleDuplicateProgram(duplicateModal.programId, duplicateModal.sourceName),
           },
-        },
-      ],
-      'plain-text',
-      defaultName
-    );
+        ]);
+        return;
+      }
+
+      console.error('Error duplicating program:', error);
+      Alert.alert('Error', 'Failed to duplicate program');
+    }
   };
 
   const viewProgram = (programId: string) => {
@@ -1140,6 +1130,46 @@ export default function ProgramsScreen() {
             </Collapsible>
           ))}
         </ThemedView>
+
+        <Modal
+          visible={duplicateModal.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDuplicateModal((prev) => ({ ...prev, visible: false }))}
+        >
+          <View className="flex-1 justify-center items-center bg-black/50 px-6">
+            <View className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm">
+              <ThemedText type="subtitle" className="mb-2">Duplicate Program</ThemedText>
+              <ThemedText className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Enter the new program name:
+              </ThemedText>
+              <TextInput
+                className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base mb-4"
+                style={{ color: textColor }}
+                value={duplicateModal.newName}
+                onChangeText={(text) => setDuplicateModal((prev) => ({ ...prev, newName: text }))}
+                autoFocus
+                selectTextOnFocus
+              />
+              <View className="flex-row gap-3">
+                <Pressable
+                  onPress={() => setDuplicateModal((prev) => ({ ...prev, visible: false }))}
+                  className="flex-1 py-3 rounded-full items-center bg-gray-200 dark:bg-gray-600"
+                  accessibilityRole="button"
+                >
+                  <ThemedText className="font-semibold">Cancel</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={confirmDuplicateProgram}
+                  className="flex-1 py-3 rounded-full items-center bg-blue-500"
+                  accessibilityRole="button"
+                >
+                  <ThemedText className="font-semibold text-white">Duplicate</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ParallaxScrollView>
     );
   }
