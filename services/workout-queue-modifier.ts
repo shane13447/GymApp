@@ -3240,6 +3240,7 @@ const inferTargetedNumericIntent = (
 
   const genericWords = new Set(['barbell', 'dumbbell', 'machine', 'cable', 'exercise', 'exercises']);
   const clauses = loweredRequest.split(/(?:,|\band\b|\bbut\b|\balso\b)/i).map((part) => part.trim());
+  let lastMatchedTargets: TargetedExerciseRef[] = [];
 
   for (const clause of clauses) {
     const hasWeightSignal = /\b(?:kg|weight|kilos?)\b/.test(clause);
@@ -3294,6 +3295,7 @@ const inferTargetedNumericIntent = (
     if (!valueToApply) continue;
 
     let clauseMatchedTarget = false;
+    const matchedInThisClause: TargetedExerciseRef[] = [];
 
     for (const targetRef of targetedExerciseRefs) {
       const fullName = normaliseText(targetRef.name);
@@ -3310,6 +3312,7 @@ const inferTargetedNumericIntent = (
       if (!matchesClause) continue;
 
       clauseMatchedTarget = true;
+      matchedInThisClause.push(targetRef);
       const targetKey = getTargetKey(targetRef);
       const existingIntent = intentMap.get(targetKey) ?? {};
       intentMap.set(targetKey, {
@@ -3318,13 +3321,29 @@ const inferTargetedNumericIntent = (
       });
     }
 
-    if (!clauseMatchedTarget && requestHasSingleAttribute && targetedExerciseRefs.length === 1) {
-      const targetKey = getTargetKey(targetedExerciseRefs[0]);
-      const existingIntent = intentMap.get(targetKey) ?? {};
-      intentMap.set(targetKey, {
-        ...existingIntent,
-        [inferredAttribute]: valueToApply,
-      });
+    if (clauseMatchedTarget) {
+      lastMatchedTargets = matchedInThisClause;
+    } else if (lastMatchedTargets.length > 0 && requestHasSingleAttribute) {
+      // Continuation clause: carry matched targets forward from earlier clause.
+      // Handles "exercise X value1, value2, and value3" patterns.
+      for (const targetRef of lastMatchedTargets) {
+        const targetKey = getTargetKey(targetRef);
+        const existingIntent = intentMap.get(targetKey) ?? {};
+        intentMap.set(targetKey, {
+          ...existingIntent,
+          [inferredAttribute]: valueToApply,
+        });
+      }
+    } else if (!clauseMatchedTarget && requestHasSingleAttribute) {
+      // Muscle-group broadcast: no exercise name in clause, broadcast to all targets.
+      for (const targetRef of targetedExerciseRefs) {
+        const targetKey = getTargetKey(targetRef);
+        const existingIntent = intentMap.get(targetKey) ?? {};
+        intentMap.set(targetKey, {
+          ...existingIntent,
+          [inferredAttribute]: valueToApply,
+        });
+      }
     }
   }
 
