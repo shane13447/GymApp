@@ -1942,6 +1942,24 @@ export const repairQueueWithIntent = (
     return { ...qItem, exercises: healedExercises };
   });
 
+  // Anti-addition guard: strip exercises that don't exist in original queue
+  // and weren't explicitly added via an add request.
+  // Prevents the LLM from sneaking in exercises that weren't requested to be added.
+  if (!isAddRequest) {
+    for (let qIndex = 0; qIndex < healedQueue.length; qIndex++) {
+      const qItem = healedQueue[qIndex];
+      const originalItem =
+        originalQueue.find((oq) => oq.id === qItem.id) ?? originalQueue[qIndex];
+      if (!originalItem) continue;
+      healedQueue[qIndex] = {
+        ...qItem,
+        exercises: qItem.exercises.filter((ex) => {
+          return originalItem.exercises.some((origEx) => doesExerciseTextMatch(origEx, ex.name));
+        }),
+      };
+    }
+  }
+
   // Deterministic structural reconciliation pass for explicit add/remove intents
   if (isRemoveRequest) {
     for (const target of targetedExerciseNames) {
