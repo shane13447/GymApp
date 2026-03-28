@@ -1,13 +1,12 @@
 import {
   parseAndValidateOperations,
-  parseOperationResponse,
   validateOperationResponse,
 } from '@/services/coach/operation-contract';
 
 describe('operation contract', () => {
   it('rejects non-json and toon-formatted payloads', () => {
-    expect(parseOperationResponse('Q0:D1:Bench Press|80|8|3')).toBeNull();
-    expect(parseOperationResponse('not-json')).toBeNull();
+    expect(validateOperationResponse('Q0:D1:Bench Press|80|8|3').isValid).toBe(false);
+    expect(validateOperationResponse('not-json').isValid).toBe(false);
   });
 
   it('accepts valid payload and enforces schema', () => {
