@@ -13,6 +13,8 @@ type CatalogExercise = {
   equipment: string;
   muscle_groups_worked: string[];
   isCompound: boolean;
+  variantOptions?: { label: string; field?: string; value?: string }[];
+  aliases?: string[];
 };
 
 export type ProgramDraftContext = {
@@ -24,6 +26,45 @@ export type ProgramDraftContext = {
   };
   allowedExerciseNames: string[];
   allowedExercises: CatalogExercise[];
+  progressionDefaults: {
+    compoundBarbell: number;
+    compoundDumbbell: number;
+    isolationBarbell: number;
+    isolationDumbbell: number;
+    threshold: number;
+  };
+};
+
+/**
+ * Returns progression defaults based on experience level.
+ */
+const getProgressionDefaults = (level: ExperienceLevel) => {
+  switch (level) {
+    case 'beginner':
+      return {
+        compoundBarbell: 2.5,
+        compoundDumbbell: 4,
+        isolationBarbell: 1.25,
+        isolationDumbbell: 2.5,
+        threshold: 0, // Linear progression — increase every session
+      };
+    case 'intermediate':
+      return {
+        compoundBarbell: 2.5,
+        compoundDumbbell: 4,
+        isolationBarbell: 1.25,
+        isolationDumbbell: 2.5,
+        threshold: 1, // Hit max reps once to progress
+      };
+    case 'advanced':
+      return {
+        compoundBarbell: 2.5,
+        compoundDumbbell: 4,
+        isolationBarbell: 1.25,
+        isolationDumbbell: 2.5,
+        threshold: 3, // Hit max reps 3 sessions to progress
+      };
+  }
 };
 
 export const buildProgramDraftContext = (
@@ -42,12 +83,15 @@ export const buildProgramDraftContext = (
     equipment: exercise.equipment,
     muscle_groups_worked: exercise.muscle_groups_worked,
     isCompound: exercise.isCompound,
+    variantOptions: exercise.variantOptions,
+    aliases: exercise.aliases,
   }));
 
   return {
     profile: resolvedProfile,
     allowedExerciseNames: allowedExercises.map((exercise) => exercise.name),
     allowedExercises,
+    progressionDefaults: getProgressionDefaults(resolvedProfile.experienceLevel),
   };
 };
 
