@@ -1,4 +1,5 @@
 import type { Program, ProgramExercise, WorkoutDay } from '@/types';
+import exerciseSelectionCatalog from '@/data/exerciseSelection.json';
 
 type DraftProgram = Omit<Program, 'createdAt' | 'updatedAt'>;
 
@@ -52,19 +53,39 @@ const toPositiveInteger = (value: unknown, fallback: number): number => {
   return fallback;
 };
 
+/**
+ * Build a lookup map from the exercise catalog for O(1) lookups by name (case-insensitive).
+ */
+const catalogByName = new Map<string, typeof exerciseSelectionCatalog[number]>();
+for (const entry of exerciseSelectionCatalog) {
+  catalogByName.set(entry.name.toLowerCase(), entry);
+}
+
 const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
   if (!isRecord(rawExercise)) {
     return null;
   }
 
-  const name = typeof rawExercise.name === 'string' ? rawExercise.name : null;
-  const equipment = typeof rawExercise.equipment === 'string' ? rawExercise.equipment : null;
+  const name = typeof rawExercise.name === 'string' ? rawExercise.name.trim() : null;
+  if (!name) {
+    return null;
+  }
+
+  // Look up the exercise from the catalog by name (case-insensitive)
+  const catalogEntry = catalogByName.get(name.toLowerCase());
+
+  // Use catalog data for missing fields
+  const equipment = typeof rawExercise.equipment === 'string'
+    ? rawExercise.equipment
+    : catalogEntry?.equipment ?? null;
   const muscleGroupsWorked = Array.isArray(rawExercise.muscle_groups_worked)
     ? rawExercise.muscle_groups_worked.filter((group): group is string => typeof group === 'string')
-    : null;
-  const isCompound = typeof rawExercise.isCompound === 'boolean' ? rawExercise.isCompound : null;
+    : catalogEntry?.muscle_groups_worked ?? null;
+  const isCompound = typeof rawExercise.isCompound === 'boolean'
+    ? rawExercise.isCompound
+    : catalogEntry?.isCompound ?? null;
 
-  if (!name || !equipment || !muscleGroupsWorked || muscleGroupsWorked.length === 0 || isCompound === null) {
+  if (!equipment || !muscleGroupsWorked || muscleGroupsWorked.length === 0 || isCompound === null) {
     return null;
   }
 
@@ -76,7 +97,7 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
     weight: toNumericString(rawExercise.weight, '0'),
     reps: toNumericString(rawExercise.reps, '10'),
     sets: toNumericString(rawExercise.sets, '3'),
-    restTime: toNumericString(rawExercise.restTime, '120'),
+    restTime: toNumericString(rawExercise.restTime ?? rawExercise.rest, '120'),
     progression: toNumericString(rawExercise.progression, '2.5'),
     hasCustomisedSets: toBoolean(rawExercise.hasCustomisedSets, false),
   };
