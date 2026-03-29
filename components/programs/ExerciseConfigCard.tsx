@@ -15,7 +15,7 @@ import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise } from '@/
 interface ExerciseConfigCardProps {
   exercise: ProgramExercise;
   index: number;
-  onUpdate: (field: keyof ProgramExercise, value: string | boolean | ExerciseVariant | null) => void;
+  onUpdate: (field: keyof ProgramExercise, value: string | boolean | number | ExerciseVariant | null) => void;
   showRemove?: boolean;
   onRemove?: () => void;
 }
@@ -177,6 +177,42 @@ const useDecimalInput = (
   return { localValue, handleFocus, handleChange, handleBlur };
 };
 
+/**
+ * Custom hook for integer input fields.
+ */
+const useIntegerInput = (
+  value: number | undefined,
+  onUpdate: (value: number | null) => void
+) => {
+  const [localValue, setLocalValue] = useState(value?.toString() || '');
+  const isFocusedRef = useRef(false);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+  
+  useEffect(() => {
+    if (isFocusedRef.current) return;
+    setLocalValue(value?.toString() || '');
+  }, [value]);
+  
+  const handleFocus = useCallback(() => {
+    isFocusedRef.current = true;
+  }, []);
+  
+  const handleChange = useCallback((text: string) => {
+    if (text === '' || /^\d*$/.test(text)) {
+      setLocalValue(text);
+    }
+  }, []);
+  
+  const handleBlur = useCallback(() => {
+    isFocusedRef.current = false;
+    const parsed = localValue ? parseInt(localValue, 10) : null;
+    onUpdateRef.current(parsed);
+  }, [localValue]);
+  
+  return { localValue, handleFocus, handleChange, handleBlur };
+};
+
 export const ExerciseConfigCard = memo(function ExerciseConfigCard({
   exercise,
   index,
@@ -217,10 +253,25 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
     (value: string) => onUpdate('progression', value),
     [onUpdate]
   );
+  const handleRepRangeMinChange = useCallback(
+    (value: number | null) => onUpdate('repRangeMin', value),
+    [onUpdate]
+  );
+  const handleRepRangeMaxChange = useCallback(
+    (value: number | null) => onUpdate('repRangeMax', value),
+    [onUpdate]
+  );
+  const handleProgressionThresholdChange = useCallback(
+    (value: number | null) => onUpdate('progressionThreshold', value),
+    [onUpdate]
+  );
   
   // Use decimal input hooks for weight and progression fields
   const weightInput = useDecimalInput(exercise.weight, handleWeightChange);
   const progressionInput = useDecimalInput(exercise.progression, handleProgressionChange);
+  const repRangeMinInput = useIntegerInput(exercise.repRangeMin, handleRepRangeMinChange);
+  const repRangeMaxInput = useIntegerInput(exercise.repRangeMax, handleRepRangeMaxChange);
+  const progressionThresholdInput = useIntegerInput(exercise.progressionThreshold, handleProgressionThresholdChange);
 
   return (
     <View className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600">
@@ -400,6 +451,65 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
             accessibilityLabel="Weight progression"
           />
         </ThemedView>
+
+        {/* Double Progression Settings */}
+        <Collapsible title="Double Progression">
+          <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Double progression automatically increases weight when you consistently hit the top of your rep range.
+          </ThemedText>
+          <View className="gap-3">
+            <ThemedView className="gap-1">
+              <ThemedText className="text-sm font-semibold">Rep Range Min</ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                placeholder="e.g., 8"
+                placeholderTextColor="#999"
+                value={repRangeMinInput.localValue}
+                onFocus={repRangeMinInput.handleFocus}
+                onChangeText={repRangeMinInput.handleChange}
+                onBlur={repRangeMinInput.handleBlur}
+                keyboardType="number-pad"
+                style={{ color: textColor }}
+                accessibilityLabel="Minimum reps for double progression"
+              />
+            </ThemedView>
+
+            <ThemedView className="gap-1">
+              <ThemedText className="text-sm font-semibold">Rep Range Max</ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                placeholder="e.g., 12"
+                placeholderTextColor="#999"
+                value={repRangeMaxInput.localValue}
+                onFocus={repRangeMaxInput.handleFocus}
+                onChangeText={repRangeMaxInput.handleChange}
+                onBlur={repRangeMaxInput.handleBlur}
+                keyboardType="number-pad"
+                style={{ color: textColor }}
+                accessibilityLabel="Maximum reps for double progression"
+              />
+            </ThemedView>
+
+            <ThemedView className="gap-1">
+              <ThemedText className="text-sm font-semibold">Progression Threshold</ThemedText>
+              <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
+                Number of consecutive sessions hitting the rep range max before increasing weight
+              </ThemedText>
+              <TextInput
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
+                placeholder="e.g., 2"
+                placeholderTextColor="#999"
+                value={progressionThresholdInput.localValue}
+                onFocus={progressionThresholdInput.handleFocus}
+                onChangeText={progressionThresholdInput.handleChange}
+                onBlur={progressionThresholdInput.handleBlur}
+                keyboardType="number-pad"
+                style={{ color: textColor }}
+                accessibilityLabel="Sessions required before weight increase"
+              />
+            </ThemedView>
+          </View>
+        </Collapsible>
       </View>
     </View>
   );
