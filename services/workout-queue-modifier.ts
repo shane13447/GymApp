@@ -1945,7 +1945,8 @@ export const repairQueueWithIntent = (
   // Anti-addition guard: strip exercises that don't exist in original queue
   // and weren't explicitly added via an add request.
   // Prevents the LLM from sneaking in exercises that weren't requested to be added.
-  if (!isAddRequest) {
+  // Exception: moderate/severe injury scenarios may swap exercises to safer alternatives.
+  if (!isAddRequest && !injuryAllowsRemoval) {
     for (let qIndex = 0; qIndex < healedQueue.length; qIndex++) {
       const qItem = healedQueue[qIndex];
       const originalItem =
@@ -1962,6 +1963,15 @@ export const repairQueueWithIntent = (
 
   // Deterministic structural reconciliation pass for explicit add/remove intents
   if (isRemoveRequest) {
+    // Detect if the LLM attempted ANY removal (some original exercise is missing from parsed output).
+    // If the LLM ignored the request entirely, deterministic pass compensates.
+    // If the LLM attempted removal, trust its targets to avoid over-broad removals.
+    const llmAttemptedRemoval = originalQueue.some((origItem) => {
+      const parsedItem = parsedQueue.find((p) => p.id === origItem.id);
+      if (!parsedItem) return false;
+      return parsedItem.exercises.length < origItem.exercises.length;
+    });
+
     for (const target of targetedExerciseNames) {
       if (!isTargetedExerciseRef(target)) {
         continue;
@@ -1972,13 +1982,14 @@ export const repairQueueWithIntent = (
         continue;
       }
 
-      // Only remove if the LLM also removed this exercise (it was already missing from parsed output).
+      // If the LLM attempted removal but kept this specific exercise, trust its judgment.
       // This prevents over-broad targeting from removing exercises the LLM correctly kept.
-      const llmAlsoRemoved = !parsedQueue
-        .find((item) => item.id === target.queueItemId)
-        ?.exercises.some((ex) => doesExerciseTextMatch(ex, target.displayName));
-
-      if (!llmAlsoRemoved) continue;
+      if (llmAttemptedRemoval) {
+        const llmKeptExercise = parsedQueue
+          .find((item) => item.id === target.queueItemId)
+          ?.exercises.some((ex) => doesExerciseTextMatch(ex, target.displayName));
+        if (llmKeptExercise) continue;
+      }
 
       healedQueue[queueItemIndex] = {
         ...healedQueue[queueItemIndex],
@@ -3074,7 +3085,8 @@ export const validateChanges = (
   }
 
   // Check for unexpected additions (if user did not request add-like action)
-  if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS)) {
+  // Injury moderate/severe scenarios may swap exercises to safer alternatives.
+  if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) && !injuryRemovalAllowed) {
     if (remainingAdditions.length > 0) {
       const addedNames = remainingAdditions.map((addition) => addition.exerciseName).join(', ');
       warnings.push(`Unexpected addition(s): ${addedNames}. These exercises were added but you didn't request addition.`);
@@ -3269,9 +3281,10 @@ const inferTargetedNumericIntent = (
   let lastMatchedTargets: TargetedExerciseRef[] = [];
 
   for (const clause of clauses) {
-    const hasWeightSignal = /\b(?:kg|weight|kilos?)\b/.test(clause);
-    const hasRepsSignal = /\breps?\b/.test(clause);
-    const hasSetsSignal = /\bsets?\b/.test(clause);
+    // hasWeightSignal: match "kg" even when attached to a number like "50kg"
+    const hasWeightSignal = /(?:\d\s*kg|\bkg\b|\bweight\b|\bkilos?\b)/i.test(clause);
+    const hasRepsSignal = /\breps?\b/i.test(clause);
+    const hasSetsSignal = /\bsets?\b/i.test(clause);
 
     const inferredAttribute: NumericAttribute | null = hasWeightSignal
       ? 'weight'
@@ -3318,10 +3331,16 @@ const inferTargetedNumericIntent = (
       .find(Boolean);
     const valueToApply = destinationMatch?.[1] ?? clause.match(/(\d+(?:\.\d+)?)/)?.[1];
 
+    console.log(`[INTENT INFERENCE] Clause: "${clause}", inferredAttribute: ${inferredAttribute}, valueToApply: ${valueToApply}, lastMatchedTargets: ${lastMatchedTargets.length}, requestHasSingleAttribute: ${requestHasSingleAttribute}, targetedExerciseRefs.length: ${targetedExerciseRefs.length}`);
+
     if (!valueToApply) continue;
 
     let clauseMatchedTarget = false;
     const matchedInThisClause: TargetedExerciseRef[] = [];
+
+    // Check if this is a muscle-group broadcast pattern (e.g., "every chest exercise")
+    // In this case, we should broadcast to all targets rather than matching individual exercises.
+    const isMuscleGroupBroadcast = /\b(?:every|all)\s+\w+\s+exercise/i.test(clause);
 
     for (const targetRef of targetedExerciseRefs) {
       const fullName = normaliseText(targetRef.name);
@@ -3331,9 +3350,11 @@ const inferTargetedNumericIntent = (
         .filter((word) => word.length > 2 && !genericWords.has(word));
 
       const matchesClause =
-        clause.includes(fullName) ||
-        clause.includes(displayName) ||
-        significantWords.some((word) => clause.includes(word));
+        !isMuscleGroupBroadcast && (
+          clause.includes(fullName) ||
+          clause.includes(displayName) ||
+          significantWords.some((word) => clause.includes(word))
+        );
 
       if (!matchesClause) continue;
 
@@ -3349,9 +3370,11 @@ const inferTargetedNumericIntent = (
 
     if (clauseMatchedTarget) {
       lastMatchedTargets = matchedInThisClause;
-    } else if (lastMatchedTargets.length > 0 && requestHasSingleAttribute) {
+    } else if (lastMatchedTargets.length > 0) {
       // Continuation clause: carry matched targets forward from earlier clause.
       // Handles "exercise X value1, value2, and value3" patterns.
+      // The clause itself has its own inferredAttribute from explicit signals,
+      // so the global attribute count guard is unnecessary here.
       for (const targetRef of lastMatchedTargets) {
         const targetKey = getTargetKey(targetRef);
         const existingIntent = intentMap.get(targetKey) ?? {};
@@ -3600,6 +3623,25 @@ export const evaluatePromptIntentOutcome = (
     }
 
     for (const targetName of canonicalTargetNames) {
+      // Skip targets whose name doesn't appear in the user's prompt.
+      // This handles over-broad fuzzy matching (e.g., "fingertip curls" matching "Hammer Curls").
+      // We require at least 2 non-generic words OR 1 specific word to match.
+      const matchingTargetRef = targetedExerciseRefs.find(
+        (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
+      );
+      if (matchingTargetRef) {
+        const targetWords = normaliseText(matchingTargetRef.name)
+          .split(/\s+/)
+          .filter((word) => word.length > 2 && !['the', 'and', 'for', 'with', 'all'].includes(word));
+        const promptMentionsTarget = targetWords.filter((word) => requestLower.includes(word));
+        // Require either: the full canonical name appears, or at least 2 words match
+        if (promptMentionsTarget.length === 0 || 
+            (promptMentionsTarget.length === 1 && !requestLower.includes(normaliseText(matchingTargetRef.name)))) {
+          // Full name doesn't appear and only 1 word matches - likely over-broad fuzzy match
+          continue;
+        }
+      }
+
       const originalCount = allOriginalExercises.filter(
         (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
       ).length;
@@ -3608,12 +3650,9 @@ export const evaluatePromptIntentOutcome = (
       ).length;
 
       if (parsedCount >= originalCount) {
-        const failedTarget = targetedExerciseRefs.find(
-          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
-        );
         return {
           passed: false,
-          reason: `Intent semantic failed: remove request did not decrease count for ${failedTarget?.displayName ?? targetName}.`,
+          reason: `Intent semantic failed: remove request did not decrease count for ${matchingTargetRef?.displayName ?? targetName}.`,
         };
       }
     }
