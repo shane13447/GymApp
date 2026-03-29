@@ -3,6 +3,7 @@
  * AI-powered workout coach for modifying workout queues and general fitness advice
  */
 
+import { useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
@@ -44,7 +45,6 @@ import {
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
 import type { Program, WorkoutQueueItem } from '@/types';
-import { CoachMode } from '@/types';
 
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
@@ -241,7 +241,6 @@ const callCoachProxy = async (
 };
 
 export default function CoachScreen() {
-  const [mode, setMode] = useState<CoachMode>(CoachMode.ModifyWorkout);
   const [inputText, setInputText] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
@@ -249,16 +248,16 @@ export default function CoachScreen() {
   const [proposedChanges, setProposedChanges] = useState<ProposedChanges | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
-  const [queueHorizon, setQueueHorizon] = useState(3); // How many workouts can be modified (1-10)
+  const [queueHorizon, setQueueHorizon] = useState(3);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const [generatedProgramDraft, setGeneratedProgramDraft] = useState<Omit<Program, 'createdAt' | 'updatedAt'> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [proxyResponse, setProxyResponse] = useState('');
   const [proxyError, setProxyError] = useState('');
-  const targetedExercisesRef = useRef<TargetedExerciseRef[]>([]); // Sync ref for race condition fix
-  const scopedQueueRef = useRef<WorkoutQueueItem[]>([]); // Queue items sent to LLM (horizon-scoped)
+  const [isProfileComplete, setIsProfileComplete] = useState(false);
+  const targetedExercisesRef = useRef<TargetedExerciseRef[]>([]);
+  const scopedQueueRef = useRef<WorkoutQueueItem[]>([]);
   const lastProcessedResponseRef = useRef<string>('');
-  const responseVersionRef = useRef(0); // Forces useEffect re-fire even for identical proxyResponse strings
   const coachProxyUrl = useRef(getCoachProxyUrl());
   const requestCounterRef = useRef(0);
   const activeRequestIdRef = useRef<number | null>(null);
@@ -276,8 +275,17 @@ export default function CoachScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const queue = await db.getWorkoutQueue();
+      const [queue, profile] = await Promise.all([
+        db.getWorkoutQueue(),
+        db.getUserProfile(),
+      ]);
       setWorkoutQueue(queue);
+      const complete =
+        profile.experienceLevel !== null &&
+        profile.trainingDaysPerWeek !== null &&
+        profile.sessionDurationMinutes !== null &&
+        profile.trainingGoal !== null;
+      setIsProfileComplete(complete);
     } catch (err) {
       console.error('Error loading data:', err);
     }
@@ -288,19 +296,39 @@ export default function CoachScreen() {
     loadData();
   }, [loadData]);
 
+  // Re-check profile completeness every time screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      const checkProfile = async () => {
+        try {
+          const profile = await db.getUserProfile();
+          const complete =
+            profile.experienceLevel !== null &&
+            profile.trainingDaysPerWeek !== null &&
+            profile.sessionDurationMinutes !== null &&
+            profile.trainingGoal !== null;
+          setIsProfileComplete(complete);
+        } catch (err) {
+          console.error('Error checking profile:', err);
+        }
+      };
+      checkProfile();
+    }, [])
+  );
+
   // Keep response/error state in sync with proxy transport
   useEffect(() => {
     if (proxyResponse) {
       setResponse(proxyResponse);
     }
 
-    if (!isGenerating && loading && mode === CoachMode.Chat) {
+    if (!isGenerating && loading) {
       setLoading(false);
       if (proxyResponse) {
         setError('');
       }
     }
-  }, [proxyResponse, isGenerating, loading, mode]);
+  }, [proxyResponse, isGenerating, loading]);
 
   useEffect(() => {
     if (proxyError) {
@@ -310,10 +338,9 @@ export default function CoachScreen() {
     }
   }, [proxyError]);
 
-  // Handle response in modify_workout mode
+  // Handle response
   useEffect(() => {
     if (
-      mode === CoachMode.ModifyWorkout &&
       proxyResponse &&
       !isGenerating &&
       proxyResponse !== lastProcessedResponseRef.current
@@ -547,7 +574,7 @@ export default function CoachScreen() {
         }
       }
     }
-  }, [proxyResponse, isGenerating, mode, workoutQueue, isTestMode, testIndex, inputText, testResults]);
+  }, [proxyResponse, isGenerating, workoutQueue, isTestMode, testIndex, inputText, testResults]);
 
   const sendToCoach = async () => {
     if (sendLockRef.current || loading || isGenerating) {
@@ -571,11 +598,6 @@ export default function CoachScreen() {
     requestCounterRef.current = requestId;
     activeRequestIdRef.current = requestId;
 
-    // BUG FIX: Reset lastProcessedResponseRef so the modify-only effect doesn't skip
-    // identical consecutive responses from the model. Without this, if the model returns
-    // the same TOON string twice, the second response is ignored (the effect checks
-    // proxyResponse !== lastProcessedResponseRef.current) and loading stays true forever,
-    // blocking all future sends. The ref was previously only cleared in runNextTest().
     lastProcessedResponseRef.current = '';
 
     setLoading(true);
@@ -591,117 +613,69 @@ export default function CoachScreen() {
     try {
       const accessToken = await getSupabaseAccessToken();
 
-      if (mode === CoachMode.ModifyWorkout) {
-        if (workoutQueue.length === 0) {
-          setError('No workout queue found. Please create a program and start a workout first.');
-          setLoading(false);
-          setIsGenerating(false);
-          sendLockRef.current = false;
-          return;
-        }
-
-        const {
-          processedRequest,
-          wasProcessed,
-          matchedExercises,
-          matchedExerciseRefs,
-          muscleGroupDetected,
-          noMatchesFound,
-        } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
-
-        // Apply queue horizon scope - limit to first N items for this request
-        const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
-        scopedQueueRef.current = scopedWorkoutQueue;
-        console.log(`[HORIZON] Modifying ${scopedWorkoutQueue.length} of ${workoutQueue.length} workouts (horizon: ${queueHorizon})`);
-
-        // Store matched exercises for use in repair system
-        // For muscle group requests, use matchedExercises from preprocessor
-        // For other requests, extract from the original request
-        const exercisesToStore =
-          wasProcessed && matchedExerciseRefs.length > 0
-            ? matchedExerciseRefs
-            : extractTargetExerciseRefs(trimmedInput, workoutQueue);
-        console.log(
-          '[TARGETED] Setting targetedExercises:',
-          exercisesToStore.map((exercise) => exercise.displayName)
-        );
-        targetedExercisesRef.current = exercisesToStore; // Sync update for immediate use
-
-        // Check if user mentioned a muscle group but no matching exercises exist in queue
-        if (noMatchesFound && muscleGroupDetected) {
-          setError(
-            `No ${muscleGroupDetected} exercises found in your workout queue. The queue only contains exercises for other muscle groups.`
-          );
-          setLoading(false);
-          setIsGenerating(false);
-          sendLockRef.current = false;
-          return;
-        }
-
-        if (wasProcessed) {
-          console.log(
-            `[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`
-          );
-        }
-
-        const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
-        console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
-        console.log(
-          `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
-        );
-
-        const messages: CoachProxyMessage[] = [
-          { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ];
-
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
-        if (activeRequestIdRef.current !== requestId) {
-          return;
-        }
-        setProxyResponse(generatedText);
-      } else if (mode === CoachMode.GenerateProgram) {
-        const profile = await db.getUserProfile();
-        const { prompt, llmInput } = buildProgramDraftRequest({
-          experienceLevel: profile.experienceLevel,
-          trainingDaysPerWeek: profile.trainingDaysPerWeek,
-          sessionDurationMinutes: profile.sessionDurationMinutes,
-          trainingGoal: profile.trainingGoal,
-        });
-
-        const messages: CoachProxyMessage[] = [
-          { role: 'system', content: prompt },
-          {
-            role: 'user',
-            content: JSON.stringify({ ...llmInput, user_request: trimmedInput }),
-          },
-        ];
-
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
-        if (activeRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        const draft = prepareProgramDraftFromModelResponse(generatedText);
-        setGeneratedProgramDraft(draft);
-        setResponse(JSON.stringify(draft, null, 2));
-        setError('');
-      } else {
-        const messages: CoachProxyMessage[] = [
-          {
-            role: 'system',
-            content:
-              'You are a fitness coach. Provide motivational advice and help with workout planning and execution.',
-          },
-          { role: 'user', content: trimmedInput },
-        ];
-
-        const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
-        if (activeRequestIdRef.current !== requestId) {
-          return;
-        }
-        setProxyResponse(generatedText);
+      if (workoutQueue.length === 0) {
+        setError('No workout queue found. Please create a program and start a workout first.');
+        setLoading(false);
+        setIsGenerating(false);
+        sendLockRef.current = false;
+        return;
       }
+
+      const {
+        processedRequest,
+        wasProcessed,
+        matchedExercises,
+        matchedExerciseRefs,
+        muscleGroupDetected,
+        noMatchesFound,
+      } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
+
+      const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
+      scopedQueueRef.current = scopedWorkoutQueue;
+      console.log(`[HORIZON] Modifying ${scopedWorkoutQueue.length} of ${workoutQueue.length} workouts (horizon: ${queueHorizon})`);
+
+      const exercisesToStore =
+        wasProcessed && matchedExerciseRefs.length > 0
+          ? matchedExerciseRefs
+          : extractTargetExerciseRefs(trimmedInput, workoutQueue);
+      console.log(
+        '[TARGETED] Setting targetedExercises:',
+        exercisesToStore.map((exercise) => exercise.displayName)
+      );
+      targetedExercisesRef.current = exercisesToStore;
+
+      if (noMatchesFound && muscleGroupDetected) {
+        setError(
+          `No ${muscleGroupDetected} exercises found in your workout queue. The queue only contains exercises for other muscle groups.`
+        );
+        setLoading(false);
+        setIsGenerating(false);
+        sendLockRef.current = false;
+        return;
+      }
+
+      if (wasProcessed) {
+        console.log(
+          `[PREPROCESS] Muscle group detected, matched exercises: ${matchedExercises.join(', ')}`
+        );
+      }
+
+      const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
+      console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
+      console.log(
+        `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
+      );
+
+      const messages: CoachProxyMessage[] = [
+        { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ];
+
+      const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
+      if (activeRequestIdRef.current !== requestId) {
+        return;
+      }
+      setProxyResponse(generatedText);
     } catch (err) {
       if (activeRequestIdRef.current !== requestId) {
         return;
@@ -718,11 +692,6 @@ export default function CoachScreen() {
       if (activeRequestIdRef.current === requestId) {
         activeRequestIdRef.current = null;
         setIsGenerating(false);
-        // BUG FIX: Previously only cleared loading when mode !== CoachMode.ModifyWorkout,
-        // relying on the modify-only useEffect to clear it. But that closure captures the
-        // old mode, and if the effect doesn't fire (e.g. duplicate response), loading stays
-        // true forever, blocking all future sends. Always clear here as the definitive
-        // cleanup; the modify effect can still override if it needs to show modal first.
         setLoading(false);
       }
       sendLockRef.current = false;
@@ -986,17 +955,88 @@ export default function CoachScreen() {
     setGeneratedQueue(null);
   };
 
-  const switchMode = useCallback(async (newMode: CoachMode) => {
-    setMode(newMode);
-    setInputText('');
-    setResponse('');
-    setError('');
-    setGeneratedProgramDraft(null);
-    if (newMode === CoachMode.ModifyWorkout) {
-      const queue = await db.getWorkoutQueue();
-      setWorkoutQueue(queue);
+  const handleGenerateProgram = useCallback(async () => {
+    if (!isProfileComplete) {
+      Alert.alert('Profile Incomplete', 'Fill in the profile section for custom program generation');
+      return;
     }
-  }, []);
+
+    if (!coachProxyUrl.current) {
+      setError('Coach proxy URL is not configured.');
+      return;
+    }
+
+    if (sendLockRef.current || loading || isGenerating) {
+      return;
+    }
+
+    sendLockRef.current = true;
+
+    const requestId = requestCounterRef.current + 1;
+    requestCounterRef.current = requestId;
+    activeRequestIdRef.current = requestId;
+
+    lastProcessedResponseRef.current = '';
+
+    setLoading(true);
+    setIsGenerating(true);
+    setError('');
+    setProxyError('');
+    setResponse('');
+    setProxyResponse('');
+    setGeneratedProgramDraft(null);
+    setGeneratedQueue(null);
+    setProposedChanges(null);
+
+    try {
+      const accessToken = await getSupabaseAccessToken();
+
+      const profile = await db.getUserProfile();
+      const { prompt, llmInput } = buildProgramDraftRequest({
+        experienceLevel: profile.experienceLevel,
+        trainingDaysPerWeek: profile.trainingDaysPerWeek,
+        sessionDurationMinutes: profile.sessionDurationMinutes,
+        trainingGoal: profile.trainingGoal,
+      });
+
+      const messages: CoachProxyMessage[] = [
+        { role: 'system', content: prompt },
+        {
+          role: 'user',
+          content: JSON.stringify({ ...llmInput, user_request: 'Generate a custom program for me based on my profile.' }),
+        },
+      ];
+
+      const generatedText = await callCoachProxy(coachProxyUrl.current, messages, accessToken);
+      if (activeRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      const draft = prepareProgramDraftFromModelResponse(generatedText);
+      setGeneratedProgramDraft(draft);
+      setResponse(JSON.stringify(draft, null, 2));
+      setError('');
+    } catch (err) {
+      if (activeRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (err instanceof Error && err.name === 'AbortError') {
+        setProxyError('Coach proxy request timed out. Please try again.');
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to get response';
+        setProxyError(errorMessage);
+      }
+      console.error('Error calling coach proxy:', err);
+    } finally {
+      if (activeRequestIdRef.current === requestId) {
+        activeRequestIdRef.current = null;
+        setIsGenerating(false);
+        setLoading(false);
+      }
+      sendLockRef.current = false;
+    }
+  }, [isProfileComplete, loading, isGenerating]);
 
   const renderQueueItem = useCallback(
     ({ item: queueItem }: { item: WorkoutQueueItem }) => (
@@ -1040,9 +1080,8 @@ export default function CoachScreen() {
       </ThemedView>
 
       <ThemedView className="gap-4 mt-5">
-        {/* Queue Horizon Control - Only show in ModifyWorkout mode */}
-        {mode === CoachMode.ModifyWorkout && (
-          <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+        {/* Queue Horizon Control */}
+        <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
             <View className="flex-row items-center gap-2">
               <ThemedText className="text-sm font-semibold">
                 Workout Queue Length:
@@ -1069,94 +1108,17 @@ export default function CoachScreen() {
               Number of upcoming workouts the AI can modify (1-9)
             </ThemedText>
           </View>
-        )}
-
-        {/* Mode Selector */}
-        <View className="flex-row gap-2">
-          <Pressable
-            onPress={() => switchMode(CoachMode.ModifyWorkout)}
-            className="flex-1"
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === CoachMode.ModifyWorkout }}
-          >
-            {({ pressed }) => (
-              <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
-                  mode === CoachMode.ModifyWorkout
-                    ? 'bg-blue-500'
-                    : 'bg-gray-200 dark:bg-gray-700'
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                <ThemedText
-                  className={`text-sm font-semibold ${
-                    mode === CoachMode.ModifyWorkout ? 'text-white' : ''
-                  }`}
-                >
-                  Modify Workouts
-                </ThemedText>
-              </View>
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => switchMode(CoachMode.GenerateProgram)}
-            className="flex-1"
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === CoachMode.GenerateProgram }}
-          >
-            {({ pressed }) => (
-              <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
-                  mode === CoachMode.GenerateProgram ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                <ThemedText
-                  className={`text-sm font-semibold ${mode === CoachMode.GenerateProgram ? 'text-white' : ''}`}
-                >
-                  Generate Program
-                </ThemedText>
-              </View>
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => switchMode(CoachMode.Chat)}
-            className="flex-1"
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === CoachMode.Chat }}
-          >
-            {({ pressed }) => (
-              <View
-                className={`py-2.5 px-4 rounded-lg items-center justify-center ${
-                  mode === CoachMode.Chat ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                <ThemedText
-                  className={`text-sm font-semibold ${mode === CoachMode.Chat ? 'text-white' : ''}`}
-                >
-                  Chat
-                </ThemedText>
-              </View>
-            )}
-          </Pressable>
-        </View>
 
         <ThemedText type="subtitle">
-          {mode === CoachMode.ModifyWorkout
-            ? 'Request workout modifications:'
-            : mode === CoachMode.GenerateProgram
-              ? 'Generate a complete draft program:'
-              : 'Ask your AI Coach:'}
+          Request workout modifications:
         </ThemedText>
 
-        {/* Input - Moved to top */}
+        {/* Input */}
         <TextInput
           className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-white dark:bg-gray-800"
           value={inputText}
           onChangeText={setInputText}
-          placeholder={
-            mode === CoachMode.GenerateProgram
-              ? 'Describe your goal (e.g., 3-day hypertrophy with low injury risk)...'
-              : 'Enter your question or message...'
-          }
+          placeholder="Enter your question or message..."
           placeholderTextColor="#999"
           multiline
           numberOfLines={4}
@@ -1171,7 +1133,7 @@ export default function CoachScreen() {
           onPress={sendToCoach}
           disabled={loading || isGenerating || !coachProxyUrl.current}
           accessibilityRole="button"
-          accessibilityLabel={mode === CoachMode.GenerateProgram ? 'Generate draft program' : 'Send message'}
+          accessibilityLabel="Send message"
         >
           {({ pressed }) => (
             <View
@@ -1183,44 +1145,77 @@ export default function CoachScreen() {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <ThemedText className="text-white font-semibold">
-                  {mode === CoachMode.GenerateProgram ? 'Generate Draft Program' : 'Send'}
+                  Send
                 </ThemedText>
               )}
             </View>
           )}
         </Pressable>
 
+        {/* Generate Program Button */}
+        <Pressable
+          onPress={handleGenerateProgram}
+          disabled={loading || isGenerating || !coachProxyUrl.current}
+          accessibilityRole="button"
+          accessibilityLabel="Generate custom program"
+        >
+          {({ pressed }) => (
+            <View
+              className={`px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
+                loading || isGenerating || !coachProxyUrl.current
+                  ? 'bg-gray-200 dark:bg-gray-700 opacity-50'
+                  : isProfileComplete
+                    ? 'bg-green-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+              } ${pressed ? 'opacity-70' : ''}`}
+            >
+              {isGenerating ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <ThemedText
+                  className={`font-semibold ${
+                    loading || isGenerating || !coachProxyUrl.current
+                      ? ''
+                      : isProfileComplete
+                        ? 'text-white'
+                        : ''
+                  }`}
+                >
+                  Generate Custom Program
+                </ThemedText>
+              )}
+            </View>
+          )}
+        </Pressable>
 
-        {/* Test Button - Only show in ModifyWorkout mode */}
-        {mode === CoachMode.ModifyWorkout && (
-          <Pressable
-            onPress={startTests}
-            disabled={loading || isGenerating || !coachProxyUrl.current || isTestMode}
-            accessibilityRole="button"
-            accessibilityLabel={`Run all tests (${totalTests})`}
-          >
-            {({ pressed }) => (
-              <View
-                className={`bg-purple-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
-                  loading || isGenerating || !coachProxyUrl.current || isTestMode ? 'opacity-50' : ''
-                } ${pressed ? 'opacity-70' : ''}`}
-              >
-                {isTestMode ? (
-                  <View className="flex-row items-center gap-2">
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                    <ThemedText className="text-white font-semibold">
-                      Test {testIndex + 1}/{totalTests}
-                    </ThemedText>
-                  </View>
-                ) : (
-                  <ThemedText className="text-white font-semibold">Run All Tests ({totalTests})</ThemedText>
-                )}
-              </View>
-            )}
-          </Pressable>
-        )}
+        {/* Test Button */}
+        <Pressable
+          onPress={startTests}
+          disabled={loading || isGenerating || !coachProxyUrl.current || isTestMode}
+          accessibilityRole="button"
+          accessibilityLabel={`Run all tests (${totalTests})`}
+        >
+          {({ pressed }) => (
+            <View
+              className={`bg-purple-500 px-6 py-3 rounded-lg items-center justify-center min-h-[44px] ${
+                loading || isGenerating || !coachProxyUrl.current || isTestMode ? 'opacity-50' : ''
+              } ${pressed ? 'opacity-70' : ''}`}
+            >
+              {isTestMode ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ThemedText className="text-white font-semibold">
+                    Test {testIndex + 1}/{totalTests}
+                  </ThemedText>
+                </View>
+              ) : (
+                <ThemedText className="text-white font-semibold">Run All Tests ({totalTests})</ThemedText>
+              )}
+            </View>
+          )}
+        </Pressable>
 
-        {mode === CoachMode.GenerateProgram && generatedProgramDraft ? (
+        {generatedProgramDraft ? (
           <ThemedView className="gap-3 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-3">
             <ThemedText className="text-sm font-semibold text-blue-900 dark:text-blue-100">
               Draft ready: {generatedProgramDraft.name}
@@ -1287,8 +1282,7 @@ export default function CoachScreen() {
           </ThemedView>
         )}
 
-        {mode === CoachMode.ModifyWorkout && (
-          <>
+        <>
             <ThemedView className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
               <ThemedText className="text-xs text-blue-800 dark:text-blue-200 leading-4">
                 💡 Examples: &quot;Change bench press to 84 kg&quot;, &quot;Remove all chest exercises&quot;,
@@ -1335,7 +1329,6 @@ export default function CoachScreen() {
               </ThemedView>
             )}
           </>
-        )}
 
         {/* Response Display */}
         {response ? (
