@@ -13,7 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { showConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MuscleGroupTargetsModal } from '@/components/MuscleGroupTargetsModal';
-import { TRAINING_GOAL_LABELS, MUSCLE_GROUPS } from '@/constants';
+import { MAX_WORKOUT_DAYS, MIN_WORKOUT_DAYS, TRAINING_GOAL_LABELS, MUSCLE_GROUPS } from '@/constants';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { validatePositiveDecimal, validatePositiveInteger } from '@/lib/validation';
 import * as db from '@/services/database';
@@ -30,6 +30,15 @@ const EXPERIENCE_LEVELS: Array<{ value: ExperienceLevel; label: string }> = [
   { value: 'beginner', label: 'Beginner' },
   { value: 'intermediate', label: 'Intermediate' },
   { value: 'advanced', label: 'Advanced' },
+];
+
+// Session duration presets (label in minutes for display, value in minutes for storage)
+const SESSION_DURATION_OPTIONS = [
+  { label: '30 min', value: 30 },
+  { label: '45 min', value: 45 },
+  { label: '1 hour', value: 60 },
+  { label: '1.5 hours', value: 90 },
+  { label: '2+ hours', value: 120 },
 ];
 
 /**
@@ -174,21 +183,28 @@ export default function ProfileScreen() {
 
   const trainingDaysInput = useNumericInput(
     profile?.trainingDaysPerWeek ?? null,
-    validatePositiveInteger,
+    (input: string) => {
+      const num = parseInt(input, 10);
+      if (isNaN(num) || num < MIN_WORKOUT_DAYS || num > MAX_WORKOUT_DAYS) {
+        return { value: null, isValid: false, error: `Training days must be between ${MIN_WORKOUT_DAYS} and ${MAX_WORKOUT_DAYS}` };
+      }
+      return { value: num, isValid: true, error: null };
+    },
     async (value) => {
       await db.updateUserProfile({ trainingDaysPerWeek: value });
       setProfile((prev) => prev ? { ...prev, trainingDaysPerWeek: value } : null);
     }
   );
 
-  const sessionDurationInput = useNumericInput(
-    profile?.sessionDurationMinutes ?? null,
-    validatePositiveInteger,
-    async (value) => {
-      await db.updateUserProfile({ sessionDurationMinutes: value });
-      setProfile((prev) => prev ? { ...prev, sessionDurationMinutes: value } : null);
+  const handleSessionDurationSelect = useCallback(async (durationMinutes: number) => {
+    try {
+      await db.updateUserProfile({ sessionDurationMinutes: durationMinutes });
+      setProfile((prev) => prev ? { ...prev, sessionDurationMinutes: durationMinutes } : null);
+    } catch (error) {
+      console.error('Error saving session duration:', error);
+      Alert.alert('Error', 'Failed to save session duration');
     }
-  );
+  }, []);
 
   const handleExperienceLevelSelect = useCallback(async (experienceLevel: ExperienceLevel) => {
     try {
@@ -434,24 +450,35 @@ export default function ProfileScreen() {
           </ThemedView>
 
           <ThemedView className="gap-1">
-            <ThemedText className="text-sm font-semibold">Session Duration (minutes)</ThemedText>
-            <TextInput
-              className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
-                sessionDurationInput.error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
-              }`}
-              placeholder="e.g., 60"
-              placeholderTextColor="#999"
-              value={sessionDurationInput.localValue}
-              onFocus={sessionDurationInput.handleFocus}
-              onChangeText={sessionDurationInput.handleChange}
-              onBlur={sessionDurationInput.handleBlur}
-              keyboardType="number-pad"
-              style={{ color: textColor }}
-              accessibilityLabel="Session duration in minutes"
-            />
-            {sessionDurationInput.error && (
-              <ThemedText className="text-xs text-red-500">{sessionDurationInput.error}</ThemedText>
-            )}
+            <ThemedText className="text-sm font-semibold">Session Duration</ThemedText>
+            <View className="gap-2">
+              {SESSION_DURATION_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => handleSessionDurationSelect(option.value)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: profile?.sessionDurationMinutes === option.value }}
+                >
+                  {({ pressed }) => (
+                    <View
+                      className={`p-4 rounded-full border-2 ${
+                        profile?.sessionDurationMinutes === option.value
+                          ? 'bg-blue-500 border-blue-500'
+                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600'
+                      } ${pressed ? 'opacity-80' : ''}`}
+                    >
+                      <ThemedText
+                        className={`font-semibold text-center ${
+                          profile?.sessionDurationMinutes === option.value ? 'text-white' : ''
+                        }`}
+                      >
+                        {option.label}
+                      </ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              ))}
+            </View>
           </ThemedView>
         </ThemedView>
 
