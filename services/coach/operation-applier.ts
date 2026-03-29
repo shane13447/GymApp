@@ -12,6 +12,9 @@ import type { QueueOperation } from './operation-contract';
 // HELPER FUNCTIONS
 // =============================================================================
 
+// Note: This duplicates parseVariantLabel from workout-queue-modifier.ts to avoid
+// pulling in the full transitive dependency chain (→ database → expo-sqlite)
+// which breaks the test environment.
 const parseVariantString = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)
