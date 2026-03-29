@@ -44,6 +44,13 @@ export type ProgramDraftLLMInput = {
     variantOptions?: { label: string; field?: string; value?: string }[];
     aliases?: string[];
   }[];
+  progression_defaults: {
+    compoundBarbell: number;
+    compoundDumbbell: number;
+    isolationBarbell: number;
+    isolationDumbbell: number;
+    threshold: number;
+  };
   output_schema_version: 1;
 };
 
@@ -83,6 +90,7 @@ export const buildProgramDraftRequest = (input: DraftInput): {
       profile: context.profile,
       config,
       allowed_exercises: context.allowedExercises,
+      progression_defaults: context.progressionDefaults,
       output_schema_version: 1,
     },
   };

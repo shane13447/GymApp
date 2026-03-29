@@ -89,6 +89,23 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
     return null;
   }
 
+  // Parse double progression fields (optional)
+  const repRangeMin = typeof rawExercise.repRangeMin === 'number' && Number.isInteger(rawExercise.repRangeMin)
+    ? rawExercise.repRangeMin
+    : typeof rawExercise.repRangeMin === 'string'
+      ? parseInt(rawExercise.repRangeMin, 10) || undefined
+      : undefined;
+  const repRangeMax = typeof rawExercise.repRangeMax === 'number' && Number.isInteger(rawExercise.repRangeMax)
+    ? rawExercise.repRangeMax
+    : typeof rawExercise.repRangeMax === 'string'
+      ? parseInt(rawExercise.repRangeMax, 10) || undefined
+      : undefined;
+  const progressionThreshold = typeof rawExercise.progressionThreshold === 'number' && Number.isInteger(rawExercise.progressionThreshold)
+    ? rawExercise.progressionThreshold
+    : typeof rawExercise.progressionThreshold === 'string'
+      ? parseInt(rawExercise.progressionThreshold, 10) || undefined
+      : undefined;
+
   return {
     name,
     equipment,
@@ -100,6 +117,10 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
     restTime: toNumericString(rawExercise.restTime ?? rawExercise.rest, '120'),
     progression: toNumericString(rawExercise.progression, '2.5'),
     hasCustomisedSets: toBoolean(rawExercise.hasCustomisedSets, false),
+    repRangeMin,
+    repRangeMax,
+    progressionThreshold,
+    timesRepsHitInARow: 0,
   };
 };
 
