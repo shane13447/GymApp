@@ -10,6 +10,7 @@ module.exports = {
   collectCoverageFrom: [
     'lib/**/*.ts',
     'services/**/*.ts',
+    'constants/**/*.ts',
     '!**/*.d.ts',
   ],
   coverageDirectory: 'coverage',
