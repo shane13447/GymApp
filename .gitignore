@@ -64,4 +64,13 @@ executorch/
 # Documents folder
 Documents/
 
+# Tool/agent metadata
+.sisyphus/
+opencode.json
+tui.json
 
+# Windows artifacts
+nul
+
+# Test logs
+live-proxy-test.log
