@@ -415,8 +415,8 @@ describe('formatExerciseDisplayName', () => {
       expect(formatExerciseDisplayName('Exercise', { extras: ['', '', 'only'] })).toBe('Exercise (only)');
     });
 
-    it('should handle empty name with variant', () => {
-      expect(formatExerciseDisplayName('', { angle: 'Flat' })).toBe(' (Flat)');
+    it('should return variant label alone for empty name', () => {
+      expect(formatExerciseDisplayName('', { angle: 'Flat' })).toBe('Flat');
     });
   });
 });
