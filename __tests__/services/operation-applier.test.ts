@@ -214,4 +214,287 @@ describe('operation-applier', () => {
       expect(result.canApply).toBe(true);
     });
   });
+
+  // =========================================================================
+  // modify_weight
+  // =========================================================================
+  describe('modify_weight', () => {
+    it('modifies exercise weight', () => {
+      const queue = makeQueue([makeExercise({ weight: '80' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { weight: 85 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('85');
+    });
+
+    it('does not modify original queue', () => {
+      const original = makeQueue([makeExercise({ weight: '80' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { weight: 85 },
+        },
+      ];
+
+      applyOperations(original, ops);
+      expect(original[0].exercises[0].weight).toBe('80');
+    });
+
+    it('ignores modify_weight for nonexistent exercise', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { dayNumber: 1, exerciseName: 'Nonexistent' },
+          value: { weight: 100 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('80');
+    });
+  });
+
+  // =========================================================================
+  // modify_reps
+  // =========================================================================
+  describe('modify_reps', () => {
+    it('modifies exercise reps', () => {
+      const queue = makeQueue([makeExercise({ reps: '8' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_reps',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { reps: 12 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].reps).toBe('12');
+    });
+
+    it('ignores modify_reps for nonexistent exercise', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_reps',
+          target: { dayNumber: 1, exerciseName: 'Nonexistent' },
+          value: { reps: 15 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].reps).toBe('8');
+    });
+  });
+
+  // =========================================================================
+  // modify_sets
+  // =========================================================================
+  describe('modify_sets', () => {
+    it('modifies exercise sets', () => {
+      const queue = makeQueue([makeExercise({ sets: '3' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_sets',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { sets: 4 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].sets).toBe('4');
+    });
+  });
+
+  // =========================================================================
+  // modify_rest
+  // =========================================================================
+  describe('modify_rest', () => {
+    it('modifies exercise rest time', () => {
+      const queue = makeQueue([makeExercise({ restTime: '180' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_rest',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { restTime: 120 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].restTime).toBe('120');
+    });
+  });
+
+  // =========================================================================
+  // remove_exercise
+  // =========================================================================
+  describe('remove_exercise', () => {
+    it('removes an exercise from the queue', () => {
+      const queue = makeQueue([
+        makeExercise({ name: 'Bench Press', exerciseInstanceId: 'ex-1' }),
+        makeExercise({ name: 'Squat', exerciseInstanceId: 'ex-2' }),
+      ]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'remove_exercise',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: {},
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises).toHaveLength(1);
+      expect(result[0].exercises[0].name).toBe('Squat');
+    });
+
+    it('does not modify original queue', () => {
+      const original = makeQueue([
+        makeExercise({ name: 'Bench Press' }),
+        makeExercise({ name: 'Squat' }),
+      ]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'remove_exercise',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: {},
+        },
+      ];
+
+      applyOperations(original, ops);
+      expect(original[0].exercises).toHaveLength(2);
+    });
+
+    it('ignores remove for nonexistent exercise', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'remove_exercise',
+          target: { dayNumber: 1, exerciseName: 'Nonexistent' },
+          value: {},
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises).toHaveLength(1);
+    });
+
+    it('validates remove_exercise target exists', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'remove_exercise',
+          target: { dayNumber: 1, exerciseName: 'Nonexistent' },
+          value: {},
+        },
+      ];
+
+      const result = validateOperationApplicability(queue, ops);
+      expect(result.canApply).toBe(false);
+      expect(result.missingTargets[0]).toContain('Cannot remove');
+    });
+  });
+
+  // =========================================================================
+  // Boundary and edge cases
+  // =========================================================================
+  describe('boundary and edge cases', () => {
+    it('handles empty operations array', () => {
+      const queue = makeQueue([makeExercise()]);
+      const result = applyOperations(queue, []);
+      expect(result).toEqual(queue);
+    });
+
+    it('handles multiple operations in sequence', () => {
+      const queue = makeQueue([makeExercise({ weight: '80', reps: '8' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { weight: 85 },
+        },
+        {
+          id: 'op_2',
+          type: 'modify_reps',
+          target: { dayNumber: 1, exerciseName: 'Bench Press' },
+          value: { reps: 10 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('85');
+      expect(result[0].exercises[0].reps).toBe('10');
+    });
+
+    it('handles add then remove in sequence', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'add_exercise',
+          target: { dayNumber: 1 },
+          value: { exerciseName: 'Cable Curl' },
+        },
+        {
+          id: 'op_2',
+          type: 'remove_exercise',
+          target: { dayNumber: 1, exerciseName: 'Cable Curl' },
+          value: {},
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises).toHaveLength(1);
+      expect(result[0].exercises[0].name).toBe('Bench Press');
+    });
+
+    it('handles exercise lookup by exerciseInstanceId', () => {
+      const queue = makeQueue([makeExercise({ exerciseInstanceId: 'ex-42' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { exerciseInstanceId: 'ex-42' },
+          value: { weight: 100 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('100');
+    });
+
+    it('handles case-insensitive exercise name matching', () => {
+      const queue = makeQueue([makeExercise({ name: 'Bench Press' })]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { dayNumber: 1, exerciseName: 'bench press' },
+          value: { weight: 90 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('90');
+    });
+  });
 });
