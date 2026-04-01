@@ -1,5 +1,31 @@
 import { validateAndRepairProgramDraft, validateProgramDraftResponse } from '@/services/coach/program-draft-validator';
 
+const makeExercise = (overrides: Record<string, unknown> = {}) => ({
+  name: 'Barbell Bench Press',
+  equipment: 'Barbell',
+  muscle_groups_worked: ['chest'],
+  isCompound: true,
+  weight: '60',
+  reps: '10',
+  sets: '3',
+  restTime: '180',
+  progression: '2.5',
+  hasCustomisedSets: false,
+  ...overrides,
+});
+
+const makeDraft = (overrides: Record<string, unknown> = {}, exerciseOverrides: Record<string, unknown> = {}) => ({
+  id: 'test',
+  name: 'Test',
+  workoutDays: [
+    {
+      dayNumber: 1,
+      exercises: [makeExercise(exerciseOverrides)],
+    },
+  ],
+  ...overrides,
+});
+
 describe('program-draft-validator', () => {
   it('rejects non-json and schema-invalid drafts from llm response', () => {
     expect(validateProgramDraftResponse('not-json').ok).toBe(false);
@@ -116,27 +142,11 @@ describe('program-draft-validator', () => {
   });
 
   it('rejects exercise with missing name', () => {
+    const { name: _, ...noName } = makeExercise();
     const result = validateAndRepairProgramDraft({
       id: 'test',
       name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              equipment: 'Barbell',
-              muscle_groups_worked: ['chest'],
-              isCompound: true,
-              weight: '60',
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
+      workoutDays: [{ dayNumber: 1, exercises: [noName] }],
     });
     expect(result.ok).toBe(false);
   });
@@ -145,58 +155,23 @@ describe('program-draft-validator', () => {
   // Coercion edge cases
   // =========================================================================
   it('coerces numeric string dayNumber to integer', () => {
-    const result = validateAndRepairProgramDraft({
-      id: 'test',
-      name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: '2',
-          exercises: [
-            {
-              name: 'Barbell Bench Press',
-              equipment: 'Barbell',
-              muscle_groups_worked: ['chest'],
-              isCompound: true,
-              weight: '60',
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.workoutDays[0].dayNumber).toBe(2);
+    const result = validateAndRepairProgramDraft(
+      makeDraft({}, {}),
+    );
+    // Override dayNumber to string at the workoutDays level
+    const draft = makeDraft();
+    (draft.workoutDays[0] as any).dayNumber = '2';
+    const result2 = validateAndRepairProgramDraft(draft);
+    expect(result2.ok).toBe(true);
+    if (result2.ok) {
+      expect(result2.value.workoutDays[0].dayNumber).toBe(2);
     }
   });
 
   it('coerces number weight to string', () => {
-    const result = validateAndRepairProgramDraft({
-      id: 'test',
-      name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              name: 'Barbell Bench Press',
-              equipment: 'Barbell',
-              muscle_groups_worked: ['chest'],
-              isCompound: true,
-              weight: 80,
-              reps: 10,
-              sets: 3,
-              restTime: 180,
-              progression: 2.5,
-            },
-          ],
-        },
-      ],
-    });
+    const result = validateAndRepairProgramDraft(
+      makeDraft({}, { weight: 80, reps: 10, sets: 3, restTime: 180, progression: 2.5 }),
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.workoutDays[0].exercises[0].weight).toBe('80');
@@ -205,27 +180,11 @@ describe('program-draft-validator', () => {
   });
 
   it('uses fallback for missing weight', () => {
+    const { weight: _, ...noWeight } = makeExercise();
     const result = validateAndRepairProgramDraft({
       id: 'test',
       name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              name: 'Barbell Bench Press',
-              equipment: 'Barbell',
-              muscle_groups_worked: ['chest'],
-              isCompound: true,
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
+      workoutDays: [{ dayNumber: 1, exercises: [noWeight] }],
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -234,27 +193,8 @@ describe('program-draft-validator', () => {
   });
 
   it('uses fallback for missing id and name', () => {
-    const result = validateAndRepairProgramDraft({
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              name: 'Barbell Bench Press',
-              equipment: 'Barbell',
-              muscle_groups_worked: ['chest'],
-              isCompound: true,
-              weight: '60',
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
-    });
+    const { id: _id, name: _name, ...noIdName } = makeDraft();
+    const result = validateAndRepairProgramDraft(noIdName);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.id).toContain('draft-program-');
@@ -266,25 +206,11 @@ describe('program-draft-validator', () => {
   // Catalog lookup
   // =========================================================================
   it('fills missing exercise fields from catalog', () => {
+    const { equipment: _e, muscle_groups_worked: _m, isCompound: _c, ...minimalExercise } = makeExercise();
     const result = validateAndRepairProgramDraft({
       id: 'test',
       name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              name: 'Barbell Bench Press',
-              weight: '60',
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
+      workoutDays: [{ dayNumber: 1, exercises: [minimalExercise] }],
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -296,25 +222,13 @@ describe('program-draft-validator', () => {
   });
 
   it('rejects exercise with unknown name not in catalog', () => {
+    const { equipment: _e, muscle_groups_worked: _m, isCompound: _c, ...minimalExercise } = makeExercise({
+      name: 'Made Up Exercise That Does Not Exist',
+    });
     const result = validateAndRepairProgramDraft({
       id: 'test',
       name: 'Test',
-      workoutDays: [
-        {
-          dayNumber: 1,
-          exercises: [
-            {
-              name: 'Made Up Exercise That Does Not Exist',
-              weight: '60',
-              reps: '10',
-              sets: '3',
-              restTime: '180',
-              progression: '2.5',
-              hasCustomisedSets: false,
-            },
-          ],
-        },
-      ],
+      workoutDays: [{ dayNumber: 1, exercises: [minimalExercise] }],
     });
     expect(result.ok).toBe(false);
   });
