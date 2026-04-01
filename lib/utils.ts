@@ -35,5 +35,5 @@ export function formatExerciseDisplayName(
 ): string {
   const variantLabel = getExerciseVariantLabel(variant);
   if (!variantLabel) return name;
-  return `${name} (${variantLabel})`;
+  return name ? `${name} (${variantLabel})` : variantLabel;
 }
