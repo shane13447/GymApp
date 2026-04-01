@@ -1084,7 +1084,7 @@ export default function CoachScreen() {
         <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
             <View className="flex-row items-center gap-2">
               <ThemedText className="text-sm font-semibold">
-                Workout Queue Length:
+                Days to Modify:
               </ThemedText>
               <TextInput
                 className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 w-16 text-center text-lg font-bold"
@@ -1101,7 +1101,7 @@ export default function CoachScreen() {
                 keyboardType="numeric"
                 maxLength={1}
                 style={{ color: textColor }}
-                accessibilityLabel="Workout queue length (1-9)"
+                accessibilityLabel="AI modification scope (1-9 workouts)"
               />
             </View>
             <ThemedText className="text-xs text-gray-500 mt-2">
@@ -1217,12 +1217,44 @@ export default function CoachScreen() {
 
         {generatedProgramDraft ? (
           <ThemedView className="gap-3 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-3">
-            <ThemedText className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-              Draft ready: {generatedProgramDraft.name}
+            <ThemedText className="text-base font-bold text-blue-900 dark:text-blue-100">
+              {generatedProgramDraft.name}
             </ThemedText>
             <ThemedText className="text-xs text-blue-800 dark:text-blue-200">
-              {generatedProgramDraft.workoutDays.length} training days generated. Review then save.
+              {generatedProgramDraft.workoutDays.length} training days · Review below then save
             </ThemedText>
+
+            {generatedProgramDraft.workoutDays.map((day) => (
+              <ThemedView
+                key={day.dayNumber}
+                className="rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden"
+              >
+                <View className="bg-blue-100 dark:bg-blue-900/40 px-3 py-2">
+                  <ThemedText className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                    Day {day.dayNumber}
+                  </ThemedText>
+                </View>
+                {day.exercises.map((exercise, exIndex) => (
+                  <View
+                    key={`${exercise.name}-${exIndex}`}
+                    className={`px-3 py-2 ${exIndex > 0 ? 'border-t border-blue-100 dark:border-blue-800/60' : ''}`}
+                  >
+                    <ThemedText className="text-sm font-semibold" numberOfLines={1}>
+                      {formatExerciseDisplayName(exercise.name, exercise.variant)}
+                    </ThemedText>
+                    <View className="flex-row flex-wrap gap-3 mt-1">
+                      <ThemedText className="text-xs opacity-70">Sets: {exercise.sets || 'N/A'}</ThemedText>
+                      <ThemedText className="text-xs opacity-70">Reps: {exercise.reps || 'N/A'}</ThemedText>
+                      <ThemedText className="text-xs opacity-70">Weight: {exercise.weight || 'N/A'}</ThemedText>
+                      {exercise.restTime ? (
+                        <ThemedText className="text-xs opacity-70">Rest: {exercise.restTime}</ThemedText>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </ThemedView>
+            ))}
+
             <Pressable
               onPress={handleSaveGeneratedProgram}
               disabled={loading || isGenerating}
@@ -1330,8 +1362,8 @@ export default function CoachScreen() {
             )}
           </>
 
-        {/* Response Display */}
-        {response ? (
+        {/* Response Display (hidden when a structured draft preview is shown) */}
+        {response && !generatedProgramDraft ? (
           <ThemedView className="gap-2 mt-4">
             <ThemedText type="subtitle">Response:</ThemedText>
             <ThemedView className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg max-h-[300px]">
