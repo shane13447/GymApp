@@ -1084,7 +1084,7 @@ export default function CoachScreen() {
         <View className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
             <View className="flex-row items-center gap-2">
               <ThemedText className="text-sm font-semibold">
-                Days to Modify:
+                Modify Workout Days (1-9):
               </ThemedText>
               <TextInput
                 className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 w-16 text-center text-lg font-bold"
@@ -1101,7 +1101,7 @@ export default function CoachScreen() {
                 keyboardType="numeric"
                 maxLength={1}
                 style={{ color: textColor }}
-                accessibilityLabel="AI modification scope (1-9 workouts)"
+                accessibilityLabel="Modify workout days (1-9)"
               />
             </View>
             <ThemedText className="text-xs text-gray-500 mt-2">
