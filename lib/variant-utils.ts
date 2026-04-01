@@ -11,8 +11,9 @@ export const getVariantOptionLabel = (option: ExerciseVariantOption): string => 
 export const applyVariantOption = (
   currentVariant: ExerciseVariant | null | undefined,
   option: ExerciseVariantOption
-): ExerciseVariant | null => {
+): ExerciseVariant => {
   const next: ExerciseVariant = { ...(currentVariant ?? {}) };
+  if (next.extras) next.extras = [...next.extras];
 
   if (!option.field || !option.value) {
     const currentExtras = next.extras ?? [];
@@ -35,6 +36,7 @@ export const removeVariantOption = (
   }
 
   const next: ExerciseVariant = { ...currentVariant };
+  if (next.extras) next.extras = [...next.extras];
 
   if (!option.field || !option.value) {
     const remainingExtras = (next.extras ?? []).filter((extra) => extra !== option.label);
