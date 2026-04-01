@@ -1,6 +1,8 @@
 import {
   parseAndValidateOperations,
   validateOperationResponse,
+  isToonFormat,
+  generateOperationId,
 } from '@/services/coach/operation-contract';
 
 describe('operation contract', () => {
@@ -63,5 +65,209 @@ describe('operation contract', () => {
 
     expect(result.isValid).toBe(false);
     expect(result.errors.some((e) => e.includes('TOON'))).toBe(true);
+  });
+
+  // =========================================================================
+  // Invalid inputs (Null/Empty)
+  // =========================================================================
+  it('rejects empty string', () => {
+    const result = validateOperationResponse('');
+    expect(result.isValid).toBe(false);
+    expect(result.errors[0]).toContain('not valid JSON');
+  });
+
+  it('rejects null-like string', () => {
+    const result = validateOperationResponse('null');
+    expect(result.isValid).toBe(false);
+    expect(result.errors[0]).toContain('must be a JSON object');
+  });
+
+  it('rejects empty operations array', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({ version: 1, operations: [] })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('empty'))).toBe(true);
+  });
+
+  it('rejects payload with missing operations array', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({ version: 1 })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors[0]).toContain('operations array');
+  });
+
+  // =========================================================================
+  // Invalid operations (individual field validation)
+  // =========================================================================
+  it('rejects operation with missing id', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { type: 'modify_weight', target: { dayNumber: 1 }, value: { weight: 80 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('id'))).toBe(true);
+  });
+
+  it('rejects operation with missing target', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', value: { weight: 80 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('target'))).toBe(true);
+  });
+
+  it('rejects operation with empty target object', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: {}, value: { weight: 80 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('queueItemId'))).toBe(true);
+  });
+
+  it('rejects modify_weight without value', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: { dayNumber: 1 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('value'))).toBe(true);
+  });
+
+  it('rejects modify_reps without value', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_reps', target: { dayNumber: 1 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+  });
+
+  // =========================================================================
+  // Valid payloads with all operation types
+  // =========================================================================
+  it('accepts all valid operation types', () => {
+    const types = ['modify_weight', 'modify_reps', 'modify_sets', 'modify_rest', 'add_exercise', 'remove_exercise', 'swap_variant'];
+    for (const type of types) {
+      const op: Record<string, unknown> = {
+        id: `op_${type}`,
+        type,
+        target: { dayNumber: 1, exerciseName: 'Test' },
+      };
+      if (type.startsWith('modify_') || type === 'swap_variant') {
+        op.value = { weight: 80 };
+      }
+      const result = validateOperationResponse(
+        JSON.stringify({ version: 1, operations: [op] })
+      );
+      expect(result.isValid).toBe(true);
+    }
+  });
+
+  it('accepts operation with exerciseInstanceId target', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: { exerciseInstanceId: 'ex-42' }, value: { weight: 80 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(true);
+  });
+
+  it('accepts operation with queueItemId target', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: { queueItemId: 'q-1' }, value: { weight: 80 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(true);
+  });
+
+  it('accepts multiple valid operations', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: { dayNumber: 1, exerciseName: 'Bench' }, value: { weight: 85 } },
+          { id: 'op_2', type: 'modify_reps', target: { dayNumber: 1, exerciseName: 'Bench' }, value: { reps: 10 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(true);
+    expect(result.validatedOperations).toHaveLength(2);
+  });
+
+  it('rejects partially valid operations array (filters invalid)', () => {
+    const result = validateOperationResponse(
+      JSON.stringify({
+        version: 1,
+        operations: [
+          { id: 'op_1', type: 'modify_weight', target: { dayNumber: 1 }, value: { weight: 80 } },
+          { id: 'op_2', type: 'invalid_type', target: { dayNumber: 1 } },
+        ],
+      })
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('invalid_type'))).toBe(true);
+  });
+
+  // =========================================================================
+  // isToonFormat
+  // =========================================================================
+  describe('isToonFormat', () => {
+    it('detects TOON format', () => {
+      expect(isToonFormat('Q0:D1:Bench Press|80|8|3')).toBe(true);
+    });
+
+    it('does not flag JSON as TOON', () => {
+      expect(isToonFormat('{"version":1,"operations":[]}')).toBe(false);
+    });
+
+    it('does not flag empty string as TOON', () => {
+      expect(isToonFormat('')).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // generateOperationId
+  // =========================================================================
+  describe('generateOperationId', () => {
+    it('generates unique IDs', () => {
+      const id1 = generateOperationId();
+      const id2 = generateOperationId();
+      expect(id1).not.toBe(id2);
+    });
+
+    it('starts with op_ prefix', () => {
+      const id = generateOperationId();
+      expect(id.startsWith('op_')).toBe(true);
+    });
   });
 });
