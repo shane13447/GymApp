@@ -3,7 +3,7 @@
  * Tests the cn() utility function with valid, invalid, incorrectly typed, null, and edge case data
  */
 
-import { cn } from '@/lib/utils';
+import { cn, getExerciseVariantLabel, formatExerciseDisplayName } from '@/lib/utils';
 
 // =============================================================================
 // cn (className utility)
@@ -244,6 +244,179 @@ describe('cn', () => {
       );
       expect(result).toContain('opacity-70');
       expect(result).not.toContain('opacity-100');
+    });
+  });
+});
+
+// =============================================================================
+// getExerciseVariantLabel
+// =============================================================================
+
+describe('getExerciseVariantLabel', () => {
+  describe('valid data', () => {
+    it('should return angle label', () => {
+      expect(getExerciseVariantLabel({ angle: 'Incline' })).toBe('Incline');
+    });
+
+    it('should return grip label', () => {
+      expect(getExerciseVariantLabel({ grip: 'Wide' })).toBe('Wide');
+    });
+
+    it('should return multiple labels in order', () => {
+      expect(getExerciseVariantLabel({ angle: 'Decline', grip: 'Close' })).toBe('Decline, Close');
+    });
+
+    it('should return extras when no field labels', () => {
+      expect(getExerciseVariantLabel({ extras: ['Tempo'] })).toBe('Tempo');
+    });
+
+    it('should combine field labels and extras', () => {
+      expect(getExerciseVariantLabel({ angle: 'Flat', extras: ['Pause'] })).toBe('Flat, Pause');
+    });
+
+    it('should return all four field labels in correct order', () => {
+      expect(getExerciseVariantLabel({
+        angle: 'Incline',
+        grip: 'Wide',
+        posture: 'Seated',
+        laterality: 'Unilateral',
+      })).toBe('Incline, Wide, Seated, Unilateral');
+    });
+  });
+
+  describe('invalid data', () => {
+    it('should return empty string for empty angle', () => {
+      expect(getExerciseVariantLabel({ angle: '' })).toBe('');
+    });
+
+    it('should return empty string for whitespace-only grip', () => {
+      expect(getExerciseVariantLabel({ grip: '  ' })).toBe('');
+    });
+
+    it('should ignore unknown fields', () => {
+      expect(getExerciseVariantLabel({ unknown: 'value' } as any)).toBe('');
+    });
+  });
+
+  describe('null and empty data', () => {
+    it('should return empty string for null', () => {
+      expect(getExerciseVariantLabel(null)).toBe('');
+    });
+
+    it('should return empty string for undefined', () => {
+      expect(getExerciseVariantLabel(undefined)).toBe('');
+    });
+
+    it('should return empty string for empty object', () => {
+      expect(getExerciseVariantLabel({})).toBe('');
+    });
+  });
+
+  describe('boundary inputs', () => {
+    it('should handle all fields plus extras', () => {
+      expect(getExerciseVariantLabel({
+        angle: 'a',
+        grip: 'b',
+        posture: 'c',
+        laterality: 'd',
+        extras: ['e', 'f'],
+      })).toBe('a, b, c, d, e, f');
+    });
+
+    it('should handle single-character labels', () => {
+      expect(getExerciseVariantLabel({ angle: 'X' })).toBe('X');
+    });
+  });
+
+  describe('exception inputs', () => {
+    it('should filter empty strings from extras', () => {
+      expect(getExerciseVariantLabel({ extras: ['', '', 'valid'] })).toBe('valid');
+    });
+
+    it('should trim whitespace from labels', () => {
+      expect(getExerciseVariantLabel({ angle: '  Incline  ' })).toBe('Incline');
+    });
+
+    it('should trim whitespace from extras', () => {
+      expect(getExerciseVariantLabel({ extras: ['  Tempo  '] })).toBe('Tempo');
+    });
+
+    it('should return empty if all extras are empty', () => {
+      expect(getExerciseVariantLabel({ extras: ['', '  ', ''] })).toBe('');
+    });
+  });
+});
+
+// =============================================================================
+// formatExerciseDisplayName
+// =============================================================================
+
+describe('formatExerciseDisplayName', () => {
+  describe('valid data', () => {
+    it('should format name with angle variant', () => {
+      expect(formatExerciseDisplayName('Bench Press', { angle: 'Incline' })).toBe('Bench Press (Incline)');
+    });
+
+    it('should return name without parens when no variant', () => {
+      expect(formatExerciseDisplayName('Squat', null)).toBe('Squat');
+    });
+
+    it('should format name with multiple variant fields', () => {
+      expect(formatExerciseDisplayName('Deadlift', { grip: 'Mixed', extras: ['Belt'] })).toBe('Deadlift (Mixed, Belt)');
+    });
+
+    it('should format name with all four fields', () => {
+      expect(formatExerciseDisplayName('Row', {
+        angle: '45',
+        grip: 'Wide',
+        posture: 'Seated',
+        laterality: 'Bilateral',
+      })).toBe('Row (45, Wide, Seated, Bilateral)');
+    });
+  });
+
+  describe('null and empty data', () => {
+    it('should return name when variant is null', () => {
+      expect(formatExerciseDisplayName('Bench Press', null)).toBe('Bench Press');
+    });
+
+    it('should return name when variant is undefined', () => {
+      expect(formatExerciseDisplayName('Bench Press', undefined)).toBe('Bench Press');
+    });
+
+    it('should return name when variant is empty object', () => {
+      expect(formatExerciseDisplayName('Bench Press', {})).toBe('Bench Press');
+    });
+
+    it('should return name when variant has only empty fields', () => {
+      expect(formatExerciseDisplayName('Bench Press', { angle: '' })).toBe('Bench Press');
+    });
+  });
+
+  describe('boundary inputs', () => {
+    it('should handle long exercise name with all variant fields', () => {
+      const result = formatExerciseDisplayName('Very Long Exercise Name That Is Quite Long', {
+        angle: 'Incline',
+        grip: 'Wide',
+        posture: 'Seated',
+        laterality: 'Unilateral',
+      });
+      expect(result).toContain('Very Long Exercise Name That Is Quite Long');
+      expect(result).toContain('(Incline, Wide, Seated, Unilateral)');
+    });
+
+    it('should handle single-character name', () => {
+      expect(formatExerciseDisplayName('X', { angle: 'Y' })).toBe('X (Y)');
+    });
+  });
+
+  describe('exception inputs', () => {
+    it('should filter empty extras in display', () => {
+      expect(formatExerciseDisplayName('Exercise', { extras: ['', '', 'only'] })).toBe('Exercise (only)');
+    });
+
+    it('should handle empty name with variant', () => {
+      expect(formatExerciseDisplayName('', { angle: 'Flat' })).toBe(' (Flat)');
     });
   });
 });
