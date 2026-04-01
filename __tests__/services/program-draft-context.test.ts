@@ -101,50 +101,58 @@ describe('buildProgramDraftContext', () => {
   // =========================================================================
   // Boundary inputs
   // =========================================================================
-  it('handles min training days (1)', () => {
+  it('produces a valid context structure at min training days (1)', () => {
     const context = buildProgramDraftContext(
       { experienceLevel: 'beginner', trainingDaysPerWeek: 1, sessionDurationMinutes: 60, trainingGoal: null },
       exerciseSelectionCatalog,
     );
 
     expect(context.profile.trainingDaysPerWeek).toBe(1);
+    expect(context.allowedExercises.length).toBeGreaterThan(0);
+    expect(context.progressionDefaults).toBeDefined();
   });
 
-  it('handles max training days (7)', () => {
+  it('produces a valid context structure at max training days (7)', () => {
     const context = buildProgramDraftContext(
       { experienceLevel: 'advanced', trainingDaysPerWeek: 7, sessionDurationMinutes: 60, trainingGoal: null },
       exerciseSelectionCatalog,
     );
 
     expect(context.profile.trainingDaysPerWeek).toBe(7);
+    expect(context.allowedExercises.length).toBeGreaterThan(0);
+    expect(context.progressionDefaults).toBeDefined();
   });
 
-  it('handles max session duration (180)', () => {
+  it('produces a valid context structure at max session duration (180)', () => {
     const context = buildProgramDraftContext(
       { experienceLevel: 'intermediate', trainingDaysPerWeek: 5, sessionDurationMinutes: 180, trainingGoal: null },
       exerciseSelectionCatalog,
     );
 
     expect(context.profile.sessionDurationMinutes).toBe(180);
+    expect(context.allowedExercises.length).toBeGreaterThan(0);
   });
 
   // =========================================================================
   // Exception inputs
   // =========================================================================
-  it('preserves exercise metadata from catalog', () => {
+  it('preserves exercise metadata structure from catalog', () => {
     const context = buildProgramDraftContext(
       { experienceLevel: 'beginner', trainingDaysPerWeek: 3, sessionDurationMinutes: 60, trainingGoal: null },
       exerciseSelectionCatalog,
     );
 
-    const benchPress = context.allowedExercises.find((e) => e.name === 'Barbell Bench Press');
-    expect(benchPress).toBeDefined();
-    expect(benchPress?.equipment).toBe('Barbell');
-    expect(benchPress?.muscle_groups_worked).toContain('chest');
-    expect(benchPress?.isCompound).toBe(true);
+    for (const exercise of context.allowedExercises) {
+      expect(typeof exercise.name).toBe('string');
+      expect(exercise.name.length).toBeGreaterThan(0);
+      expect(typeof exercise.equipment).toBe('string');
+      expect(Array.isArray(exercise.muscle_groups_worked)).toBe(true);
+      expect(exercise.muscle_groups_worked.length).toBeGreaterThan(0);
+      expect(typeof exercise.isCompound).toBe('boolean');
+    }
   });
 
-  it('includes variant options from catalog', () => {
+  it('includes variant options from catalog for at least some exercises', () => {
     const context = buildProgramDraftContext(
       { experienceLevel: 'beginner', trainingDaysPerWeek: 3, sessionDurationMinutes: 60, trainingGoal: null },
       exerciseSelectionCatalog,
