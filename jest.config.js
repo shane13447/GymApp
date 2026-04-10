@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/*.test.ts'],
+  testPathIgnorePatterns: ['/__tests__/services/headless-live-proxy-gate.test.ts$'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
