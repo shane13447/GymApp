@@ -21,7 +21,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx expo lint
+      - run: npm run lint
 
   typecheck:
     name: Type Check
@@ -33,7 +33,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npm run typecheck
 
   test:
     name: Test
@@ -45,7 +45,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx jest --ci --coverage
+      - run: npm run test -- --ci --coverage
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "constants/**/*.ts",
+    "lib/**/*.ts",
+    "services/coach/**/*.ts",
+    "services/workout-queue-modifier.ts"
+  ],
+  "exclude": [
+    "__tests__/**"
+  ]
+}
