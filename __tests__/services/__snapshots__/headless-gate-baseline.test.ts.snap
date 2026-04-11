@@ -1,0 +1,5 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`headless gate baseline fixture has a stable day count in canonical fixture: day-count 1`] = `3`;
+
+exports[`headless gate baseline fixture has a stable total exercise count in canonical fixture: total-exercise-count 1`] = `20`;

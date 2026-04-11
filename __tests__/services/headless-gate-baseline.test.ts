@@ -54,5 +54,55 @@ describe('headless gate baseline fixture', () => {
       }
     }
   });
+
+  // =============================================================================
+  // Phase 00: Baseline structural invariants for strict parity zone
+  // =============================================================================
+
+  /**
+   * The number of days in the canonical fixture must remain stable.
+   * Any change is a parity drift signal.
+   */
+  it('has a stable day count in canonical fixture', () => {
+    expect(OFFICIAL_HEADLESS_GATE_BASELINE.length).toMatchSnapshot('day-count');
+  });
+
+  /**
+   * The total exercise count across all days must remain stable.
+   * This catches accidental fixture deletions or additions.
+   */
+  it('has a stable total exercise count in canonical fixture', () => {
+    const totalExercises = OFFICIAL_HEADLESS_GATE_BASELINE.reduce(
+      (sum, day) => sum + day.exercises.length,
+      0,
+    );
+    expect(totalExercises).toMatchSnapshot('total-exercise-count');
+  });
+
+  /**
+   * Materialized queue must produce the same number of queue items as
+   * the fixture has days.
+   */
+  it('materializes queue items equal in count to fixture days', () => {
+    const queue = materializeCanonicalFixtureQueue(OFFICIAL_HEADLESS_GATE_BASELINE);
+    expect(queue.length).toBe(OFFICIAL_HEADLESS_GATE_BASELINE.length);
+  });
+
+  /**
+   * Each materialized exercise preserves its canonical name.
+   * Name changes indicate fixture drift.
+   */
+  it('materialized exercise names match canonical fixture names', () => {
+    const queue = materializeCanonicalFixtureQueue(OFFICIAL_HEADLESS_GATE_BASELINE);
+
+    for (let dayIndex = 0; dayIndex < OFFICIAL_HEADLESS_GATE_BASELINE.length; dayIndex++) {
+      const fixtureDay = OFFICIAL_HEADLESS_GATE_BASELINE[dayIndex];
+      const queueDay = queue[dayIndex];
+
+      for (let exIndex = 0; exIndex < fixtureDay.exercises.length; exIndex++) {
+        expect(queueDay.exercises[exIndex].name).toBe(fixtureDay.exercises[exIndex].name);
+      }
+    }
+  });
 });
 
