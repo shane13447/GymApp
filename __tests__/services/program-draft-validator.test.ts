@@ -66,7 +66,7 @@ describe('program-draft-validator', () => {
     }
   });
 
-  it('rejects payloads that include unknown top-level keys', () => {
+  it('strips unknown top-level keys instead of rejecting the draft', () => {
     const result = validateAndRepairProgramDraft({
       id: 'draft-with-extra',
       name: 'Draft',
@@ -89,12 +89,17 @@ describe('program-draft-validator', () => {
           ],
         },
       ],
-      notes: 'should not be allowed',
+      notes: 'should be stripped',
+      version: 2,
     });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('unknown top-level keys');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe('draft-with-extra');
+      expect(result.value.name).toBe('Draft');
+      expect(result.value.workoutDays.length).toBe(1);
+      expect((result.value as Record<string, unknown>).notes).toBeUndefined();
+      expect((result.value as Record<string, unknown>).version).toBeUndefined();
     }
   });
 

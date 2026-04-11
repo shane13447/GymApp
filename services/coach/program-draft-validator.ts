@@ -154,15 +154,12 @@ const parseDraftInput = (input: unknown): unknown => {
 };
 
 /**
- * BUG (ChatGPT audit): isAllowedTopLevelKey rejects any JSON key not in {id, name, workoutDays}.
- * If the LLM returns extra metadata (e.g., "version", "notes"), the draft is rejected entirely
- * rather than ignoring unknown keys. This makes the validator fragile against LLM output
- * variability. Fix: During the refactor, switch to ignoring unknown keys instead of rejecting,
- * or expand the allowlist to include known metadata fields.
+ * Unknown top-level keys (e.g. "version", "notes") are silently stripped rather
+ * than causing draft rejection.  Only {id, name, workoutDays} are carried into
+ * the validated result; everything else is ignored so the validator tolerates
+ * LLM output variability.
  */
-const isAllowedTopLevelKey = (key: string): boolean => {
-  return key === 'id' || key === 'name' || key === 'workoutDays';
-};
+const KNOWN_TOP_LEVEL_KEYS = new Set(['id', 'name', 'workoutDays']);
 
 export const validateAndRepairProgramDraft = (input: unknown): DraftValidationResult => {
   const parsed = parseDraftInput(input);
@@ -175,12 +172,11 @@ export const validateAndRepairProgramDraft = (input: unknown): DraftValidationRe
     return { ok: false, error: 'Program draft must include non-empty workoutDays' };
   }
 
-  const unknownTopLevelKeys = Object.keys(parsed).filter((key) => !isAllowedTopLevelKey(key));
+  const unknownTopLevelKeys = Object.keys(parsed).filter((key) => !KNOWN_TOP_LEVEL_KEYS.has(key));
   if (unknownTopLevelKeys.length > 0) {
-    return {
-      ok: false,
-      error: `Program draft contains unknown top-level keys: ${unknownTopLevelKeys.join(', ')}`,
-    };
+    for (const key of unknownTopLevelKeys) {
+      delete parsed[key];
+    }
   }
 
   const workoutDays = parsed.workoutDays
