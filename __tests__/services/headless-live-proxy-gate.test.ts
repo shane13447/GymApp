@@ -12,8 +12,8 @@ import {
   materializeCanonicalFixtureQueue,
   runCoachPromptSuite,
   type CoachPromptCase,
-  type ProxyMessage,
 } from '@/services/coach/prompt-test-runner';
+import type { CoachProxyMessage } from '@/lib/coach-utils';
 import { OFFICIAL_HEADLESS_GATE_BASELINE } from '@/services/coach/headless-gate-baseline';
 
 const TEST_PROMPTS_PATH = path.resolve(__dirname, '../../data/TestPrompts30.JSON');
@@ -62,7 +62,7 @@ const extractProxyResponseText = (rawBody: string): string => {
 
 const callCoachProxy = async (
   proxyUrl: string,
-  messages: ProxyMessage[],
+  messages: CoachProxyMessage[],
   accessToken?: string | null
 ): Promise<string> => {
   const controller = new AbortController();

@@ -1,7 +1,5 @@
-import type { Program, ProgramExercise, WorkoutDay } from '@/types';
+import type { DraftProgram, Program, ProgramExercise, WorkoutDay } from '@/types';
 import exerciseSelectionCatalog from '@/data/exerciseSelection.json';
-
-type DraftProgram = Omit<Program, 'createdAt' | 'updatedAt'>;
 
 type DraftValidationSuccess = {
   ok: true;

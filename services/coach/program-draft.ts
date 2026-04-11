@@ -17,7 +17,7 @@ import exerciseSelectionCatalog from '@/data/exerciseSelection.json';
 import { buildProgramDraftContext } from '@/services/coach/program-draft-context';
 import { buildProgramDraftSystemPrompt } from '@/services/coach/program-draft-prompt';
 import { validateAndRepairProgramDraft } from '@/services/coach/program-draft-validator';
-import type { ExperienceLevel, Program, ProgramExercise, TrainingGoal } from '@/types';
+import type { DraftProgram, ExperienceLevel, Program, ProgramExercise, TrainingGoal } from '@/types';
 
 type DraftInput = {
   experienceLevel: ExperienceLevel | null;
@@ -103,7 +103,7 @@ export const buildProgramDraftRequest = (input: DraftInput): {
  * @returns Validated program draft (ready for user preview)
  * @throws Error if response cannot be parsed into a valid program
  */
-export const prepareProgramDraftFromModelResponse = (responseText: string): Omit<Program, 'createdAt' | 'updatedAt'> => {
+export const prepareProgramDraftFromModelResponse = (responseText: string): DraftProgram => {
   const validatedDraft = validateAndRepairProgramDraft(responseText);
 
   if (!validatedDraft.ok) {

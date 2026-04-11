@@ -87,6 +87,12 @@ export interface Program {
   updatedAt?: string;
 }
 
+/**
+ * A program draft without timestamps, used for creating and editing programs.
+ * Shared between Coach.tsx, program-draft.ts, and program-draft-validator.ts.
+ */
+export type DraftProgram = Omit<Program, 'createdAt' | 'updatedAt'>;
+
 // =============================================================================
 // WORKOUT TYPES
 // =============================================================================

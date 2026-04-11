@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
+import { inferInjurySeverity, inferRequestedVariant, type CoachProxyMessage } from '@/lib/coach-utils';
 import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
@@ -44,7 +45,7 @@ import {
   validateQueueStructure,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
-import type { Program, WorkoutQueueItem } from '@/types';
+import type { DraftProgram, Program, WorkoutQueueItem } from '@/types';
 
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
@@ -93,49 +94,11 @@ const TEST_PROMPTS: CoachPromptCase[] = [
   { type: 'Injury - Moderate', prompt: "my lower back is sore, adjust today's plan so it doesn't flare up" },
   { type: 'Injury - Severe', prompt: 'I tweaked my knee badly, I cannot do any painful leg work today' },
 ];
-type CoachProxyMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
 
 type CoachTestResult = {
   type: string;
   success: boolean;
   error?: string;
-};
-
-const inferRequestedVariant = (prompt: string): string | null => {
-  const lowerPrompt = prompt.toLowerCase();
-
-  const explicitVariants = [
-    'neutral grip',
-    'close grip',
-    'wide grip',
-    'incline',
-    'decline',
-    'high bar',
-    'low bar',
-  ];
-
-  for (const variant of explicitVariants) {
-    if (lowerPrompt.includes(variant)) {
-      return variant;
-    }
-  }
-
-  if (lowerPrompt.includes('wrist-friendly')) {
-    return 'neutral grip';
-  }
-
-  return null;
-};
-
-const inferInjurySeverity = (type: string): 'mild' | 'moderate' | 'severe' | null => {
-  const lowerType = type.toLowerCase();
-  if (lowerType.includes('injury - severe')) return 'severe';
-  if (lowerType.includes('injury - moderate')) return 'moderate';
-  if (lowerType.includes('injury - mild')) return 'mild';
-  return null;
 };
 
 const COACH_API_TIMEOUT_MS = 60000;
@@ -250,7 +213,7 @@ export default function CoachScreen() {
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const [queueHorizon, setQueueHorizon] = useState(3);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
-  const [generatedProgramDraft, setGeneratedProgramDraft] = useState<Omit<Program, 'createdAt' | 'updatedAt'> | null>(null);
+  const [generatedProgramDraft, setGeneratedProgramDraft] = useState<DraftProgram | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [proxyResponse, setProxyResponse] = useState('');
   const [proxyError, setProxyError] = useState('');

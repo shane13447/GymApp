@@ -14,6 +14,7 @@ import {
   validateQueueStructure,
 } from '@/services/workout-queue-modifier';
 import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
+import { inferInjurySeverity, inferRequestedVariant, type CoachProxyMessage } from '@/lib/coach-utils';
 import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
 
 export type CoachPromptCase = {
@@ -134,24 +135,6 @@ export const materializeCanonicalFixtureQueue = (
   }));
 };
 
-const inferRequestedVariant = (prompt: string): string | null => {
-  const lowerPrompt = prompt.toLowerCase();
-  const explicitVariants = ['neutral grip', 'close grip', 'wide grip', 'incline', 'decline', 'high bar', 'low bar'];
-  for (const variant of explicitVariants) {
-    if (lowerPrompt.includes(variant)) return variant;
-  }
-  if (lowerPrompt.includes('wrist-friendly')) return 'neutral grip';
-  return null;
-};
-
-const inferInjurySeverity = (type: string): 'mild' | 'moderate' | 'severe' | null => {
-  const lowerType = type.toLowerCase();
-  if (lowerType.includes('injury - severe')) return 'severe';
-  if (lowerType.includes('injury - moderate')) return 'moderate';
-  if (lowerType.includes('injury - mild')) return 'mild';
-  return null;
-};
-
 export type ExecutePromptInput = {
   promptCase: CoachPromptCase;
   queue: WorkoutQueueItem[];
@@ -215,11 +198,6 @@ export const runCoachPromptSuite = async ({
   };
 };
 
-export type ProxyMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
-
 const parseNumericArray = (value: string): number[] | null => {
   const trimmed = value.trim();
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return null;
@@ -259,7 +237,7 @@ const scalarizeQueueForTransport = (queue: WorkoutQueueItem[]): WorkoutQueueItem
 };
 
 export type PromptExecutionDeps = {
-  callCoachProxy: (messages: ProxyMessage[]) => Promise<string>;
+  callCoachProxy: (messages: CoachProxyMessage[]) => Promise<string>;
 };
 
 export const executePromptThroughCoachPipeline = async (
@@ -286,7 +264,7 @@ export const executePromptThroughCoachPipeline = async (
       ? matchedExerciseRefs
       : extractTargetExerciseRefs(promptCase.prompt, transportQueue);
 
-  const messages: ProxyMessage[] = [
+  const messages: CoachProxyMessage[] = [
     { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
     { role: 'user', content: buildCompressedPrompt(processedRequest, transportQueue) },
   ];
