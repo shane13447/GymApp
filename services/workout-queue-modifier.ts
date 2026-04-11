@@ -1,72 +1,57 @@
 /**
  * Workout Queue Modifier Service
  * Handles AI-powered workout queue modifications using compressed encoding
+ *
+ * Re-exports canonical APIs from `services/queue/*` for backward compatibility.
+ * New consumers should import directly from `@/services/queue`.
  */
 
+// --- Re-exports from service modules (backward compatibility) ---
+export {
+  roundWeightToNearestHalfKg,
+  isCoachQueueModification,
+  normalizeCoachModifiedWeight,
+  roundCoachModifiedQueueWeights,
+  normalizeCustomisedSetPayload,
+  COMPRESSED_SYSTEM_PROMPT,
+  encodeQueueForLLM,
+  buildCompressedPrompt,
+} from '@/services/queue/codec';
+
+export type {
+  QueueParseFailureReason,
+  CustomisedSetPayloadInput,
+  TargetedExerciseMatcher,
+  ChangeType,
+} from '@/services/queue/types';
+
+export { TargetedExerciseRef } from '@/services/queue/types';
+
+// --- Internal imports (implementation remains here during Phase 01) ---
 import { JOINT_INJURY_MAP } from '@/constants/joint-injury-map';
-
-// =============================================================================
-// WEIGHT ROUNDING - Round to nearest 0.5kg for coach-modified queue items
-// =============================================================================
-
-/**
- * Rounds a weight to the nearest 0.5kg increment.
- * Example: 82.74 -> 82.5, 82.76 -> 83.0
- * 
- * Used only in the coach modify-workout queue flow.
- * Does NOT apply to manual program creation, ActiveWorkout logging, or history.
- */
-export const roundWeightToNearestHalfKg = (weight: number | string): string => {
-  const numericWeight = typeof weight === 'string' ? parseFloat(weight) : weight;
-  if (isNaN(numericWeight)) {
-    return String(weight);
-  }
-  // Round to nearest 0.5: multiply by 2, round, divide by 2
-  const rounded = Math.round(numericWeight * 2) / 2;
-  return rounded.toFixed(1);
-};
-
-/**
- * Checks if rounding should be applied for a given modification context.
- * Only applies to coach-initiated queue modifications.
- */
-export const isCoachQueueModification = (context?: string): boolean => {
-  // Could check context string for "coach" or "modify-workout"
-  // For now, always round when called from coach flow
-  return true;
-};
-import exercisesData from '@/data/exerciseSelection.json';import { getExerciseVariantLabel } from '@/lib/utils';
+import exercisesData from '@/data/exerciseSelection.json';
+import { getExerciseVariantLabel } from '@/lib/utils';
 import * as db from '@/services/database';
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise, WorkoutQueueItem } from '@/types';
 
-interface CustomisedSetPayloadInput {
-  hasCustomisedSets: boolean;
-  repsBySet?: string[];
-  weightBySet?: string[];
-}
+// Re-export types used by remaining code and public API
+import type { CustomisedSetPayloadInput as CustomisedSetPayloadInputType, TargetedExerciseMatcher as TargetedExerciseMatcherType, ChangeType as ChangeTypeCanonical } from '@/services/queue/types';
+import type { TargetedExerciseRef as TargetedExerciseRefType } from '@/services/queue/types';
 
-export const normalizeCustomisedSetPayload = (payload: CustomisedSetPayloadInput): CustomisedSetPayloadInput => {
-  if (!payload.hasCustomisedSets) {
-    return {
-      ...payload,
-      repsBySet: payload.repsBySet ?? [],
-      weightBySet: payload.weightBySet ?? [],
-    };
-  }
+/** Local alias for the canonical TargetedExerciseRef type. */
+type TargetedExerciseRef = TargetedExerciseRefType;
 
-  const repsBySet = payload.repsBySet ?? [];
-  const weightBySet = payload.weightBySet ?? [];
+/** Local alias for the canonical TargetedExerciseMatcher type. */
+type TargetedExerciseMatcher = TargetedExerciseMatcherType;
 
-  if (repsBySet.length === 0 || weightBySet.length === 0 || repsBySet.length !== weightBySet.length) {
-    throw new Error('Invalid customised set payload');
-  }
+/** Local alias for the canonical ChangeType. */
+type ChangeType = ChangeTypeCanonical;
 
-  return {
-    ...payload,
-    repsBySet,
-    weightBySet,
-  };
-};
+// Codec functions (roundWeightToNearestHalfKg, normalizeCoachModifiedWeight,
+// roundCoachModifiedQueueWeights, normalizeCustomisedSetPayload,
+// COMPRESSED_SYSTEM_PROMPT, encodeQueueForLLM, buildCompressedPrompt,
+// isCoachQueueModification) now live in services/queue/codec.ts
+// and are re-exported above for backward compatibility.
 
 // =============================================================================
 // EXERCISE DATABASE - Uses exerciseSelection.json
@@ -81,17 +66,6 @@ interface ExerciseData {
   aliases?: string[];
 }
 
-export interface TargetedExerciseRef {
-  queueItemId: string;
-  dayNumber: number;
-  exerciseIndex: number;
-  exerciseInstanceId?: string;
-  name: string;
-  displayName: string;
-}
-
-type TargetedExerciseMatcher = string | TargetedExerciseRef;
-
 const EXERCISES: ExerciseData[] = exercisesData as ExerciseData[];
 
 const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
@@ -103,7 +77,7 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
 
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
-export type QueueParseFailureReason = 'none' | 'variant_source_conflict';
+import type { QueueParseFailureReason } from '@/services/queue/types';
 
 let lastQueueParseFailureReason: QueueParseFailureReason = 'none';
 
@@ -1142,118 +1116,6 @@ export const preprocessMuscleGroupRequest = (
 };
 
 // =============================================================================
-// COMPRESSED ENCODING SYSTEM
-// =============================================================================
-
-/**
- * IronLogic System Prompt - TOON (Token Optimized Object Notation) Format
- * 
- * This prompt instructs the LLM to act as IronLogic, a gym coaching engine
- * that modifies workout queues using a highly compressed pipe-delimited format.
- */
-export const COMPRESSED_SYSTEM_PROMPT = `<role>
-IronLogic: Gym Queue Modifier. Output TOON only. No text.
-</role>
-
-<format>
-QUEUE: Q0:D<day>:exercises;Q1:D<day>:exercises;Q2:D<day>:exercises
-EXERCISE: name|kg|reps|sets|variant
-Columns: 1=name 2=kg 3=reps 4=sets 5=variant(optional)
-</format>
-
-<critical>
-- COPY ALL exercises from input (except removals)
-- COPY ALL Q items (Q0;Q1;Q2)
-- Change ONLY the column requested:
-  * "weight" = column 2 (kg)
-  * "reps" = column 3
-  * "sets" = column 4
-  * "variant" = column 5
-- For variants: keep column 1 as base exercise name only.
-- Do NOT embed variant in column 1 when column 5 is present.
-- If variant appears in both column 1 and column 5, both must be identical.
-- Preserve exact values in unchanged columns.
-- Sets are deterministic. If canonical reps[] and weight[] arrays are provided upstream, set column 4 to array length.
-- Canonical conversion rule: kg=weight[0], reps=reps[0], sets=array length (reps[] and weight[] lengths must match).
-</critical>
-
-<structural_rules>
-- Explicit structural requests (add/remove) are mandatory intent constraints.
-- "add" requests must increase target count for each targeted exercise by at least +1.
-- "remove" requests must decrease target count for each targeted exercise by at least -1.
-- Structural operations must be target-scoped. Do not remove unrelated exercises.
-- Structural operations must preserve non-targeted exercises and queue items exactly.
-- When add/remove appears with variant terms (e.g., "add neutral grip"), treat this as variant intent unless the prompt explicitly asks for a new exercise instance.
-</structural_rules>
-
-<injury_policy>
-- mild: lighten all affected exercises across the entire current queue using a weight-first rule (reduce kg first, then reps/sets if needed)
-- moderate: swap all affected exercises across the entire current queue to safer similar alternatives or remove them
-- severe: same swap-or-remove rule across the entire current queue, with removal as fallback when no suitable safer alternative exists
-- infer severity from user language when unspecified
-- avoid positional assumptions; evaluate and modify the entire current queue
-</injury_policy>
-
-<examples>
-IN: Q0:D1:Barbell Bench Press|92.5|5|3|Flat,Chest Press|74|11|3|Incline;Q1:D2:Decline Crunches|25|20|4|Decline,Lat Pulldowns|67|8|4|Wide Grip
-REQ: change barbell bench press weight to 95
-OUT: Q0:D1:Barbell Bench Press|95|5|3|Flat,Chest Press|74|11|3|Incline;Q1:D2:Decline Crunches|25|20|4|Decline,Lat Pulldowns|67|8|4|Wide Grip
-
-IN: canonical row upstream reps[]=[5,5,5,5] weight[]=[92.5,92.5,92.5,92.5]
-REQ: convert to TOON row deterministically
-OUT: Q0:D1:Barbell Bench Press|92.5|5|4|Flat
-
-IN: Q0:D1:Barbell Bench Press|92.5|5|5|Flat,Overhead Barbell Press|47.5|6|4|Standing;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
-REQ: mild shoulder irritation, go easier on pressing
-OUT: Q0:D1:Barbell Bench Press|85|5|5|Flat,Overhead Barbell Press|40|6|4|Standing;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
-
-IN: Q0:D1:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Calf Press|160|12|5|Neutral,Barbell Deadlift|135|3|5|Conventional;Q1:D2:Lat Pulldowns|67|8|4|Wide Grip
-REQ: my lower back is sore, adjust today so it does not flare up
-OUT: Q0:D1:Lat Pulldowns|67|8|4|Wide Grip
-
-IN: Q0:D2:Lat Pulldowns|55|10|3|Wide Grip,Triangle Rows|50|10|3|Close Grip
-REQ: switch lat pulldowns and triangle rows to neutral grip
-OUT: Q0:D2:Lat Pulldowns|55|10|3|Neutral Grip,Triangle Rows|50|10|3|Neutral Grip
-
-IN: Q0:D2:Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip
-REQ: add another hammer curls
-OUT: Q0:D2:Hammer Curls|20|9|4|Neutral Grip,Reverse Grip Forearm Curls|12|16|3|Reverse Grip,Hammer Curls|20|9|4|Neutral Grip
-
-IN: Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated,Barbell Deadlift|135|3|5|Conventional
-REQ: remove barbell deadlift from day 3
-OUT: Q2:D3:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3|Seated
-</examples>
-
-<task>
-Output modified queue. Include ALL exercises and ALL Q items.
-</task>`;
-
-export const encodeQueueForLLM = (queue: WorkoutQueueItem[]): string => {
-  return queue
-    .map((item, queueIndex) => {
-      const exercises = item.exercises
-        .map((ex) => {
-          // Use full exercise names and optional variant metadata
-          const variantLabel = serialiseVariantForPrompt(ex.variant);
-          const base = `${ex.name}|${ex.weight || '0'}|${ex.reps || '8'}|${ex.sets || '3'}`;
-          return variantLabel ? `${base}|${variantLabel}` : base;
-        })
-        .join(',');
-    return `Q${queueIndex}:D${item.dayNumber}:${exercises}`;
-    })
-    .join(';');
-};
-
-export const buildCompressedPrompt = (
-  userRequest: string,
-  queue: WorkoutQueueItem[]
-): string => {
-  const encodedQueue = encodeQueueForLLM(queue);
-  return `Queue:${encodedQueue}
-Request:${userRequest}`;
-};
-
-// =============================================================================
 // QUEUE FORMAT PARSER
 // =============================================================================
 
@@ -1278,14 +1140,10 @@ const preprocessLLMResponse = (response: string): string => {
   return fixed;
 };
 
-export const normalizeCoachModifiedWeight = (weight: string): string => {
-  const numericWeight = Number(weight);
-  if (!Number.isFinite(numericWeight)) {
-    return weight;
-  }
-
-  return (Math.round(numericWeight * 2) / 2).toFixed(1);
-};
+// Re-export: normalizeCoachModifiedWeight and roundCoachModifiedQueueWeights
+// now live in services/queue/codec.ts. They are re-exported above for
+// backward compatibility. The parseQueueFormatResponse below still
+// references normalizeCoachModifiedWeight via the module-level re-export.
 
 // BUG: roundCoachModifiedQueueWeights is defined and tested but never called in the
 // live modify-workout path. The parseQueueFormatResponse path in Coach.tsx parses TOON
@@ -1293,49 +1151,12 @@ export const normalizeCoachModifiedWeight = (weight: string): string => {
 // (nearest 0.5kg for coach-modified weights) is not actually enforced in production.
 // Fix: call this function after parseQueueFormatResponse and before compareWorkoutQueues
 // in the Coach.tsx modify flow.
-export const roundCoachModifiedQueueWeights = (
-  originalQueue: WorkoutQueueItem[],
-  parsedQueue: WorkoutQueueItem[]
-): WorkoutQueueItem[] => {
-  return parsedQueue.map((parsedItem, itemIndex) => {
-    const originalItem = originalQueue.find((item) => item.id === parsedItem.id) ?? originalQueue[itemIndex];
-
-    return {
-      ...parsedItem,
-      exercises: parsedItem.exercises.map((exercise, exerciseIndex) => {
-        const originalExercise =
-          originalItem?.exercises.find(
-            (candidate) =>
-              candidate.exerciseInstanceId &&
-              exercise.exerciseInstanceId &&
-              candidate.exerciseInstanceId === exercise.exerciseInstanceId
-          ) ?? originalItem?.exercises[exerciseIndex];
-
-        if (!originalExercise) {
-          return {
-            ...exercise,
-            weight: normalizeCoachModifiedWeight(exercise.weight),
-          };
-        }
-
-        if (exercise.weight === originalExercise.weight) {
-          return exercise;
-        }
-
-        return {
-          ...exercise,
-          weight: normalizeCoachModifiedWeight(exercise.weight),
-        };
-      }),
-    };
-  });
-};
 
 export const parseQueueFormatResponse = (
   response: string,
   originalQueue: WorkoutQueueItem[],
   userRequest: string = '',
-  matchedExercises: TargetedExerciseMatcher[] = []
+  matchedExercises: TargetedExerciseMatcherType[] = []
 ): WorkoutQueueItem[] | null => {
   setLastQueueParseFailureReason('none');
 
@@ -2059,7 +1880,6 @@ export const repairQueueWithIntent = (
 /**
  * Detect what type of change was requested from user input
  */
-type ChangeType = 'weight' | 'reps' | 'sets' | 'variant' | 'remove' | 'add' | 'unknown';
 
 export const detectRequestedChangeType = (request: string): ChangeType[] => {
   const lowerRequest = request.toLowerCase();
@@ -2583,90 +2403,40 @@ export const repairQueue = (
 };
 
 // =============================================================================
-// PROPOSED CHANGES TYPES
+// PROPOSED CHANGES TYPES — canonical definitions live in services/queue/types.ts
 // =============================================================================
 
-export interface ProposedChanges {
-  variantChanges: Array<{
-    queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-    exerciseName: string;
-    oldVariant: string;
-    newVariant: string;
-  }>;
-  weightChanges: Array<{
-  queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-  exerciseName: string;
-    oldWeight: string;
-  newWeight: string;
-  }>;
-  repsChanges: Array<{
-  queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-  exerciseName: string;
-    oldReps: string;
-    newReps: string;
-  }>;
-  setsChanges: Array<{
-    queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-    exerciseName: string;
-    oldSets: string;
-    newSets: string;
-  }>;
-  removals: Array<{
-    queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-    exerciseName: string;
-    muscleGroup: string;
-  }>;
-  additions: Array<{
-    queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-    exerciseName: string;
-    weight: string;
-    reps: string;
-    sets: string;
-    equipment: string;
-    muscle_groups_worked: string[];
-  }>;
-  swaps: Array<{
-    queueItemId: string;
-    queueItemName: string;
-    dayNumber: number;
-    oldExerciseName: string;
-    newExerciseName: string;
-  }>;
-}
+import type {
+  ProposedChanges as ProposedChangesType,
+  QueueDifference as QueueDifferenceType,
+  ValidationResult as ValidationResultType,
+  QueueStructureValidationResult as QueueStructureValidationResultType,
+  SemanticEvaluationResult as SemanticEvaluationResultType,
+  TestPromptCoverageInput as TestPromptCoverageInputType,
+  TestPromptCoverageStatus as TestPromptCoverageStatusType,
+  TestPromptCoverageResult as TestPromptCoverageResultType,
+  TestPromptCoverageReport as TestPromptCoverageReportType,
+} from '@/services/queue/types';
+
+/** @deprecated Import from `@/services/queue/types` instead. */
+export type ProposedChanges = ProposedChangesType;
+/** @deprecated Import from `@/services/queue/types` instead. */
+export type QueueDifference = QueueDifferenceType;
+/** @deprecated Import from `@/services/queue/types` instead. */
+export type ValidationResult = ValidationResultType;
+/** @deprecated Import from `@/services/queue/types` instead. */
+export type QueueStructureValidationResult = QueueStructureValidationResultType;
+/** @deprecated Import from `@/services/queue/types` instead. */
+export type SemanticEvaluationResult = SemanticEvaluationResultType;
+
+/** Local aliases for TestPromptCoverage types used in implementation. */
+type TestPromptCoverageInput = TestPromptCoverageInputType;
+type TestPromptCoverageResult = TestPromptCoverageResultType;
+type TestPromptCoverageReport = TestPromptCoverageReportType;
 
 // =============================================================================
 // QUEUE COMPARISON
 // =============================================================================
-
-export interface QueueDifference {
-  type: 'variant_change' | 'weight_change' | 'reps_change' | 'sets_change' | 'removed' | 'added' | 'modified' | 'exercise_swap';
-  queueItemId: string;
-  queueItemName: string;
-  dayNumber: number;
-  exerciseName?: string;
-  oldExercise?: ProgramExercise;
-  newExercise?: ProgramExercise;
-  oldWeight?: string;
-  newWeight?: string;
-  oldReps?: string;
-  newReps?: string;
-  oldSets?: string;
-  newSets?: string;
-  newExerciseName?: string;
-  details?: string;
-}
 
 export const compareWorkoutQueues = (
   oldQueue: WorkoutQueueItem[],
@@ -2905,18 +2675,8 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
 };
 
 // =============================================================================
-// VALIDATION
+// VALIDATION — type definitions live in services/queue/types.ts
 // =============================================================================
-
-export interface ValidationResult {
-  valid: boolean;
-  warnings: string[];
-}
-
-export interface QueueStructureValidationResult {
-  valid: boolean;
-  errors: string[];
-}
 
 export const validateQueueStructure = (
   originalQueue: WorkoutQueueItem[],
@@ -3098,35 +2858,6 @@ export const validateChanges = (
     warnings,
   };
 };
-
-export interface SemanticEvaluationResult {
-  passed: boolean;
-  reason?: string;
-}
-
-export interface TestPromptCoverageInput {
-  type: string;
-  prompt: string;
-}
-
-export type TestPromptCoverageStatus =
-  | 'covered'
-  | 'missing_targets'
-  | 'missing_variant_capability';
-
-export interface TestPromptCoverageResult {
-  type: string;
-  prompt: string;
-  status: TestPromptCoverageStatus;
-  targetedExercises: string[];
-  missingTargets?: string[];
-  missingVariantTargets?: string[];
-}
-
-export interface TestPromptCoverageReport {
-  allCovered: boolean;
-  results: TestPromptCoverageResult[];
-}
 
 const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
   const lowerPrompt = prompt.toLowerCase();
