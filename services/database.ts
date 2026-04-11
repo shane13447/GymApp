@@ -23,23 +23,32 @@ import type {
 import { TrainingGoal } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
+import {
+  serializeVariant,
+  parseStringArrayField,
+  parseNumberArrayField,
+  parseVariant,
+  serializeExerciseToSqlParams,
+  serializeQueueExerciseToSqlParams,
+  deserializeProgramExerciseRow,
+} from '@/services/db/serialization';
+import type { SqlExerciseRow } from '@/services/db/serialization';
+import {
+  getDb,
+  setDb,
+  getInitPromise,
+  setInitPromise,
+  getMaintenancePromise,
+  setMaintenancePromise,
+  isMaintenanceCompleted,
+  setMaintenanceCompleted,
+  runInTransaction,
+  logStartupStage,
+} from '@/services/db/connection';
+
 // =============================================================================
 // DATABASE INITIALIZATION
 // =============================================================================
-
-let db: SQLite.SQLiteDatabase | null = null;
-let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-let maintenancePromise: Promise<void> | null = null;
-let maintenanceCompleted = false;
-
-const logStartupStage = (stage: string, detail?: Record<string, unknown>) => {
-  if (detail) {
-    console.log(`[startup][${stage}]`, detail);
-    return;
-  }
-
-  console.log(`[startup][${stage}]`);
-};
 
 /**
  * QUEUE GENERATION LOCK: Prevents race conditions when switching programs rapidly.
@@ -47,105 +56,6 @@ const logStartupStage = (stage: string, detail?: Record<string, unknown>) => {
  * the older one will abort before writing to the database.
  */
 let currentQueueGenerationId = 0;
-
-const serializeVariant = (variant?: ExerciseVariant | null): string =>
-  variant ? JSON.stringify(variant) : '';
-
-const parseStringArrayField = (
-  raw: string | null | undefined,
-  fieldName: string,
-  context: Record<string, unknown>
-): string[] => {
-  if (!raw || !raw.trim()) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      console.warn('[database][json_parse_fallback]', { field: fieldName, reason: 'not_array', ...context });
-      return [];
-    }
-
-    return parsed.filter((value): value is string => typeof value === 'string');
-  } catch (error) {
-    console.warn('[database][json_parse_fallback]', {
-      field: fieldName,
-      reason: 'parse_error',
-      detail: error instanceof Error ? error.message : String(error),
-      ...context,
-    });
-    return [];
-  }
-};
-
-const parseNumberArrayField = (
-  raw: string | null | undefined,
-  fieldName: string,
-  context: Record<string, unknown>
-): number[] => {
-  if (!raw || !raw.trim()) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      console.warn('[database][json_parse_fallback]', { field: fieldName, reason: 'not_array', ...context });
-      return [];
-    }
-
-    return parsed.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  } catch (error) {
-    console.warn('[database][json_parse_fallback]', {
-      field: fieldName,
-      reason: 'parse_error',
-      detail: error instanceof Error ? error.message : String(error),
-      ...context,
-    });
-    return [];
-  }
-};
-const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
-  if (!variantJson || !variantJson.trim()) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(variantJson) as ExerciseVariant;
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-
-    const normalised: ExerciseVariant = {};
-
-    if (typeof parsed.angle === 'string' && parsed.angle.trim()) {
-      normalised.angle = parsed.angle.trim();
-    }
-    if (typeof parsed.grip === 'string' && parsed.grip.trim()) {
-      normalised.grip = parsed.grip.trim();
-    }
-    if (typeof parsed.posture === 'string' && parsed.posture.trim()) {
-      normalised.posture = parsed.posture.trim();
-    }
-    if (typeof parsed.laterality === 'string' && parsed.laterality.trim()) {
-      normalised.laterality = parsed.laterality.trim();
-    }
-    if (Array.isArray(parsed.extras)) {
-      const extras = parsed.extras
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (extras.length > 0) {
-        normalised.extras = extras;
-      }
-    }
-
-    return Object.keys(normalised).length > 0 ? normalised : null;
-  } catch {
-    return null;
-  }
-};
 
 type SeedFixtureExercise = {
   name: string;
@@ -539,18 +449,17 @@ export const mapSeedFixtureToProgram = (
  * 3. Cause NullPointerException when accessing partially initialized DB
  */
 export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  // If database is already initialized, return it immediately
-  if (db) {
-    return db;
+  const existingDb = getDb();
+  if (existingDb) {
+    return existingDb;
   }
 
-  // If initialization is in progress, wait for it
-  if (initPromise) {
-    return initPromise;
+  const existingPromise = getInitPromise();
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  // Start initialization and store the promise so other callers can wait
-  initPromise = (async () => {
+  const promise = (async () => {
     try {
       logStartupStage('db_open_start');
       const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
@@ -560,16 +469,16 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       await initializeDatabase(database);
       logStartupStage('db_schema_end');
 
-      db = database;
+      setDb(database);
       return database;
     } catch (error) {
-      // Reset on failure so next call can retry
-      initPromise = null;
+      setInitPromise(null);
       throw error;
     }
   })();
 
-  return initPromise;
+  setInitPromise(promise);
+  return promise;
 };
 
 /**
@@ -582,15 +491,16 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
  * behaviour during the refactor; each maintenance step should be independently resilient.
  */
 export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
-  if (maintenanceCompleted) {
+  if (isMaintenanceCompleted()) {
     return;
   }
 
-  if (maintenancePromise) {
-    return maintenancePromise;
+  const existing = getMaintenancePromise();
+  if (existing) {
+    return existing;
   }
 
-  maintenancePromise = (async () => {
+  const promise = (async () => {
     const database = await getDatabase();
 
     logStartupStage('seed_start');
@@ -601,33 +511,14 @@ export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
     await cleanupOrphanedTimersWithDatabase(database);
     logStartupStage('timer_cleanup_end');
 
-    maintenanceCompleted = true;
+    setMaintenanceCompleted(true);
   })().catch((error) => {
-    maintenancePromise = null;
+    setMaintenancePromise(null);
     throw error;
   });
 
-  return maintenancePromise;
-};
-
-const runInTransaction = async <T>(
-  database: SQLite.SQLiteDatabase,
-  operation: () => Promise<T>
-): Promise<T> => {
-  await database.execAsync('BEGIN IMMEDIATE TRANSACTION');
-
-  try {
-    const result = await operation();
-    await database.execAsync('COMMIT');
-    return result;
-  } catch (error) {
-    try {
-      await database.execAsync('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('Error rolling back transaction:', rollbackError);
-    }
-    throw error;
-  }
+  setMaintenancePromise(promise);
+  return promise;
 };
 
 export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): void => {
@@ -2520,11 +2411,12 @@ export const importFromLegacyStorage = async (
  * Close the database connection
  */
 export const closeDatabase = async (): Promise<void> => {
-  if (db) {
-    await db.closeAsync();
-    db = null;
-    initPromise = null;
-    maintenancePromise = null;
-    maintenanceCompleted = false;
+  const currentDb = getDb();
+  if (currentDb) {
+    await currentDb.closeAsync();
+    setDb(null);
+    setInitPromise(null);
+    setMaintenancePromise(null);
+    setMaintenanceCompleted(false);
   }
 };
