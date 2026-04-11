@@ -8,6 +8,7 @@
  */
 
 import type { ExerciseVariant, ProgramExercise } from '@/types';
+import type { SQLiteBindValue } from 'expo-sqlite';
 
 export const serializeVariant = (variant?: ExerciseVariant | null): string =>
   variant ? JSON.stringify(variant) : '';
@@ -132,7 +133,7 @@ export function serializeExerciseToSqlParams(
   foreignKey: string
 ): {
   sql: string;
-  params: unknown[];
+  params: SQLiteBindValue[];
 } {
   const muscleGroups = exercise.muscle_groups_worked ?? [];
   return {
@@ -163,7 +164,7 @@ export function serializeQueueExerciseToSqlParams(
   queueItemId: string
 ): {
   sql: string;
-  params: unknown[];
+  params: SQLiteBindValue[];
 } {
   const muscleGroups = exercise.muscle_groups_worked ?? [];
   return {

@@ -32,6 +32,7 @@ import * as db from '@/services/database';
 import type {
   DraftProgram,
   Exercise,
+  ExerciseVariant,
   Program,
   ProgramExercise,
   WorkoutDay,

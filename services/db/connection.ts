@@ -13,6 +13,27 @@ let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let maintenancePromise: Promise<void> | null = null;
 let maintenanceCompleted = false;
 
+let _getDatabase: (() => Promise<SQLite.SQLiteDatabase>) | null = null;
+
+/**
+ * Register the database getter so sibling modules (e.g. queue.ts)
+ * can obtain the database without importing database.ts (avoids circular deps).
+ */
+export const registerDatabaseGetter = (fn: () => Promise<SQLite.SQLiteDatabase>): void => {
+  _getDatabase = fn;
+};
+
+/**
+ * Retrieve the database connection.
+ * Must only be called after registerDatabaseGetter has been invoked (done at database.ts init).
+ */
+export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
+  if (!_getDatabase) {
+    throw new Error('Database getter not registered. Call registerDatabaseGetter first.');
+  }
+  return _getDatabase();
+};
+
 export const logStartupStage = (stage: string, detail?: Record<string, unknown>): void => {
   if (detail) {
     console.log(`[startup][${stage}]`, detail);
