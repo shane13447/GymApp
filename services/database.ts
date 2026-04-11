@@ -44,18 +44,30 @@ import {
   setMaintenanceCompleted,
   runInTransaction,
   logStartupStage,
+  registerDatabaseGetter,
 } from '@/services/db/connection';
+import {
+  validateWorkoutQueueForPersistence as queueValidateWorkoutQueueForPersistence,
+  getWorkoutQueue as queueGetWorkoutQueue,
+  saveWorkoutQueue as queueSaveWorkoutQueue,
+  addToWorkoutQueue as queueAddToWorkoutQueue,
+  dequeueFirstWorkout as queueDequeueFirstWorkout,
+  clearWorkoutQueue as queueClearWorkoutQueue,
+  updateQueueItem as queueUpdateQueueItem,
+  generateWorkoutQueue as queueGenerateWorkoutQueue,
+  skipQueueToDay as queueSkipQueueToDay,
+  getQueueItemForDay as queueGetQueueItemForDay,
+  incrementQueueGenerationId,
+} from '@/services/db/queue';
 
 // =============================================================================
 // DATABASE INITIALIZATION
 // =============================================================================
 
 /**
- * QUEUE GENERATION LOCK: Prevents race conditions when switching programs rapidly.
- * Each call to generateWorkoutQueue increments this ID. If a newer request starts,
- * the older one will abort before writing to the database.
+ * Queue generation lock is now managed in services/db/queue.ts.
+ * The incrementQueueGenerationId import provides the same functionality.
  */
-let currentQueueGenerationId = 0;
 
 type SeedFixtureExercise = {
   name: string;
@@ -481,6 +493,8 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   return promise;
 };
 
+registerDatabaseGetter(getDatabase);
+
 /**
  * Deferred database maintenance
  *
@@ -521,47 +535,7 @@ export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
   return promise;
 };
 
-export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): void => {
-  const seenIds = new Set<string>();
-
-  for (let index = 0; index < queue.length; index++) {
-    const item = queue[index];
-
-    if (!item?.id) {
-      throw new Error(`Invalid queue item at index ${index}: missing id.`);
-    }
-
-    if (seenIds.has(item.id)) {
-      throw new Error(`Invalid queue: duplicate queue item id "${item.id}".`);
-    }
-    seenIds.add(item.id);
-
-    if (!item.programId) {
-      throw new Error(`Invalid queue item "${item.id}": missing programId.`);
-    }
-
-    if (!Number.isInteger(item.dayNumber) || item.dayNumber < 1) {
-      throw new Error(`Invalid queue item "${item.id}": dayNumber must be a positive integer.`);
-    }
-
-    if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
-      throw new Error(`Invalid queue item "${item.id}": exercises must be a non-empty array.`);
-    }
-
-    for (const exercise of item.exercises) {
-      if (!exercise) {
-        throw new Error(`Invalid queue item "${item.id}": exercise entry is missing.`);
-      }
-
-      if (exercise.hasCustomisedSets) {
-        const sets = Number.parseInt(exercise.sets, 10);
-        if (!Number.isInteger(sets) || sets < 1) {
-          throw new Error(`Invalid queue item "${item.id}": customised set semantics are invalid.`);
-        }
-      }
-    }
-  }
-};
+export const validateWorkoutQueueForPersistence = queueValidateWorkoutQueueForPersistence;
 
 /**
  * Initialize database schema
@@ -966,14 +940,10 @@ export const getCurrentProgramId = async (): Promise<string | null> => {
  * Set current program ID and generate workout queue
  */
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
-  // Invalidate any in-flight queue generation before preferences/queue change.
-  // This prevents stale generations from restoring an old queue after the user
-  // clears or switches the current program.
-  currentQueueGenerationId += 1;
+  incrementQueueGenerationId();
 
   await updateUserPreferences({ currentProgramId: programId });
   
-  // Generate workout queue if a program is set
   if (programId) {
     await generateWorkoutQueue(programId);
   } else {
@@ -1689,467 +1659,71 @@ export const getLastLoggedWeight = async (
 };
 
 // =============================================================================
-// WORKOUT QUEUE
+// WORKOUT QUEUE (delegated to services/db/queue.ts)
 // =============================================================================
 
 /**
  * Get all items in the workout queue
  */
-export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
-  const database = await getDatabase();
-  
-  const queueItems = await database.getAllAsync<{
-    id: string;
-    program_id: string;
-    program_name: string;
-    day_number: number;
-    scheduled_date: string | null;
-    position: number;
-  }>('SELECT * FROM workout_queue ORDER BY position');
-
-  const result: WorkoutQueueItem[] = [];
-  
-  for (const item of queueItems) {
-    const exercises = await database.getAllAsync<{
-      id: number;
-      name: string;
-      equipment: string;
-      muscle_groups: string;
-      is_compound: number;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
-      has_customised_sets: number;
-      variant_json: string | null;
-      position: number;
-    }>(
-      'SELECT * FROM queue_exercises WHERE queue_item_id = ? ORDER BY position',
-      [item.id]
-    );
-
-    result.push({
-      id: item.id,
-      programId: item.program_id,
-      programName: item.program_name,
-      dayNumber: item.day_number,
-      scheduledDate: item.scheduled_date ?? undefined,
-      position: item.position,
-      exercises: exercises.map((ex) => ({
-        exerciseInstanceId: `${item.id}:e${ex.position}`,
-        name: ex.name,
-        equipment: ex.equipment,
-        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'queue_exercises.muscle_groups', {
-          queue_item_id: item.id,
-          exercise: ex.name,
-        }),
-        isCompound: !!ex.is_compound,
-        weight: ex.weight.toString(),
-        reps: ex.reps.toString(),
-        sets: ex.sets.toString(),
-        restTime: ex.rest_time.toString(),
-        progression: ex.progression.toString(),
-        hasCustomisedSets: ex.has_customised_sets === 1,
-        variant: parseVariant(ex.variant_json),
-      })),
-    });
-  }
-
-  return result;
-};
+export const getWorkoutQueue = queueGetWorkoutQueue;
 
 /**
  * Save the entire workout queue (replaces existing)
  */
-export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void> => {
-  const database = await getDatabase();
-  validateWorkoutQueueForPersistence(queue);
-
-  await runInTransaction(database, async () => {
-    // Clear existing queue
-    await database.runAsync('DELETE FROM workout_queue');
-
-    // Insert new queue items
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i];
-      await database.runAsync(
-        `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          item.id,
-          item.programId,
-          item.programName,
-          item.dayNumber,
-          item.scheduledDate ?? null,
-          i,
-        ]
-      );
-
-      // Insert queue exercises
-      for (let j = 0; j < item.exercises.length; j++) {
-        const exercise = item.exercises[j];
-        const muscleGroups = exercise.muscle_groups_worked ?? [];
-        await database.runAsync(
-          `INSERT INTO queue_exercises
-           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            item.id,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(muscleGroups),
-            exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            j,
-          ]
-        );
-      }
-    }
-  });
-};
+export const saveWorkoutQueue = queueSaveWorkoutQueue;
 
 /**
  * Add an item to the workout queue
  */
-export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> => {
-  const database = await getDatabase();
-
-  // Get the max position
-  const maxPos = await database.getFirstAsync<{ max_pos: number | null }>(
-    'SELECT MAX(position) as max_pos FROM workout_queue'
-  );
-  const position = (maxPos?.max_pos ?? -1) + 1;
-
-  await database.runAsync(
-    `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      item.id,
-      item.programId,
-      item.programName,
-      item.dayNumber,
-      item.scheduledDate ?? null,
-      position,
-    ]
-  );
-
-  // Insert queue exercises
-  for (let j = 0; j < item.exercises.length; j++) {
-    const exercise = item.exercises[j];
-    const muscleGroups = exercise.muscle_groups_worked ?? [];
-    await database.runAsync(
-      `INSERT INTO queue_exercises
-       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item.id,
-        exercise.name ?? '',
-        exercise.equipment ?? '',
-        JSON.stringify(muscleGroups),
-        exercise.isCompound ? 1 : 0,
-        parseFloat(exercise.weight) || 0,
-        parseInt(exercise.reps, 10) || 8,
-        parseInt(exercise.sets, 10) || 3,
-        parseInt(exercise.restTime, 10) || 180,
-        parseFloat(exercise.progression) || 0,
-        exercise.hasCustomisedSets ? 1 : 0,
-        serializeVariant(exercise.variant),
-        j,
-      ]
-    );
-  }
-};
+export const addToWorkoutQueue = queueAddToWorkoutQueue;
 
 /**
  * Remove the first item from the queue and return it
  */
-export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> => {
-  const queue = await getWorkoutQueue();
-  if (queue.length === 0) return null;
-
-  const first = queue[0];
-  const database = await getDatabase();
-  
-  // Delete the first item (cascade deletes exercises)
-  await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
-
-  // Update positions of remaining items
-  await database.runAsync(
-    'UPDATE workout_queue SET position = position - 1 WHERE position > 0'
-  );
-
-  return first;
-};
+export const dequeueFirstWorkout = queueDequeueFirstWorkout;
 
 /**
  * Clear the entire workout queue
  */
-export const clearWorkoutQueue = async (): Promise<void> => {
-  const database = await getDatabase();
-  await database.runAsync('DELETE FROM workout_queue');
-};
+export const clearWorkoutQueue = queueClearWorkoutQueue;
 
 /**
  * Update a specific queue item
  */
-export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => {
-  const database = await getDatabase();
-
-  await database.runAsync(
-    `UPDATE workout_queue SET program_id = ?, program_name = ?, day_number = ?, scheduled_date = ?
-     WHERE id = ?`,
-    [item.programId, item.programName, item.dayNumber, item.scheduledDate ?? null, item.id]
-  );
-
-  // Delete and re-insert exercises
-  await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [item.id]);
-
-  for (let j = 0; j < item.exercises.length; j++) {
-    const exercise = item.exercises[j];
-    const muscleGroups = exercise.muscle_groups_worked ?? [];
-    await database.runAsync(
-      `INSERT INTO queue_exercises
-       (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item.id,
-        exercise.name ?? '',
-        exercise.equipment ?? '',
-        JSON.stringify(muscleGroups),
-        exercise.isCompound ? 1 : 0,
-        parseFloat(exercise.weight) || 0,
-        parseInt(exercise.reps, 10) || 8,
-        parseInt(exercise.sets, 10) || 3,
-        parseInt(exercise.restTime, 10) || 180,
-        parseFloat(exercise.progression) || 0,
-        exercise.hasCustomisedSets ? 1 : 0,
-        serializeVariant(exercise.variant),
-        j,
-      ]
-    );
-  }
-};
+export const updateQueueItem = queueUpdateQueueItem;
 
 // =============================================================================
-// QUEUE MANIPULATION
+// QUEUE MANIPULATION (implemented in services/db/queue.ts)
 // =============================================================================
-
-function roundWeightToNearestQuarter(weight: number): number {
-  return Math.round(weight * 4) / 4;
-}
-
-function calculateProgressedWeight(exercise: ProgramExercise, lastWeight: number | null): number {
-  const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
-  const numProgression = Number(exercise.progression) || 0;
-  const numExerciseWeight = Number(exercise.weight) || 0;
-
-  let newWeight = numExerciseWeight;
-  if (numLastWeight !== null && numProgression > 0) {
-    newWeight = numLastWeight + numProgression;
-  } else if (numLastWeight !== null) {
-    newWeight = numLastWeight;
-  }
-
-  return roundWeightToNearestQuarter(newWeight);
-}
-
-async function applyProgressionToExercises(
-  exercises: ProgramExercise[],
-  programId: string
-): Promise<ProgramExercise[]> {
-  const exercisesWithProgression: ProgramExercise[] = [];
-
-  for (const exercise of exercises) {
-    const lastWeight = await getLastLoggedWeight(exercise.name, programId, exercise.variant);
-    const newWeight = calculateProgressedWeight(exercise, lastWeight);
-
-    exercisesWithProgression.push({
-      ...exercise,
-      weight: newWeight.toString(),
-    });
-  }
-
-  return exercisesWithProgression;
-}
 
 /**
  * Skip queue items until the target day is first in the queue.
- * 
- * UNDO BEHAVIOR: When an originalQueue is provided, this function uses it as
- * the reference point. This enables "undo" when the user goes backward:
- * - Day 1 → Day 2: originalQueue[1] becomes first (skip forward)
- * - Day 2 → Day 1: originalQueue[0] becomes first (restore/undo)
- * 
- * Without originalQueue, each skip is relative to the current queue state,
- * which would cause Day 1 → Day 2 → Day 1 to keep skipping forward.
- * 
- * @param programId - The current program ID
- * @param targetDayNumber - The day number to skip to (1-indexed)
- * @param originalQueue - Optional original queue state for undo support
- * @returns The updated queue, or null if program not found
+ * Delegates to queue module which accepts getProgramById and getLastLoggedWeight
+ * as injected dependencies.
  */
 export const skipQueueToDay = async (
   programId: string,
   targetDayNumber: number,
   originalQueue?: WorkoutQueueItem[]
 ): Promise<WorkoutQueueItem[] | null> => {
-  const program = await getProgramById(programId);
-  if (!program || program.workoutDays.length === 0) {
-    console.warn('Cannot skip queue: Program not found or has no workout days');
-    return null;
-  }
-
-  // Use original queue if provided, otherwise fetch current queue
-  const referenceQueue = originalQueue ?? await getWorkoutQueue();
-  
-  // Check if this is even for the same program
-  if (referenceQueue.length > 0 && referenceQueue[0].programId !== programId) {
-    // Queue is for a different program, regenerate
-    await generateWorkoutQueue(programId);
-    return getWorkoutQueue();
-  }
-
-  // Check if target day is already first in reference queue
-  if (referenceQueue.length > 0 && referenceQueue[0].dayNumber === targetDayNumber) {
-    // Restore the reference queue (important for undo: restores original state)
-    await saveWorkoutQueue(referenceQueue);
-    return referenceQueue;
-  }
-
-  // Find if target day exists in the reference queue
-  const targetIndex = referenceQueue.findIndex(q => q.dayNumber === targetDayNumber);
-  
-  let newQueue: WorkoutQueueItem[];
-  
-  if (targetIndex >= 0) {
-    // Target day exists in reference queue - slice from there (preserves original items)
-    newQueue = referenceQueue.slice(targetIndex).map((item, idx) => ({
-      ...item,
-      position: idx,
-    }));
-  } else {
-    // Target day not in reference queue - rebuild queue starting from target day
-    newQueue = [];
-  }
-
-  // Fill queue to maintain DEFAULT_QUEUE_SIZE items
-  const numDays = program.workoutDays.length;
-  const targetDayIndex = program.workoutDays.findIndex(d => d.dayNumber === targetDayNumber);
-  
-  if (targetDayIndex === -1) {
-    console.warn(`Day ${targetDayNumber} not found in program`);
-    return referenceQueue;
-  }
-
-  while (newQueue.length < DEFAULT_QUEUE_SIZE) {
-    // Calculate which day to add next
-    const lastDayNumber = newQueue.length > 0 
-      ? newQueue[newQueue.length - 1].dayNumber 
-      : targetDayNumber - 1; // So first iteration adds targetDayNumber
-    
-    // Find the index of the last day in the program
-    const lastDayIndex = program.workoutDays.findIndex(d => d.dayNumber === lastDayNumber);
-    const nextDayIndex = lastDayIndex === -1 
-      ? targetDayIndex  // If last day not found, start from target
-      : (lastDayIndex + 1) % numDays;
-    
-    const nextDay = program.workoutDays[nextDayIndex];
-
-    const exercisesWithProgression = await applyProgressionToExercises(nextDay.exercises, programId);
-
-    newQueue.push({
-      id: `queue-${Date.now()}-${newQueue.length}`,
-      programId: program.id,
-      programName: program.name,
-      dayNumber: nextDay.dayNumber,
-      exercises: exercisesWithProgression,
-      position: newQueue.length,
-    });
-  }
-
-  // Save the new queue
-  await saveWorkoutQueue(newQueue);
-  console.log(`Skipped queue to day ${targetDayNumber}, new queue: [${newQueue.map(q => q.dayNumber).join(', ')}]`);
-  
-  return newQueue;
+  return queueSkipQueueToDay(programId, targetDayNumber, originalQueue, getProgramById, getLastLoggedWeight);
 };
 
 /**
  * Get a queue item for a specific day, if it exists in the queue.
- * Useful for loading pre-calculated exercise values when user switches days.
- * 
- * @param dayNumber - The day number to find
- * @returns The queue item if found, or null
  */
-export const getQueueItemForDay = async (dayNumber: number): Promise<WorkoutQueueItem | null> => {
-  const queue = await getWorkoutQueue();
-  return queue.find(q => q.dayNumber === dayNumber) ?? null;
-};
+export const getQueueItemForDay = queueGetQueueItemForDay;
 
 // =============================================================================
-// QUEUE GENERATION
+// QUEUE GENERATION (delegated to services/db/queue.ts)
 // =============================================================================
 
 /**
- * Generate a workout queue from a program
- * Creates DEFAULT_QUEUE_SIZE queue items cycling through the program's workout days
- * Applies auto-progression based on last logged weights
+ * Generate a workout queue from a program.
+ * Delegates to queue module, injecting getProgramById and getLastLoggedWeight.
  */
 export const generateWorkoutQueue = async (programId: string): Promise<void> => {
-  // Increment request ID to invalidate any previous in-flight generations
-  currentQueueGenerationId += 1;
-  const thisRequestId = currentQueueGenerationId;
-
-  const program = await getProgramById(programId);
-  if (!program || program.workoutDays.length === 0) {
-    console.warn('Cannot generate queue: Program not found or has no workout days');
-    return;
-  }
-
-  // Check if we've been superseded by a newer request
-  if (thisRequestId !== currentQueueGenerationId) {
-    console.log(`Aborting stale queue generation for program: ${program.name}`);
-    return;
-  }
-
-  const queueItems: WorkoutQueueItem[] = [];
-  const numDays = program.workoutDays.length;
-
-  for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
-    // Check again inside the loop for long-running generations
-    if (thisRequestId !== currentQueueGenerationId) return;
-
-    const dayIndex = i % numDays;
-    const workoutDay = program.workoutDays[dayIndex];
-
-    const exercisesWithProgression = await applyProgressionToExercises(workoutDay.exercises, programId);
-
-    queueItems.push({
-      id: `queue-${Date.now()}-${i}`,
-      programId: program.id,
-      programName: program.name,
-      dayNumber: workoutDay.dayNumber,
-      exercises: exercisesWithProgression,
-      position: i,
-    });
-  }
-
-  // Final check before saving
-  if (thisRequestId !== currentQueueGenerationId) {
-    console.log(`Aborting stale queue save for program: ${program.name}`);
-    return;
-  }
-
-  // Save the generated queue
-  await saveWorkoutQueue(queueItems);
-  console.log(`Generated workout queue with ${queueItems.length} items for program: ${program.name}`);
+  return queueGenerateWorkoutQueue(programId, getProgramById, getLastLoggedWeight);
 };
 
 // =============================================================================
