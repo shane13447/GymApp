@@ -14,8 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
-import { inferInjurySeverity, inferRequestedVariant, type CoachProxyMessage } from '@/lib/coach-utils';
+import { type CoachProxyMessage } from '@/lib/coach-utils';
 import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
@@ -28,24 +27,16 @@ import {
   runCoachPromptSuite,
   type CoachPromptCase,
 } from '@/services/coach/prompt-test-runner';
+import { processCoachResponse } from '@/services/coach/response-processor';
 import {
   buildCompressedPrompt,
-  compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
-  differencesToProposedChanges,
-  evaluateInjurySemanticOutcome,
-  evaluatePromptIntentOutcome,
-  evaluateVariantSemanticOutcome,
   extractTargetExerciseRefs,
-  mergeScopedQueueChanges,
-  parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
   type TargetedExerciseRef,
-  validateChanges,
-  validateQueueStructure,
   type ProposedChanges,
 } from '@/services/workout-queue-modifier';
-import type { DraftProgram, Program, WorkoutQueueItem } from '@/types';
+import type { DraftProgram, WorkoutQueueItem } from '@/types';
 
 // Test prompts for automated testing
 // Note: These use values DIFFERENT from current queue to ensure changes are detected
@@ -301,7 +292,7 @@ export default function CoachScreen() {
     }
   }, [proxyError]);
 
-  // Handle response
+// Handle response
   useEffect(() => {
     if (
       proxyResponse &&
@@ -311,27 +302,28 @@ export default function CoachScreen() {
       console.log('[QUEUE FORMAT] Processing LLM response');
       lastProcessedResponseRef.current = proxyResponse;
 
-      // Parse and repair in one step - repair is now integrated into parseQueueFormatResponse
-      // Use ref to avoid race condition with async state updates
-      const parsedQueue = parseQueueFormatResponse(proxyResponse, scopedQueueRef.current, inputText, targetedExercisesRef.current);
+      const result = processCoachResponse({
+        proxyResponse,
+        scopedQueue: scopedQueueRef.current,
+        fullQueue: workoutQueue,
+        inputText,
+        targetedExercises: targetedExercisesRef.current,
+        isTestMode,
+        testIndex,
+        totalTests: TEST_PROMPTS.length,
+        currentTest: isTestMode ? TEST_PROMPTS[testIndex] : null,
+      });
 
-      if (parsedQueue && parsedQueue.length > 0) {
-        const structureValidation = validateQueueStructure(scopedQueueRef.current, parsedQueue);
-        if (!structureValidation.valid) {
-          console.warn('[QUEUE FORMAT] Structure validation failed:', structureValidation.errors);
-
-          const structureError = `Unable to safely apply AI changes: ${structureValidation.errors.join(' ')}`;
-
+      switch (result.kind) {
+        case 'parse_failed': {
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
-            console.log(
-              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: STRUCTURE VALIDATION FAILED`
-            );
+            console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: FAILED_PARSE`);
+            console.log(`[TEST][FAILED_PARSE]`, 'Parse failed');
             setTestResults((prev) => [
               ...prev,
-              { type: currentTest.type, success: false, error: structureError },
+              { type: currentTest.type, success: false, error: 'Parse failed' },
             ]);
-
             if (testIndex < TEST_PROMPTS.length - 1) {
               pendingNextTestRef.current = testIndex + 1;
             } else {
@@ -340,161 +332,47 @@ export default function CoachScreen() {
               Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
             }
           } else {
-            setError(structureError);
+            setError('Could not parse queue from response. Expected format like "Q0:D1:BBP/80/5/5,BBS/100/5/5". Please try again.');
           }
+          setLoading(false);
+          break;
+        }
 
+        case 'structure_invalid': {
+          console.warn('[QUEUE FORMAT] Structure validation failed');
+          if (isTestMode) {
+            const currentTest = TEST_PROMPTS[testIndex];
+            console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: STRUCTURE VALIDATION FAILED`);
+            setTestResults((prev) => [
+              ...prev,
+              { type: currentTest.type, success: false, error: result.error },
+            ]);
+            if (testIndex < TEST_PROMPTS.length - 1) {
+              pendingNextTestRef.current = testIndex + 1;
+            } else {
+              setIsTestMode(false);
+              console.log('[TEST] All tests complete!');
+              Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
+            }
+          } else {
+            setError(result.error);
+          }
           setGeneratedQueue(null);
           setProposedChanges(null);
           setShowModal(false);
           setLoading(false);
-          return;
+          break;
         }
 
-        console.log('[QUEUE FORMAT] Parsed and repaired queue with', parsedQueue.length, 'items');
-
-        const differences = compareWorkoutQueues(scopedQueueRef.current, parsedQueue);
-
-        const mergedQueue = mergeScopedQueueChanges(workoutQueue, parsedQueue, scopedQueueRef.current.length);
-        setGeneratedQueue(mergedQueue);
-
-        if (differences.length > 0) {
-          const formatted = differencesToProposedChanges(differences);
-
-          // Validate for unexpected changes
-          const validation = validateChanges(inputText, differences);
-          if (!validation.valid) {
-            console.warn('[VALIDATION] Warnings:', validation.warnings);
-          }
-
-          setProposedChanges(formatted);
-
-          // In test mode, auto-discard and log result
+        case 'no_changes': {
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
-            const isVariantTest = currentTest.type.startsWith('Variant -');
-            const isInjuryTest = currentTest.type.startsWith('Injury -');
-
-            let semanticResult: { passed: boolean; reason?: string } = { passed: true };
-
-            if (isVariantTest) {
-              const requestedVariant = inferRequestedVariant(currentTest.prompt) ?? '';
-              semanticResult = evaluateVariantSemanticOutcome(
-                currentTest.prompt,
-                workoutQueue,
-                parsedQueue,
-                targetedExercisesRef.current,
-                requestedVariant
-              );
-            } else if (isInjuryTest) {
-              const injurySeverity = inferInjurySeverity(currentTest.type);
-              const semanticRequest = injurySeverity
-                ? `${injurySeverity} injury: ${currentTest.prompt}`
-                : currentTest.prompt;
-
-              semanticResult = evaluateInjurySemanticOutcome(
-                semanticRequest,
-                workoutQueue,
-                parsedQueue,
-                targetedExercisesRef.current.map((exercise) => exercise.displayName)
-              );
-            }
-
-            const deterministicIntentResult =
-              !isVariantTest && !isInjuryTest
-                ? evaluatePromptIntentOutcome(
-                    currentTest.prompt,
-                    workoutQueue,
-                    parsedQueue,
-                    targetedExercisesRef.current
-                  )
-                : { passed: true };
-
-            const hasWarnings = !validation.valid;
-            const success = classifyCoachTestSuccess({
-              hasWarnings,
-              semanticPassed: semanticResult.passed,
-              deterministicIntentPassed: deterministicIntentResult.passed,
-            });
-
-            console.log(
-              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${success ? 'SUCCESS' : 'FAILED'}`
-            );
-
-            if (hasWarnings) {
-              console.log(`[TEST][FAILED_VALIDATION]`, validation.warnings);
-            }
-
-            if (!semanticResult.passed) {
-              console.log(`[TEST][FAILED_SEMANTIC]`, semanticResult.reason);
-            }
-
-            if (!deterministicIntentResult.passed) {
-              console.log(`[TEST][FAILED_INTENT_MISMATCH]`, deterministicIntentResult.reason);
-            }
-
-            console.log(`[TEST] Changes proposed:`, formatted);
-            const failureReasons: string[] = [];
-            if (hasWarnings) {
-              failureReasons.push(validation.warnings.join('; '));
-            }
-            if (!semanticResult.passed) {
-              failureReasons.push(
-                semanticResult.reason ?? `Semantic validation failed for ${currentTest.type}.`
-              );
-            }
-            if (!deterministicIntentResult.passed) {
-              failureReasons.push(
-                deterministicIntentResult.reason ?? `Intent mismatch for ${currentTest.type}.`
-              );
-            }
-
-            setTestResults((prev) => [
-              ...prev,
-              {
-                type: currentTest.type,
-                success,
-                error: failureReasons.length > 0 ? failureReasons.join('; ') : undefined,
-              },
-            ]);
-
-            // Auto-discard and proceed to next test
-            setGeneratedQueue(null);
-            setProposedChanges(null);
-
-            // Schedule next test
-            if (testIndex < TEST_PROMPTS.length - 1) {
-              pendingNextTestRef.current = testIndex + 1;
-            } else {
-              // All tests complete
-              setIsTestMode(false);
-              console.log('[TEST] All tests complete!');
-              Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
-            }
-          } else {
-            // Block confirmation when validation has warnings
-            if (!validation.valid) {
-              setGeneratedQueue(null);
-              setProposedChanges(null);
-              setShowModal(false);
-              setError(`Unable to apply AI changes safely: ${validation.warnings.join(' ')}`);
-            } else {
-              setError('');
-              setShowModal(true);
-            }
-          }
-        } else {
-          if (isTestMode) {
-            const currentTest = TEST_PROMPTS[testIndex];
-            console.log(
-              `[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO_CHANGES`
-            );
+            console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: NO_CHANGES`);
             console.log(`[TEST][NO_CHANGES]`, 'No changes detected');
             setTestResults((prev) => [
               ...prev,
               { type: currentTest.type, success: false, error: 'No changes detected' },
             ]);
-
-            // Schedule next test
             if (testIndex < TEST_PROMPTS.length - 1) {
               pendingNextTestRef.current = testIndex + 1;
             } else {
@@ -505,35 +383,52 @@ export default function CoachScreen() {
           } else {
             Alert.alert('No Changes', 'The generated workout queue is identical to the current one.');
           }
+          setLoading(false);
+          break;
         }
 
-        setLoading(false);
-      } else {
-        console.warn('[QUEUE FORMAT] Failed to parse response');
+        case 'changes_approved': {
+          setGeneratedQueue(result.generatedQueue);
+          setProposedChanges(result.proposedChanges);
+          setError('');
+          setShowModal(true);
+          setLoading(false);
+          break;
+        }
 
-        if (isTestMode) {
+        case 'changes_blocked': {
+          setGeneratedQueue(null);
+          setProposedChanges(null);
+          setShowModal(false);
+          setError(result.error);
+          setLoading(false);
+          break;
+        }
+
+        case 'test_result': {
           const currentTest = TEST_PROMPTS[testIndex];
-          console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: FAILED_PARSE`);
-          console.log(`[TEST][FAILED_PARSE]`, 'Parse failed');
+          console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+          if (result.errors.length > 0) {
+            console.log(`[TEST][FAILED]`, result.errors.join('; '));
+          }
+          if (result.proposedChanges) {
+            console.log(`[TEST] Changes proposed:`, result.proposedChanges);
+          }
           setTestResults((prev) => [
             ...prev,
-            { type: currentTest.type, success: false, error: 'Parse failed' },
+            { type: currentTest.type, success: result.success, error: result.errors.length > 0 ? result.errors.join('; ') : undefined },
           ]);
-
-          // Schedule next test
-          if (testIndex < TEST_PROMPTS.length - 1) {
-            pendingNextTestRef.current = testIndex + 1;
+          setGeneratedQueue(null);
+          setProposedChanges(null);
+          if (result.pendingNextTestIndex !== null) {
+            pendingNextTestRef.current = result.pendingNextTestIndex;
           } else {
             setIsTestMode(false);
             console.log('[TEST] All tests complete!');
             Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
           }
           setLoading(false);
-        } else {
-          setError(
-            'Could not parse queue from response. Expected format like "Q0:D1:BBP/80/5/5,BBS/100/5/5". Please try again.'
-          );
-          setLoading(false);
+          break;
         }
       }
     }
