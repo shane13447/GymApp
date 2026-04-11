@@ -21,118 +21,22 @@ import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import { parseExerciseCatalog, getDefaultVariantForExercise } from '@/services/catalog/parse-catalog';
+import {
+  cloneExercise,
+  cloneWorkoutDays,
+  areExercisesEquivalent,
+  buildExerciseIdentity,
+} from '@/services/programs/clone';
 import * as db from '@/services/database';
 import type {
+  DraftProgram,
   Exercise,
-  ExerciseVariant,
-  ExerciseVariantOption,
   Program,
   ProgramExercise,
   WorkoutDay,
 } from '@/types';
 import { CreateProgramStep, ProgramViewMode } from '@/types';
-
-const cloneExercise = (exercise: ProgramExercise): ProgramExercise => ({
-  ...exercise,
-  muscle_groups_worked: [...exercise.muscle_groups_worked],
-  variant: exercise.variant
-    ? {
-        ...exercise.variant,
-        extras: exercise.variant.extras ? [...exercise.variant.extras] : undefined,
-      }
-    : null,
-  variantOptions: exercise.variantOptions
-    ? exercise.variantOptions.map((option) => ({
-        ...option,
-        aliases: option.aliases ? [...option.aliases] : undefined,
-      }))
-    : undefined,
-  aliases: exercise.aliases ? [...exercise.aliases] : undefined,
-});
-
-const parseVariantOption = (rawOption: unknown): ExerciseVariantOption | null => {
-  if (!rawOption || typeof rawOption !== 'object') {
-    return null;
-  }
-
-  const option = rawOption as Record<string, unknown>;
-  const label = typeof option.label === 'string' ? option.label.trim() : '';
-  if (!label) {
-    return null;
-  }
-
-  const field = option.field;
-  const normalisedField =
-    field === 'angle' || field === 'grip' || field === 'posture' || field === 'laterality'
-      ? field
-      : undefined;
-
-  const value = typeof option.value === 'string' ? option.value.trim() : undefined;
-  const aliases = Array.isArray(option.aliases)
-    ? option.aliases
-        .filter((alias): alias is string => typeof alias === 'string')
-        .map((alias) => alias.trim())
-        .filter(Boolean)
-    : undefined;
-
-  return {
-    label,
-    field: normalisedField,
-    value: value || undefined,
-    aliases: aliases && aliases.length > 0 ? aliases : undefined,
-  };
-};
-
-const parseVariantOptions = (rawOptions: unknown): ExerciseVariantOption[] | undefined => {
-  if (!Array.isArray(rawOptions)) {
-    return undefined;
-  }
-
-  const options = rawOptions.map(parseVariantOption).filter((option): option is ExerciseVariantOption => Boolean(option));
-  return options.length > 0 ? options : undefined;
-};
-
-const getDefaultVariantForExercise = (
-  variantOptions?: ExerciseVariantOption[]
-): ExerciseVariant | null => {
-  if (!variantOptions || variantOptions.length === 0) {
-    return null;
-  }
-
-  const defaultVariant: ExerciseVariant = {};
-
-  for (const option of variantOptions) {
-    if (!option.field || !option.value) {
-      continue;
-    }
-
-    if (defaultVariant[option.field]) {
-      continue;
-    }
-
-    defaultVariant[option.field] = option.value;
-  }
-
-  return Object.keys(defaultVariant).length > 0 ? defaultVariant : null;
-};
-
-const buildExerciseIdentity = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string =>
-  JSON.stringify({
-    name: exercise.name,
-    variant: exercise.variant ?? null,
-  });
-
-const areExercisesEquivalent = (
-  left: Pick<ProgramExercise, 'name' | 'variant'>,
-  right: Pick<ProgramExercise, 'name' | 'variant'>
-): boolean => buildExerciseIdentity(left) === buildExerciseIdentity(right);
-
-const cloneWorkoutDay = (day: WorkoutDay): WorkoutDay => ({
-  ...day,
-  exercises: day.exercises.map(cloneExercise),
-});
-
-const cloneWorkoutDays = (days: WorkoutDay[]): WorkoutDay[] => days.map(cloneWorkoutDay);
 
 export default function ProgramsScreen() {
   // View state
@@ -164,29 +68,7 @@ export default function ProgramsScreen() {
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
 
   // Load exercises from JSON
-  const exercises: Exercise[] = useMemo(() => {
-    return exercisesData.map((rawExercise) => {
-      const ex = rawExercise as Record<string, unknown>;
-      const variantOptions = parseVariantOptions(ex.variantOptions);
-      const aliases = Array.isArray(ex.aliases)
-        ? ex.aliases
-            .filter((alias): alias is string => typeof alias === 'string')
-            .map((alias) => alias.trim())
-            .filter(Boolean)
-        : undefined;
-
-      return {
-        name: typeof ex.name === 'string' ? ex.name : '',
-        equipment: typeof ex.equipment === 'string' ? ex.equipment : '',
-        muscle_groups_worked: Array.isArray(ex.muscle_groups_worked)
-          ? ex.muscle_groups_worked.filter((group): group is string => typeof group === 'string')
-          : [],
-        isCompound: Boolean(ex.isCompound),
-        variantOptions,
-        aliases: aliases && aliases.length > 0 ? aliases : undefined,
-      };
-    });
-  }, []);
+  const exercises: Exercise[] = useMemo(() => parseExerciseCatalog(exercisesData as unknown[]), []);
 
   // Load programs on mount
   useEffect(() => {
@@ -256,10 +138,10 @@ export default function ProgramsScreen() {
     (
       exerciseIdentity: Pick<ProgramExercise, 'name' | 'variant'>,
       field: keyof ProgramExercise,
-      value: string | boolean | ExerciseVariant | null,
+      value: string | boolean | number | ExerciseVariant | null,
       dayNumber?: number
     ) => {
-      const numericFields: (keyof ProgramExercise)[] = [
+      const numericStringFields: (keyof ProgramExercise)[] = [
         'weight',
         'reps',
         'sets',
@@ -267,13 +149,22 @@ export default function ProgramsScreen() {
         'progression',
       ];
 
+      const numericFields: (keyof ProgramExercise)[] = [
+        'repRangeMin',
+        'repRangeMax',
+        'progressionThreshold',
+        'timesRepsHitInARow',
+      ];
+
       const finalValue: ProgramExercise[keyof ProgramExercise] =
         field === 'hasCustomisedSets'
           ? Boolean(value)
           : field === 'variant'
           ? (value as ExerciseVariant | null)
-          : numericFields.includes(field)
+          : numericStringFields.includes(field)
           ? String(value)
+          : numericFields.includes(field)
+          ? (value as number)
           : String(value);
 
       if (createStep === CreateProgramStep.Configuration && dayNumber !== undefined) {
@@ -400,7 +291,7 @@ export default function ProgramsScreen() {
 
     try {
       setIsSaving(true);
-      const newProgram: Omit<Program, 'createdAt' | 'updatedAt'> = {
+      const newProgram: DraftProgram = {
         id: Date.now().toString(),
         name: programName.trim(),
         workoutDays,
