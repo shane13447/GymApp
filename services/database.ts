@@ -10,14 +10,12 @@
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import exercisesData from '@/data/exerciseSelection.json';
 import type {
-  ExerciseVariant,
   MuscleGroupTarget,
   Program,
   ProgramExercise,
   UserPreferences,
   UserProfile,
   Workout,
-  WorkoutDay,
   WorkoutQueueItem
 } from '@/types';
 import { TrainingGoal } from '@/types';
@@ -25,14 +23,7 @@ import * as SQLite from 'expo-sqlite';
 
 import {
   serializeVariant,
-  parseStringArrayField,
-  parseNumberArrayField,
-  parseVariant,
-  serializeExerciseToSqlParams,
-  serializeQueueExerciseToSqlParams,
-  deserializeProgramExerciseRow,
 } from '@/services/db/serialization';
-import type { SqlExerciseRow } from '@/services/db/serialization';
 import {
   getDb,
   setDb,
@@ -59,6 +50,8 @@ import {
   getQueueItemForDay as queueGetQueueItemForDay,
   incrementQueueGenerationId,
 } from '@/services/db/queue';
+import * as programsDb from '@/services/db/programs';
+import * as workoutsDb from '@/services/db/workouts';
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -1143,520 +1136,53 @@ export const saveMuscleGroupTargets = async (
 };
 
 // =============================================================================
-// PROGRAMS
+// PROGRAMS (delegated to services/db/programs.ts)
 // =============================================================================
 
-/**
- * Get all programs
- */
-export const getAllPrograms = async (): Promise<Program[]> => {
-  const database = await getDatabase();
-  
-  const programs = await database.getAllAsync<{
-    id: string;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  }>('SELECT * FROM programs ORDER BY created_at DESC');
+export const getAllPrograms = programsDb.getAllPrograms;
 
-  const result: Program[] = [];
-  
-  for (const program of programs) {
-    const workoutDays = await getWorkoutDaysForProgram(program.id);
-    result.push({
-      id: program.id,
-      name: program.name,
-      workoutDays,
-      createdAt: program.created_at,
-      updatedAt: program.updated_at,
-    });
-  }
+export const getProgramById = programsDb.getProgramById;
 
-  return result;
-};
+export const createProgram = programsDb.createProgram;
 
-/**
- * Get a single program by ID
- */
-export const getProgramById = async (programId: string): Promise<Program | null> => { 
-  const database = await getDatabase();
-  
-  const program = await database.getFirstAsync<{
-    id: string;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  }>('SELECT * FROM programs WHERE id = ?', [programId]);
-
-  if (!program) return null;
-
-  const workoutDays = await getWorkoutDaysForProgram(program.id);
-  
-  return {
-    id: program.id,
-    name: program.name,
-    workoutDays,
-    createdAt: program.created_at,
-    updatedAt: program.updated_at,
-  };
-};
-
-/**
- * Get workout days for a program
- */
-const getWorkoutDaysForProgram = async (programId: string): Promise<WorkoutDay[]> => {
-  const database = await getDatabase();
-  
-  const days = await database.getAllAsync<{
-    id: number;
-    program_id: string;
-    day_number: number;
-  }>('SELECT * FROM workout_days WHERE program_id = ? ORDER BY day_number', [programId]);
-
-  const result: WorkoutDay[] = [];
-  
-  for (const day of days) {
-    const exercises = await database.getAllAsync<{
-      id: number;
-      name: string;
-      equipment: string;
-      muscle_groups: string;
-      is_compound: number;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
-      has_customised_sets: number;
-      variant_json: string | null;
-      position: number;
-    }>(
-      'SELECT * FROM program_exercises WHERE workout_day_id = ? ORDER BY position',
-      [day.id]
-    );
-
-    result.push({
-      dayNumber: day.day_number,
-      exercises: exercises.map((ex) => ({
-        name: ex.name,
-        equipment: ex.equipment,
-        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'program_exercises.muscle_groups', {
-          workout_day_id: day.id,
-          exercise: ex.name,
-        }),
-        isCompound: !!ex.is_compound,
-        weight: ex.weight.toString(),
-        reps: ex.reps.toString(),
-        sets: ex.sets.toString(),
-        restTime: ex.rest_time.toString(),
-        progression: ex.progression.toString(),
-        hasCustomisedSets: ex.has_customised_sets === 1,
-        variant: parseVariant(ex.variant_json),
-      })),
-    });
-  }
-
-  return result;
-};
-
-/**
- * Create a new program
- */
-export const createProgram = async (program: Omit<Program, 'createdAt' | 'updatedAt'>): Promise<Program> => {
-  const database = await getDatabase();
-  const now = new Date().toISOString();
-
-  await runInTransaction(database, async () => {
-    await database.runAsync(
-      'INSERT INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-      [program.id, program.name, now, now]
-    );
-
-    // Insert workout days and exercises
-    for (const day of program.workoutDays) {
-      const dayResult = await database.runAsync(
-        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-        [program.id, day.dayNumber]
-      );
-
-      const dayId = dayResult.lastInsertRowId;
-
-      for (let i = 0; i < day.exercises.length; i++) {
-        const exercise = day.exercises[i];
-        // Defensive coding: ensure all fields have valid values
-        const muscleGroups = exercise.muscle_groups_worked ?? [];
-        await database.runAsync(
-          `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            dayId,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(muscleGroups),
-            exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            i,
-          ]
-        );
-      }
-    }
-  });
-
-  return {
-    ...program,
-    createdAt: now,
-    updatedAt: now,
-  };
-};
-
-/**
- * Update an existing program
- */
-export const updateProgram = async (program: Program): Promise<void> => {
-  const database = await getDatabase();
-  const now = new Date().toISOString();
-
-  await runInTransaction(database, async () => {
-    // Update program name
-    await database.runAsync(
-      'UPDATE programs SET name = ?, updated_at = ? WHERE id = ?',
-      [program.name, now, program.id]
-    );
-
-    // Delete existing workout days (cascade deletes exercises)
-    await database.runAsync('DELETE FROM workout_days WHERE program_id = ?', [program.id]);
-
-    // Re-insert workout days and exercises
-    for (const day of program.workoutDays) {
-      const dayResult = await database.runAsync(
-        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-        [program.id, day.dayNumber]
-      );
-
-      const dayId = dayResult.lastInsertRowId;
-
-      for (let i = 0; i < day.exercises.length; i++) {
-        const exercise = day.exercises[i];
-        // Defensive coding: ensure all fields have valid values
-        const muscleGroups = exercise.muscle_groups_worked ?? [];
-        await database.runAsync(
-          `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            dayId,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(muscleGroups),
-            exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            i,
-          ]
-        );
-      }
-    }
-  });
-};
-
-const createDuplicateProgramId = (sourceProgramId: string): string => {
-  return `${sourceProgramId}-copy-${Date.now()}`;
-};
-
-const cloneProgramExerciseForDuplicate = (exercise: ProgramExercise): ProgramExercise => ({
-  ...exercise,
-  muscle_groups_worked: [...exercise.muscle_groups_worked],
-  variant: exercise.variant
-    ? {
-        ...exercise.variant,
-        extras: exercise.variant.extras ? [...exercise.variant.extras] : undefined,
-      }
-    : null,
-  variantOptions: exercise.variantOptions
-    ? exercise.variantOptions.map((option) => ({
-        ...option,
-        aliases: option.aliases ? [...option.aliases] : undefined,
-      }))
-    : undefined,
-  aliases: exercise.aliases ? [...exercise.aliases] : undefined,
-});
-
-const cloneProgramForDuplicate = (program: Program, duplicateName: string): Omit<Program, 'createdAt' | 'updatedAt'> => ({
-  id: createDuplicateProgramId(program.id),
-  name: duplicateName,
-  workoutDays: program.workoutDays.map((day) => ({
-    dayNumber: day.dayNumber,
-    exercises: day.exercises.map(cloneProgramExerciseForDuplicate),
-  })),
-});
+export const updateProgram = programsDb.updateProgram;
 
 export const duplicateProgram = async (programId: string, duplicateNameRaw: string): Promise<Program> => {
-  const duplicateName = duplicateNameRaw.trim();
-  if (!duplicateName) {
-    throw new Error('Program name is required');
-  }
-
-  const sourceProgram = await getProgramById(programId);
-  if (!sourceProgram) {
-    throw new Error('Program not found');
-  }
-
-  const allPrograms = await getAllPrograms();
-  const hasNameCollision = allPrograms.some(
-    (program) => program.id !== programId && program.name.toLowerCase() === duplicateName.toLowerCase()
-  );
-
-  if (hasNameCollision) {
-    throw new Error('Program name already exists');
-  }
-
-  const duplicateDraft = cloneProgramForDuplicate(sourceProgram, duplicateName);
-  return createProgram(duplicateDraft);
-};
-
-/**
- * Delete a program
- */
-export const deleteProgram = async (programId: string): Promise<void> => {
-  const database = await getDatabase();
-
-  // Check if this is the current program and clear it
-  const prefs = await getUserPreferences();
-  if (prefs.currentProgramId === programId) {
-    await setCurrentProgramId(null);
-  }
-
-  // Delete program (cascade deletes workout_days and program_exercises)
-  const deleteResult = await database.runAsync('DELETE FROM programs WHERE id = ?', [programId]);
-  const deletedRows = typeof deleteResult?.changes === 'number' ? deleteResult.changes : 0;
-
-  if (deletedRows > 0 && getSeedStateColumn(programId)) {
-    await setSeedLifecycleStateWithDatabase(database, programId, 'deleted_by_user');
-  }
-};
-
-// =============================================================================
-// WORKOUTS (Completed)
-// =============================================================================
-
-/**
- * Get all completed workouts
- */
-export const getAllWorkouts = async (): Promise<Workout[]> => {
-  const database = await getDatabase();
-  
-  const workouts = await database.getAllAsync<{
-    id: string;
-    date: string;
-    program_id: string;
-    program_name: string;
-    day_number: number;
-    completed: number;
-    duration: number | null;
-    notes: string | null;
-  }>('SELECT * FROM workouts ORDER BY date DESC');
-
-  const result: Workout[] = [];
-  
-  for (const workout of workouts) {
-    const exercises = await database.getAllAsync<{
-      id: number;
-      name: string;
-      equipment: string;
-      muscle_groups: string;
-      is_compound: number;
-      weight: number;
-      reps: number;
-      sets: number;
-      rest_time: number;
-      progression: number;
-      has_customised_sets: number;
-      variant_json: string | null;
-      logged_weight: number;
-      logged_reps: number;
-      logged_set_weights: string;
-      logged_set_reps: string;
-      position: number;
-    }>(
-      'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
-      [workout.id]
-    );
-
-    result.push({
-      id: workout.id,
-      date: workout.date,
-      programId: workout.program_id,
-      programName: workout.program_name,
-      dayNumber: workout.day_number,
-      completed: workout.completed === 1,
-      duration: workout.duration ?? undefined,
-      notes: workout.notes ?? undefined,
-      exercises: exercises.map((ex) => ({
-        name: ex.name,
-        equipment: ex.equipment,
-        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'workout_exercises.muscle_groups', {
-          workout_id: workout.id,
-          exercise: ex.name,
-        }),
-        isCompound: !!ex.is_compound,
-        weight: ex.weight.toString(),
-        reps: ex.reps.toString(),
-        sets: ex.sets.toString(),
-        restTime: ex.rest_time.toString(),
-        progression: ex.progression.toString(),
-        hasCustomisedSets: ex.has_customised_sets === 1,
-        variant: parseVariant(ex.variant_json),
-        loggedWeight: ex.logged_weight,
-        loggedReps: ex.logged_reps,
-        loggedSetWeights: parseNumberArrayField(ex.logged_set_weights ?? '[]', 'workout_exercises.logged_set_weights', {
-          workout_id: workout.id,
-          exercise: ex.name,
-        }),
-        loggedSetReps: parseNumberArrayField(ex.logged_set_reps ?? '[]', 'workout_exercises.logged_set_reps', {
-          workout_id: workout.id,
-          exercise: ex.name,
-        }),
-      })),
-    });
-  }
-
-  return result;
-};
-
-/**
- * Get workouts for a specific program
- */
-export const getWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
-  const allWorkouts = await getAllWorkouts();
-  return allWorkouts.filter((w) => w.programId === programId);
-};
-
-/**
- * Get completed workouts for a program (for progression calculation)
- */
-export const getCompletedWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
-  const workouts = await getWorkoutsForProgram(programId);
-  return workouts.filter((w) => w.completed);
-};
-
-/**
- * Save a completed workout
- */
-export const saveWorkout = async (workout: Workout): Promise<void> => {
-  const database = await getDatabase();
-
-  await runInTransaction(database, async () => {
-    await database.runAsync(
-      `INSERT INTO workouts (id, date, program_id, program_name, day_number, completed, duration, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        workout.id,
-        workout.date,
-        workout.programId,
-        workout.programName,
-        workout.dayNumber,
-        workout.completed ? 1 : 0,
-        workout.duration ?? null,
-        workout.notes ?? null,
-      ]
-    );
-
-    // Insert workout exercises
-    for (let i = 0; i < workout.exercises.length; i++) {
-      const exercise = workout.exercises[i];
-      const muscleGroups = exercise.muscle_groups_worked ?? [];
-      await database.runAsync(
-        `INSERT INTO workout_exercises
-         (workout_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, logged_weight, logged_reps, logged_set_weights, logged_set_reps, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          workout.id,
-          exercise.name ?? '',
-          exercise.equipment ?? '',
-          JSON.stringify(muscleGroups),
-          exercise.isCompound ? 1 : 0,
-          parseFloat(exercise.weight) || 0,
-          parseInt(exercise.reps, 10) || 8,
-          parseInt(exercise.sets, 10) || 3,
-          parseInt(exercise.restTime, 10) || 180,
-          parseFloat(exercise.progression) || 0,
-          exercise.hasCustomisedSets ? 1 : 0,
-          serializeVariant(exercise.variant),
-          exercise.loggedWeight ?? 0,
-          exercise.loggedReps ?? 0,
-          JSON.stringify(exercise.loggedSetWeights ?? []),
-          JSON.stringify(exercise.loggedSetReps ?? []),
-          i,
-        ]
-      );
-    }
+  return programsDb.duplicateProgram(programId, duplicateNameRaw, {
+    getProgramById: programsDb.getProgramById,
+    getAllPrograms: programsDb.getAllPrograms,
+    createProgram: programsDb.createProgram,
   });
 };
 
-/**
- * Delete a workout
- */
-export const deleteWorkout = async (workoutId: string): Promise<void> => {
-  const database = await getDatabase();
-  await database.runAsync('DELETE FROM workouts WHERE id = ?', [workoutId]);
+export const deleteProgram = async (programId: string): Promise<void> => {
+  return programsDb.deleteProgram(programId, {
+    getUserPreferences: getUserPreferences,
+    setCurrentProgramId: setCurrentProgramId,
+    setSeedLifecycleStateWithDatabase: setSeedLifecycleStateWithDatabase,
+    getSeedStateColumn: getSeedStateColumn,
+  });
 };
 
-/**
- * Get the last logged weight for an exercise in a program
- */
-export const getLastLoggedWeight = async (
-  exerciseName: string,
-  programId: string,
-  variant?: ExerciseVariant | null
-): Promise<number | null> => {
-  const database = await getDatabase();
-  
-  const serialisedVariant = serializeVariant(variant);
+// =============================================================================
+// WORKOUTS (delegated to services/db/workouts.ts)
+// =============================================================================
 
-  if (serialisedVariant) {
-    const variantResult = await database.getFirstAsync<{ logged_weight: number }>(
-      `SELECT we.logged_weight
-       FROM workout_exercises we
-       JOIN workouts w ON we.workout_id = w.id
-       WHERE we.name = ?
-         AND we.variant_json = ?
-         AND w.program_id = ?
-         AND w.completed = 1
-         AND we.logged_weight > 0
-       ORDER BY w.date DESC
-       LIMIT 1`,
-      [exerciseName, serialisedVariant, programId]
-    );
+export const getAllWorkouts = workoutsDb.getAllWorkouts;
 
-    if (variantResult?.logged_weight !== undefined) {
-      return variantResult.logged_weight;
-    }
-  }
-
-  const result = await database.getFirstAsync<{ logged_weight: number }>(
-    `SELECT we.logged_weight
-     FROM workout_exercises we
-     JOIN workouts w ON we.workout_id = w.id
-     WHERE we.name = ? AND w.program_id = ? AND w.completed = 1 AND we.logged_weight > 0
-     ORDER BY w.date DESC
-     LIMIT 1`,
-    [exerciseName, programId]
-  );
-
-  return result?.logged_weight ?? null;
+export const getWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
+  return workoutsDb.getWorkoutsForProgram(programId, workoutsDb.getAllWorkouts);
 };
+
+export const getCompletedWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
+  return workoutsDb.getCompletedWorkoutsForProgram(programId, (id: string) => workoutsDb.getWorkoutsForProgram(id, workoutsDb.getAllWorkouts));
+};
+
+export const saveWorkout = workoutsDb.saveWorkout;
+
+export const deleteWorkout = workoutsDb.deleteWorkout;
+
+export const getLastLoggedWeight = workoutsDb.getLastLoggedWeight;
 
 // =============================================================================
 // WORKOUT QUEUE (delegated to services/db/queue.ts)
