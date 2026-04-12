@@ -496,5 +496,56 @@ describe('operation-applier', () => {
       const result = applyOperations(queue, ops);
       expect(result[0].exercises[0].weight).toBe('90');
     });
+
+    it('add_exercise generates exerciseInstanceId and enriches from catalog', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'add_exercise',
+          target: { dayNumber: 1 },
+          value: { exerciseName: 'Cable Curl' },
+        },
+      ];
+
+      const catalogLookup = (name: string) => {
+        if (name === 'Cable Curl') {
+          return {
+            equipment: 'Cable',
+            muscle_groups_worked: ['biceps'],
+            isCompound: false,
+          };
+        }
+        return null;
+      };
+
+      const result = applyOperations(queue, ops, catalogLookup);
+      expect(result[0].exercises).toHaveLength(2);
+      const addedExercise = result[0].exercises[1];
+      expect(addedExercise.name).toBe('Cable Curl');
+      expect(addedExercise.exerciseInstanceId).toBe(`${queue[0].id}:e1`);
+      expect(addedExercise.equipment).toBe('Cable');
+      expect(addedExercise.muscle_groups_worked).toEqual(['biceps']);
+      expect(addedExercise.isCompound).toBe(false);
+    });
+
+    it('add_exercise falls back gracefully without catalog lookup', () => {
+      const queue = makeQueue([makeExercise()]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'add_exercise',
+          target: { dayNumber: 1 },
+          value: { exerciseName: 'Cable Curl' },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises).toHaveLength(2);
+      const addedExercise = result[0].exercises[1];
+      expect(addedExercise.exerciseInstanceId).toBe(`${queue[0].id}:e1`);
+      expect(addedExercise.equipment).toBe('');
+      expect(addedExercise.muscle_groups_worked).toEqual([]);
+    });
   });
 });

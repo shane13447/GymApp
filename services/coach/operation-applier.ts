@@ -8,6 +8,16 @@
 import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
 import type { QueueOperation } from './operation-contract';
 
+type ExerciseCatalogEntry = {
+  equipment: string;
+  muscle_groups_worked: string[];
+  isCompound: boolean;
+  variantOptions?: import('@/types').ExerciseVariantOption[];
+  aliases?: string[];
+};
+
+type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEntry | null;
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -189,7 +199,8 @@ const applyRemoveOperation = (
  */
 export const applyOperations = (
   originalQueue: WorkoutQueueItem[],
-  operations: QueueOperation[]
+  operations: QueueOperation[],
+  catalogLookup?: ExerciseCatalogLookup
 ): WorkoutQueueItem[] => {
   // Start with a deep copy of the original queue
   let currentQueue = originalQueue.map((item) => ({
@@ -230,11 +241,13 @@ export const applyOperations = (
       case 'add_exercise': {
         const targetDay = currentQueue.find((qi) => qi.dayNumber === operation.target.dayNumber);
         if (targetDay && operation.value?.exerciseName) {
+          const catalogEntry = catalogLookup?.(operation.value.exerciseName) ?? null;
           const newExercise: ProgramExercise = {
+            exerciseInstanceId: `${targetDay.id}:e${targetDay.exercises.length}`,
             name: operation.value.exerciseName,
-            equipment: '',
-            muscle_groups_worked: [],
-            isCompound: false,
+            equipment: catalogEntry?.equipment ?? '',
+            muscle_groups_worked: catalogEntry?.muscle_groups_worked ?? [],
+            isCompound: catalogEntry?.isCompound ?? false,
             weight: String(operation.value.weight ?? 0),
             reps: String(operation.value.reps ?? 8),
             sets: String(operation.value.sets ?? 3),
@@ -242,6 +255,8 @@ export const applyOperations = (
             progression: '0',
             hasCustomisedSets: false,
             variant: null,
+            ...(catalogEntry?.variantOptions ? { variantOptions: catalogEntry.variantOptions } : {}),
+            ...(catalogEntry?.aliases ? { aliases: catalogEntry.aliases } : {}),
           };
           currentQueue = currentQueue.map((qi) => {
             if (qi.id === targetDay.id) {
