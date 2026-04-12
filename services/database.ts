@@ -10,15 +10,11 @@
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import exercisesData from '@/data/exerciseSelection.json';
 import type {
-  MuscleGroupTarget,
   Program,
   ProgramExercise,
-  UserPreferences,
-  UserProfile,
   Workout,
   WorkoutQueueItem
 } from '@/types';
-import { TrainingGoal } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
 import {
@@ -52,6 +48,20 @@ import {
 } from '@/services/db/queue';
 import * as programsDb from '@/services/db/programs';
 import * as workoutsDb from '@/services/db/workouts';
+import {
+  getUserPreferences as prefsGetUserPreferences,
+  updateUserPreferences as prefsUpdateUserPreferences,
+  getCurrentProgramId as prefsGetCurrentProgramId,
+  setCurrentProgramId as prefsSetCurrentProgramId,
+  getUserProfile as prefsGetUserProfile,
+  updateUserProfile as prefsUpdateUserProfile,
+  getMuscleGroupTargets as prefsGetMuscleGroupTargets,
+  getMuscleGroupTarget as prefsGetMuscleGroupTarget,
+  setMuscleGroupTarget as prefsSetMuscleGroupTarget,
+  removeMuscleGroupTarget as prefsRemoveMuscleGroupTarget,
+  saveMuscleGroupTargets as prefsSaveMuscleGroupTargets,
+  registerPreferencesDeps,
+} from '@/services/db/preferences';
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -834,306 +844,30 @@ export const setSeedLifecycleState = async (
 };
 
 // =============================================================================
-// USER PREFERENCES
+// USER PREFERENCES (delegated to services/db/preferences.ts)
 // =============================================================================
 
-/**
- * Get user preferences
- */
-export const getUserPreferences = async (): Promise<UserPreferences> => {
-  const database = await getDatabase();
-  const result = await database.getFirstAsync<{
-    id: string;
-    current_program_id: string | null;
-    weight_unit: string;
-    theme: string;
-    queue_size: number;
-    rest_timer_enabled: number;
-    haptic_feedback_enabled: number;
-  }>('SELECT * FROM user_preferences WHERE id = ?', ['default']);
-
-  if (!result) {
-    // Return defaults
-    return {
-      id: 'default',
-      currentProgramId: null,
-      weightUnit: 'kg',
-      theme: 'system',
-      queueSize: DEFAULT_QUEUE_SIZE,
-      restTimerEnabled: true,
-      hapticFeedbackEnabled: true,
-    };
-  }
-
-  return {
-    id: result.id,
-    currentProgramId: result.current_program_id,
-    weightUnit: result.weight_unit as 'kg' | 'lbs',
-    theme: result.theme as 'light' | 'dark' | 'system',
-    queueSize: result.queue_size,
-    restTimerEnabled: result.rest_timer_enabled === 1,
-    hapticFeedbackEnabled: result.haptic_feedback_enabled === 1,
-  };
-};
-
-/**
- * Update user preferences
- */
-export const updateUserPreferences = async (
-  preferences: Partial<UserPreferences>
-): Promise<void> => {
-  const database = await getDatabase();
-  const updates: string[] = [];
-  const values: (string | number | null)[] = [];
-
-  if (preferences.currentProgramId !== undefined) {
-    updates.push('current_program_id = ?');
-    values.push(preferences.currentProgramId);
-  }
-  if (preferences.weightUnit !== undefined) {
-    updates.push('weight_unit = ?');
-    values.push(preferences.weightUnit);
-  }
-  if (preferences.theme !== undefined) {
-    updates.push('theme = ?');
-    values.push(preferences.theme);
-  }
-  if (preferences.queueSize !== undefined) {
-    updates.push('queue_size = ?');
-    values.push(preferences.queueSize);
-  }
-  if (preferences.restTimerEnabled !== undefined) {
-    updates.push('rest_timer_enabled = ?');
-    values.push(preferences.restTimerEnabled ? 1 : 0);
-  }
-  if (preferences.hapticFeedbackEnabled !== undefined) {
-    updates.push('haptic_feedback_enabled = ?');
-    values.push(preferences.hapticFeedbackEnabled ? 1 : 0);
-  }
-
-  if (updates.length > 0) {
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    values.push('default');
-    await database.runAsync(
-      `UPDATE user_preferences SET ${updates.join(', ')} WHERE id = ?`,
-      values
-    );
-  }
-};
-
-/**
- * Get current program ID
- */
-export const getCurrentProgramId = async (): Promise<string | null> => {
-  const prefs = await getUserPreferences();
-  return prefs.currentProgramId;
-};
-
-/**
- * Set current program ID and generate workout queue
- */
-export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
-  incrementQueueGenerationId();
-
-  await updateUserPreferences({ currentProgramId: programId });
-  
-  if (programId) {
-    await generateWorkoutQueue(programId);
-  } else {
-    await clearWorkoutQueue();
-  }
-};
+export const getUserPreferences = prefsGetUserPreferences;
+export const updateUserPreferences = prefsUpdateUserPreferences;
+export const getCurrentProgramId = prefsGetCurrentProgramId;
+export const setCurrentProgramId = prefsSetCurrentProgramId;
 
 // =============================================================================
-// USER PROFILE
+// USER PROFILE (delegated to services/db/preferences.ts)
 // =============================================================================
 
-/**
- * Get user profile
- */
-export const getUserProfile = async (): Promise<UserProfile> => {
-  const database = await getDatabase();
-  const result = await database.getFirstAsync<{
-    id: string;
-    name: string | null;
-    current_weight: number | null;
-    goal_weight: number | null;
-    training_goal: string | null;
-    target_sets_per_week: number | null;
-    experience_level: string | null;
-    training_days_per_week: number | null;
-    session_duration_minutes: number | null;
-  }>('SELECT * FROM user_profile WHERE id = ?', ['default']);
-
-  if (!result) {
-    // Return defaults
-    return {
-      id: 'default',
-      name: null,
-      currentWeight: null,
-      goalWeight: null,
-      trainingGoal: null,
-      targetSetsPerWeek: null,
-      experienceLevel: null,
-      trainingDaysPerWeek: null,
-      sessionDurationMinutes: null,
-    };
-  }
-
-  return {
-    id: result.id,
-    name: result.name,
-    currentWeight: result.current_weight,
-    goalWeight: result.goal_weight,
-    trainingGoal: result.training_goal as TrainingGoal | null,
-    targetSetsPerWeek: result.target_sets_per_week,
-    experienceLevel: (result.experience_level as UserProfile['experienceLevel']) ?? null,
-    trainingDaysPerWeek: result.training_days_per_week,
-    sessionDurationMinutes: result.session_duration_minutes,
-  };
-};
-
-/**
- * Update user profile
- */
-export const updateUserProfile = async (
-  profile: Partial<UserProfile>
-): Promise<void> => {
-  const database = await getDatabase();
-  const updates: string[] = [];
-  const values: (string | number | null)[] = [];
-
-  if (profile.name !== undefined) {
-    updates.push('name = ?');
-    values.push(profile.name);
-  }
-  if (profile.currentWeight !== undefined) {
-    updates.push('current_weight = ?');
-    values.push(profile.currentWeight);
-  }
-  if (profile.goalWeight !== undefined) {
-    updates.push('goal_weight = ?');
-    values.push(profile.goalWeight);
-  }
-  if (profile.trainingGoal !== undefined) {
-    updates.push('training_goal = ?');
-    values.push(profile.trainingGoal);
-  }
-  if (profile.targetSetsPerWeek !== undefined) {
-    updates.push('target_sets_per_week = ?');
-    values.push(profile.targetSetsPerWeek);
-  }
-  if (profile.experienceLevel !== undefined) {
-    updates.push('experience_level = ?');
-    values.push(profile.experienceLevel);
-  }
-  if (profile.trainingDaysPerWeek !== undefined) {
-    updates.push('training_days_per_week = ?');
-    values.push(profile.trainingDaysPerWeek);
-  }
-  if (profile.sessionDurationMinutes !== undefined) {
-    updates.push('session_duration_minutes = ?');
-    values.push(profile.sessionDurationMinutes);
-  }
-
-  if (updates.length > 0) {
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    values.push('default');
-    await database.runAsync(
-      `UPDATE user_profile SET ${updates.join(', ')} WHERE id = ?`,
-      values
-    );
-  }
-};
+export const getUserProfile = prefsGetUserProfile;
+export const updateUserProfile = prefsUpdateUserProfile;
 
 // =============================================================================
-// MUSCLE GROUP TARGETS
+// MUSCLE GROUP TARGETS (delegated to services/db/preferences.ts)
 // =============================================================================
 
-/**
- * Get all muscle group targets
- */
-export const getMuscleGroupTargets = async (): Promise<MuscleGroupTarget[]> => {
-  const database = await getDatabase();
-  const results = await database.getAllAsync<{
-    muscle_group: string;
-    target_sets: number;
-  }>('SELECT * FROM muscle_group_targets ORDER BY muscle_group');
-
-  return results.map((r) => ({
-    muscleGroup: r.muscle_group,
-    targetSets: r.target_sets,
-  }));
-};
-
-/**
- * Get target sets for a specific muscle group
- * Returns null if no override is set (use global default)
- */
-export const getMuscleGroupTarget = async (
-  muscleGroup: string
-): Promise<number | null> => {
-  const database = await getDatabase();
-  const result = await database.getFirstAsync<{ target_sets: number }>(
-    'SELECT target_sets FROM muscle_group_targets WHERE muscle_group = ?',
-    [muscleGroup]
-  );
-  return result?.target_sets ?? null;
-};
-
-/**
- * Set target sets for a muscle group (upsert)
- */
-export const setMuscleGroupTarget = async (
-  muscleGroup: string,
-  targetSets: number
-): Promise<void> => {
-  const database = await getDatabase();
-  await database.runAsync(
-    `INSERT INTO muscle_group_targets (muscle_group, target_sets, updated_at)
-     VALUES (?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(muscle_group) DO UPDATE SET
-       target_sets = excluded.target_sets,
-       updated_at = CURRENT_TIMESTAMP`,
-    [muscleGroup, targetSets]
-  );
-};
-
-/**
- * Remove a muscle group target override (revert to global default)
- */
-export const removeMuscleGroupTarget = async (
-  muscleGroup: string
-): Promise<void> => {
-  const database = await getDatabase();
-  await database.runAsync(
-    'DELETE FROM muscle_group_targets WHERE muscle_group = ?',
-    [muscleGroup]
-  );
-};
-
-/**
- * Save all muscle group targets (replaces all existing)
- */
-export const saveMuscleGroupTargets = async (
-  targets: MuscleGroupTarget[]
-): Promise<void> => {
-  const database = await getDatabase();
-
-  await runInTransaction(database, async () => {
-    // Clear existing targets
-    await database.runAsync('DELETE FROM muscle_group_targets');
-
-    // Insert new targets
-    for (const target of targets) {
-      await database.runAsync(
-        `INSERT INTO muscle_group_targets (muscle_group, target_sets)
-         VALUES (?, ?)`,
-        [target.muscleGroup, target.targetSets]
-      );
-    }
-  });
-};
+export const getMuscleGroupTargets = prefsGetMuscleGroupTargets;
+export const getMuscleGroupTarget = prefsGetMuscleGroupTarget;
+export const setMuscleGroupTarget = prefsSetMuscleGroupTarget;
+export const removeMuscleGroupTarget = prefsRemoveMuscleGroupTarget;
+export const saveMuscleGroupTargets = prefsSaveMuscleGroupTargets;
 
 // =============================================================================
 // PROGRAMS (delegated to services/db/programs.ts)
@@ -1341,3 +1075,10 @@ export const closeDatabase = async (): Promise<void> => {
     setMaintenanceCompleted(false);
   }
 };
+
+// Register cross-module dependencies after all exports are defined
+registerPreferencesDeps({
+  incrementQueueGenerationId,
+  generateWorkoutQueue,
+  clearWorkoutQueue,
+});
