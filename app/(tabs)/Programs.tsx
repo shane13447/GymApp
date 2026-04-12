@@ -21,12 +21,14 @@ import exercisesData from '@/data/exerciseSelection.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import { coerceExerciseFieldValue } from '@/lib/exercise-field-coercion';
 import { parseExerciseCatalog, getDefaultVariantForExercise } from '@/services/catalog/parse-catalog';
 import {
   cloneExercise,
   cloneWorkoutDays,
   areExercisesEquivalent,
   buildExerciseIdentity,
+  commitCurrentDay,
 } from '@/services/programs/clone';
 import * as db from '@/services/database';
 import type {
@@ -142,31 +144,7 @@ export default function ProgramsScreen() {
       value: string | boolean | number | ExerciseVariant | null,
       dayNumber?: number
     ) => {
-      const numericStringFields: (keyof ProgramExercise)[] = [
-        'weight',
-        'reps',
-        'sets',
-        'restTime',
-        'progression',
-      ];
-
-      const numericFields: (keyof ProgramExercise)[] = [
-        'repRangeMin',
-        'repRangeMax',
-        'progressionThreshold',
-        'timesRepsHitInARow',
-      ];
-
-      const finalValue: ProgramExercise[keyof ProgramExercise] =
-        field === 'hasCustomisedSets'
-          ? Boolean(value)
-          : field === 'variant'
-          ? (value as ExerciseVariant | null)
-          : numericStringFields.includes(field)
-          ? String(value)
-          : numericFields.includes(field)
-          ? (value as number)
-          : String(value);
+      const finalValue = coerceExerciseFieldValue(field, value);
 
       if (createStep === CreateProgramStep.Configuration && dayNumber !== undefined) {
         setWorkoutDays((prev) =>
@@ -221,8 +199,7 @@ export default function ProgramsScreen() {
   };
 
   const continueToConfiguration = () => {
-    const updatedDays = cloneWorkoutDays(workoutDays);
-    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExercises);
     setWorkoutDays(updatedDays);
 
     const allDaysHaveExercises = updatedDays.every((day) => day.exercises.length > 0);
@@ -241,8 +218,7 @@ export default function ProgramsScreen() {
   };
 
   const goToNextDay = () => {
-    const updatedDays = cloneWorkoutDays(workoutDays);
-    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+    const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExercises);
     setWorkoutDays(updatedDays);
 
     if (currentDayIndex < workoutDays.length - 1) {
@@ -254,8 +230,7 @@ export default function ProgramsScreen() {
   };
 
   const goToPreviousDay = () => {
-    const updatedDays = cloneWorkoutDays(workoutDays);
-    updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+    const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExercises);
     setWorkoutDays(updatedDays);
 
     if (currentDayIndex > 0) {
@@ -711,8 +686,7 @@ export default function ProgramsScreen() {
           {selectedExercises.length > 0 && (
             <Pressable
               onPress={() => {
-                const updatedDays = cloneWorkoutDays(workoutDays);
-                updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+                const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExercises);
                 setWorkoutDays(updatedDays);
 
                 const allDaysComplete = updatedDays.every((day) => day.exercises.length > 0);
@@ -726,8 +700,7 @@ export default function ProgramsScreen() {
               }}
             >
               {({ pressed }) => {
-                const updatedDays = cloneWorkoutDays(workoutDays);
-                updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+                const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExercises);
                 const allDaysComplete = updatedDays.every((day) => day.exercises.length > 0);
                 const isLastDay = currentDayIndex === workoutDays.length - 1;
 

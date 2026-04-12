@@ -4,6 +4,7 @@ import {
   cloneWorkoutDays,
   buildExerciseIdentity,
   areExercisesEquivalent,
+  commitCurrentDay,
 } from '@/services/programs/clone';
 import type { ProgramExercise, WorkoutDay, ExerciseVariant } from '@/types';
 

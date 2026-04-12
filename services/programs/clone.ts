@@ -42,3 +42,21 @@ export const cloneWorkoutDay = (day: WorkoutDay): WorkoutDay => ({
 });
 
 export const cloneWorkoutDays = (days: WorkoutDay[]): WorkoutDay[] => days.map(cloneWorkoutDay);
+
+/**
+ * Commit the currently-selected exercises into a specific day of the workout plan.
+ * Returns a new array of workout days with the target day's exercises replaced.
+ *
+ * This replaces the 4-site pattern in Programs.tsx:
+ *   const updatedDays = cloneWorkoutDays(workoutDays);
+ *   updatedDays[currentDayIndex].exercises = selectedExercises.map(cloneExercise);
+ */
+export const commitCurrentDay = (
+  days: WorkoutDay[],
+  dayIndex: number,
+  selectedExercises: ProgramExercise[]
+): WorkoutDay[] => {
+  const updatedDays = cloneWorkoutDays(days);
+  updatedDays[dayIndex].exercises = selectedExercises.map(cloneExercise);
+  return updatedDays;
+};
