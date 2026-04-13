@@ -1,10 +1,6 @@
 /**
- * Queue repair module — re-exports repair functions from the legacy module.
- *
- * During Phase 01, the repair implementation remains in
- * `services/workout-queue-modifier.ts` while this module establishes the
- * canonical import path. The implementation will migrate here in a
- * subsequent change once internal helper dependencies are decoupled.
+ * Queue repair module — re-exports repair functions from the implementation
+ * module until the repair logic is migrated into this file.
  */
 
 export {

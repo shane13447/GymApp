@@ -59,17 +59,4 @@ export function showDeleteConfirmation(itemName: string, onConfirm: () => void):
   });
 }
 
-/**
- * Show a discard changes confirmation dialog
- */
-export function showDiscardChangesConfirmation(onConfirm: () => void): void {
-  showConfirmDialog({
-    title: 'Discard Changes?',
-    message: 'You have unsaved changes. Are you sure you want to discard them?',
-    confirmText: 'Discard',
-    destructive: true,
-    onConfirm,
-  });
-}
-
 export default showConfirmDialog;

@@ -6,7 +6,7 @@
  */
 
 import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
-import type { QueueOperation } from './operation-contract';
+import type { QueueOperation, OperationApplicabilityResult } from './operation-contract';
 
 type ExerciseCatalogEntry = {
   equipment: string;
@@ -277,12 +277,12 @@ export const applyOperations = (
 };
 
 /**
- * Validates that operations can be applied (check targets exist)
+ * Validates that operations can be applied (check targets exist).
  */
 export const validateOperationApplicability = (
   queue: WorkoutQueueItem[],
   operations: QueueOperation[]
-): { canApply: boolean; missingTargets: string[] } => {
+): OperationApplicabilityResult => {
   const missingTargets: string[] = [];
   
   for (const operation of operations) {

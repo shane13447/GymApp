@@ -17,15 +17,15 @@ import type { CustomisedSetPayloadInput } from './types';
 // =============================================================================
 
 /**
- * Rounds a weight to the nearest 0.5 kg increment.
- * Example: 82.74 → 82.5, 82.76 → 83.0
+ * Rounds a weight string to the nearest 0.5 kg increment.
+ * Example: "82.74" → "82.5", "82.76" → "83.0"
  *
- * Used only in the coach modify-workout queue flow.
- * Does NOT apply to manual program creation, ActiveWorkout logging, or history.
+ * The domain model stores weight as string; callers should pass
+ * the string directly rather than converting to number first.
  */
-export const roundWeightToNearestHalfKg = (weight: number | string): string => {
-  const numericWeight = typeof weight === 'string' ? parseFloat(weight) : weight;
-  if (isNaN(numericWeight)) {
+export const roundWeightToNearestHalfKg = (weight: string): string => {
+  const numericWeight = Number(weight);
+  if (!Number.isFinite(numericWeight)) {
     return String(weight);
   }
   // Round to nearest 0.5: multiply by 2, round, divide by 2

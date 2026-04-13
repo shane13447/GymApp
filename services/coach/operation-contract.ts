@@ -12,6 +12,29 @@ import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 // =============================================================================
 
 /**
+ * Target specification for an operation — identifies which exercise to modify.
+ */
+export interface OperationTarget {
+  queueItemId?: string;
+  dayNumber?: number;
+  exerciseName?: string;
+  exerciseIndex?: number;
+  exerciseInstanceId?: string;
+}
+
+/**
+ * Value specification for an operation — the new values to apply.
+ */
+export interface OperationValue {
+  weight?: number;
+  reps?: number;
+  sets?: number;
+  restTime?: number;
+  variant?: string;
+  exerciseName?: string;
+}
+
+/**
  * Single operation to modify a workout queue item or exercise
  */
 export interface QueueOperation {
@@ -20,22 +43,9 @@ export interface QueueOperation {
   /** Operation type */
   type: 'modify_weight' | 'modify_reps' | 'modify_sets' | 'modify_rest' | 'add_exercise' | 'remove_exercise' | 'swap_variant';
   /** Target: queue item ID or day number */
-  target: {
-    queueItemId?: string;
-    dayNumber?: number;
-    exerciseName?: string;
-    exerciseIndex?: number;
-    exerciseInstanceId?: string;
-  };
+  target: OperationTarget;
   /** Operation value */
-  value?: {
-    weight?: number;
-    reps?: number;
-    sets?: number;
-    restTime?: number;
-    variant?: string;
-    exerciseName?: string;
-  };
+  value?: OperationValue;
   /** Reason for the operation (optional) */
   reason?: string;
 }
@@ -62,6 +72,14 @@ export interface OperationValidationResult {
   errors: string[];
   warnings: string[];
   validatedOperations: QueueOperation[];
+}
+
+/**
+ * Result of checking whether operations can be applied to a queue.
+ */
+export interface OperationApplicabilityResult {
+  canApply: boolean;
+  missingTargets: string[];
 }
 
 // =============================================================================

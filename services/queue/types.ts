@@ -2,9 +2,7 @@
  * Queue-domain shared type definitions.
  *
  * Canonical location for all types consumed across the queue pipeline
- * (codec, repair, diff, and validation). Re-exported via the barrel
- * at `services/queue/index.ts` and kept backward-compatible with
- * the legacy re-exports in `services/workout-queue-modifier.ts`.
+ * (codec, repair, diff, and validation).
  */
 
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise } from '@/types';

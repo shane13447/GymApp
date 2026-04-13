@@ -1,5 +1,5 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import type { ProposedChanges } from '@/services/workout-queue-modifier';
+import type { ProposedChanges } from '@/services/queue/types';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 

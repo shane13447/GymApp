@@ -1,57 +1,32 @@
 /**
  * Workout Queue Modifier Service
- * Handles AI-powered workout queue modifications using compressed encoding
+ * Handles AI-powered workout queue modifications using compressed encoding.
  *
- * Re-exports canonical APIs from `services/queue/*` for backward compatibility.
- * New consumers should import directly from `@/services/queue`.
+ * Implementation module for queue diff, repair, and comparison logic.
+ * Codec and type definitions live in @/services/queue/*.
  */
 
-// --- Re-exports from service modules (backward compatibility) ---
-export {
-  roundWeightToNearestHalfKg,
-  isCoachQueueModification,
-  normalizeCoachModifiedWeight,
-  roundCoachModifiedQueueWeights,
-  normalizeCustomisedSetPayload,
-  COMPRESSED_SYSTEM_PROMPT,
-  encodeQueueForLLM,
-  buildCompressedPrompt,
-} from '@/services/queue/codec';
-
-export type {
-  QueueParseFailureReason,
-  CustomisedSetPayloadInput,
-  TargetedExerciseMatcher,
-  ChangeType,
-} from '@/services/queue/types';
-
-export { TargetedExerciseRef } from '@/services/queue/types';
-
-// --- Internal imports (implementation remains here during Phase 01) ---
 import { JOINT_INJURY_MAP } from '@/constants/joint-injury-map';
 import exercisesData from '@/data/exerciseSelection.json';
 import { getExerciseVariantLabel } from '@/lib/utils';
 import * as db from '@/services/database';
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise, WorkoutQueueItem } from '@/types';
 
-// Re-export types used by remaining code and public API
-import type { CustomisedSetPayloadInput as CustomisedSetPayloadInputType, TargetedExerciseMatcher as TargetedExerciseMatcherType, ChangeType as ChangeTypeCanonical } from '@/services/queue/types';
-import type { TargetedExerciseRef as TargetedExerciseRefType } from '@/services/queue/types';
-
-/** Local alias for the canonical TargetedExerciseRef type. */
-type TargetedExerciseRef = TargetedExerciseRefType;
-
-/** Local alias for the canonical TargetedExerciseMatcher type. */
-type TargetedExerciseMatcher = TargetedExerciseMatcherType;
-
-/** Local alias for the canonical ChangeType. */
-type ChangeType = ChangeTypeCanonical;
-
-// Codec functions (roundWeightToNearestHalfKg, normalizeCoachModifiedWeight,
-// roundCoachModifiedQueueWeights, normalizeCustomisedSetPayload,
-// COMPRESSED_SYSTEM_PROMPT, encodeQueueForLLM, buildCompressedPrompt,
-// isCoachQueueModification) now live in services/queue/codec.ts
-// and are re-exported above for backward compatibility.
+import type {
+  CustomisedSetPayloadInput,
+  TargetedExerciseMatcher,
+  ChangeType,
+  TargetedExerciseRef,
+  ProposedChanges,
+  QueueDifference,
+  ValidationResult,
+  QueueStructureValidationResult,
+  SemanticEvaluationResult,
+  TestPromptCoverageInput,
+  TestPromptCoverageResult,
+  TestPromptCoverageReport,
+  QueueParseFailureReason,
+} from '@/services/queue/types';
 
 // =============================================================================
 // EXERCISE DATABASE - Uses exerciseSelection.json
@@ -76,8 +51,6 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
 ];
 
 const normaliseText = (value: string): string => value.trim().toLowerCase();
-
-import type { QueueParseFailureReason } from '@/services/queue/types';
 
 let lastQueueParseFailureReason: QueueParseFailureReason = 'none';
 
@@ -673,6 +646,10 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
 /**
  * Resolve user input to actual exercise names using aliases
  */
+/**
+ * Resolves a user-provided exercise name against known aliases in the queue.
+ * Returns matching exercise names that the alias maps to.
+ */
 export const resolveExerciseAlias = (userInput: string, queueExercises: string[]): string[] => {
   const lowerInput = userInput.toLowerCase().trim();
 
@@ -1156,7 +1133,7 @@ export const parseQueueFormatResponse = (
   response: string,
   originalQueue: WorkoutQueueItem[],
   userRequest: string = '',
-  matchedExercises: TargetedExerciseMatcherType[] = []
+  matchedExercises: TargetedExerciseMatcher[] = []
 ): WorkoutQueueItem[] | null => {
   setLastQueueParseFailureReason('none');
 
@@ -1319,6 +1296,9 @@ export const parseQueueFormatResponse = (
 /**
  * Simple string similarity using Levenshtein-based approach
  * Returns a value between 0 (no match) and 1 (exact match)
+ */
+/**
+ * Computes a normalised Levenshtein similarity score between two strings (0–1).
  */
 export const getSimilarity = (str1: string, str2: string): number => {
   const s1 = str1.toLowerCase().trim();
@@ -2117,6 +2097,10 @@ export const extractTargetExerciseRefs = (
 /**
  * Fuzzy match an exercise name to the known exercise database
  */
+/**
+ * Finds the best fuzzy-matching exercise in the known catalog for a given name.
+ * Returns the matching catalog entry or null if no close match is found.
+ */
 export const fuzzyMatchExerciseName = (
   name: string,
   knownExercises: { name: string; equipment: string; muscle_groups_worked: string[] }[]
@@ -2401,38 +2385,6 @@ export const repairQueue = (
   console.log('[REPAIR] Queue repair complete');
   return repairedQueue;
 };
-
-// =============================================================================
-// PROPOSED CHANGES TYPES — canonical definitions live in services/queue/types.ts
-// =============================================================================
-
-import type {
-  ProposedChanges as ProposedChangesType,
-  QueueDifference as QueueDifferenceType,
-  ValidationResult as ValidationResultType,
-  QueueStructureValidationResult as QueueStructureValidationResultType,
-  SemanticEvaluationResult as SemanticEvaluationResultType,
-  TestPromptCoverageInput as TestPromptCoverageInputType,
-  TestPromptCoverageStatus as TestPromptCoverageStatusType,
-  TestPromptCoverageResult as TestPromptCoverageResultType,
-  TestPromptCoverageReport as TestPromptCoverageReportType,
-} from '@/services/queue/types';
-
-/** @deprecated Import from `@/services/queue/types` instead. */
-export type ProposedChanges = ProposedChangesType;
-/** @deprecated Import from `@/services/queue/types` instead. */
-export type QueueDifference = QueueDifferenceType;
-/** @deprecated Import from `@/services/queue/types` instead. */
-export type ValidationResult = ValidationResultType;
-/** @deprecated Import from `@/services/queue/types` instead. */
-export type QueueStructureValidationResult = QueueStructureValidationResultType;
-/** @deprecated Import from `@/services/queue/types` instead. */
-export type SemanticEvaluationResult = SemanticEvaluationResultType;
-
-/** Local aliases for TestPromptCoverage types used in implementation. */
-type TestPromptCoverageInput = TestPromptCoverageInputType;
-type TestPromptCoverageResult = TestPromptCoverageResultType;
-type TestPromptCoverageReport = TestPromptCoverageReportType;
 
 // =============================================================================
 // QUEUE COMPARISON

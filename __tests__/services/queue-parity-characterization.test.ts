@@ -14,12 +14,16 @@ jest.mock('@/services/database', () => ({
 
 import {
   encodeQueueForLLM,
+  normalizeCustomisedSetPayload,
+} from '@/services/queue/codec';
+import {
   parseQueueFormatResponse,
   repairQueueWithIntent,
-  compareWorkoutQueues,
-  normalizeCustomisedSetPayload,
   getLastQueueParseFailureReason,
-} from '@/services/workout-queue-modifier';
+} from '@/services/queue/repair';
+import {
+  compareWorkoutQueues,
+} from '@/services/queue/diff';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
 const createExercise = (overrides: Partial<ProgramExercise> = {}): ProgramExercise => ({

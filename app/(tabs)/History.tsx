@@ -1,9 +1,12 @@
 /**
  * History Screen
  * View completed workout history organized by date
+ *
+ * Business logic extracted to hooks/use-workout-history.ts and
+ * lib/workout-history.ts. This component is a thin render layer.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -12,78 +15,12 @@ import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import * as db from '@/services/database';
+import { useWorkoutHistory } from '@/hooks/use-workout-history';
+import { formatTime } from '@/lib/workout-history';
 import type { Workout } from '@/types';
 
-interface WorkoutsByDate {
-  date: string;
-  workouts: Workout[];
-}
-
 export default function HistoryScreen() {
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  useEffect(() => {
-    loadWorkouts();
-  }, []);
-
-  const loadWorkouts = async () => {
-    try {
-      const loadedWorkouts = await db.getAllWorkouts();
-      setWorkouts(loadedWorkouts);
-    } catch (error) {
-      console.error('Error loading workouts:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadWorkouts();
-    setIsRefreshing(false);
-  }, []);
-
-  // Group workouts by date
-  const workoutsByDate = useMemo(() => {
-    const grouped: Record<string, Workout[]> = {};
-
-    workouts.forEach((workout) => {
-      const workoutDate = new Date(workout.date);
-      const dateKey = workoutDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = [];
-      }
-      grouped[dateKey].push(workout);
-    });
-
-    // Convert to array and sort by date
-    const sortedDates = Object.keys(grouped).sort((a, b) => {
-      return new Date(b).getTime() - new Date(a).getTime();
-    });
-
-    return sortedDates.map((date) => ({
-      date,
-      workouts: grouped[date].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      ),
-    }));
-  }, [workouts]);
-
-  const formatTime = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  const { workoutsByDate, isLoading, isRefreshing, handleRefresh } = useWorkoutHistory();
 
   const renderWorkoutItem = useCallback(
     ({ item: workout }: { item: Workout }) => (
@@ -197,7 +134,7 @@ export default function HistoryScreen() {
   );
 
   const renderDateGroup = useCallback(
-    ({ item: dateGroup }: { item: WorkoutsByDate }) => (
+    ({ item: dateGroup }: { item: { date: string; workouts: Workout[] } }) => (
       <ThemedView className="mb-4">
         <Collapsible
           title={

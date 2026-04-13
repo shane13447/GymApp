@@ -153,13 +153,13 @@ describe('db/serialization', () => {
       expect(result.params[12]).toBe(0);
     });
 
-    it('applies default values for missing numeric fields', () => {
+    it('preserves zero numeric values instead of falling back to defaults', () => {
       const exercise = { ...baseExercise, weight: '0', reps: '0', sets: '0', restTime: '0' };
       const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
       expect(result.params[5]).toBe(0);
-      expect(result.params[6]).toBe(8);
-      expect(result.params[7]).toBe(3);
-      expect(result.params[8]).toBe(180);
+      expect(result.params[6]).toBe(0);
+      expect(result.params[7]).toBe(0);
+      expect(result.params[8]).toBe(0);
     });
 
     it('serializes variant JSON', () => {
@@ -192,11 +192,80 @@ describe('db/serialization', () => {
       expect(result.params[1]).toBe('Squat');
     });
 
-    it('applies default values for zero weight', () => {
+    it('preserves zero numeric values instead of falling back to defaults', () => {
       const exercise = { ...baseExercise, weight: '0', reps: '0' };
       const result = serializeQueueExerciseToSqlParams(exercise as any, 0, 'queue-1');
       expect(result.params[5]).toBe(0);
-      expect(result.params[6]).toBe(8);
+      expect(result.params[6]).toBe(0);
+    });
+  });
+
+  describe('zero-value regression tests (Phase 06)', () => {
+    const baseExercise = {
+      name: 'Bench Press',
+      equipment: 'Barbell',
+      muscle_groups_worked: ['chest', 'triceps'],
+      isCompound: true,
+      weight: '80',
+      reps: '8',
+      sets: '3',
+      restTime: '180',
+      progression: '2.5',
+      hasCustomisedSets: false,
+      variant: null as ExerciseVariant | null,
+    };
+
+    it('preserves weight "0" as param 0, not as default', () => {
+      const exercise = { ...baseExercise, weight: '0', reps: '5', sets: '3', restTime: '180', progression: '0' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      // parseFloat("0") || 0 would give 0 (coincidence), but safeParseFloat gives 0 intentionally.
+      expect(result.params[5]).toBe(0);
+    });
+
+    it('preserves reps "0" as param 0, not as default 8 (falsy-guard bug)', () => {
+      const exercise = { ...baseExercise, weight: '80', reps: '0', sets: '3', restTime: '180', progression: '0' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      // OLD BEHAVIOR: parseInt("0", 10) || 8 → 8 (BUG)
+      // NEW BEHAVIOR: safeParseInt("0", 8) → 0 (CORRECT)
+      expect(result.params[6]).toBe(0);
+    });
+
+    it('preserves sets "0" as param 0, not as default 3 (falsy-guard bug)', () => {
+      const exercise = { ...baseExercise, weight: '80', reps: '5', sets: '0', restTime: '180', progression: '0' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      // OLD BEHAVIOR: parseInt("0", 10) || 3 → 3 (BUG)
+      // NEW BEHAVIOR: safeParseInt("0", 3) → 0 (CORRECT)
+      expect(result.params[7]).toBe(0);
+    });
+
+    it('preserves restTime "0" as param 0, not as default 180', () => {
+      const exercise = { ...baseExercise, weight: '80', reps: '5', sets: '3', restTime: '0', progression: '0' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      expect(result.params[8]).toBe(0);
+    });
+
+    it('preserves progression "0" as param 0, not as default 0 (explicit check)', () => {
+      const exercise = { ...baseExercise, weight: '80', reps: '5', sets: '3', restTime: '180', progression: '0' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      expect(result.params[9]).toBe(0);
+    });
+
+    it('queue exercise serialization also preserves zero reps and sets', () => {
+      const exercise = { ...baseExercise, weight: '100', reps: '0', sets: '0', restTime: '0', progression: '0' };
+      const result = serializeQueueExerciseToSqlParams(exercise as any, 0, 'queue-1');
+      expect(result.params[6]).toBe(0); // reps
+      expect(result.params[7]).toBe(0); // sets
+      expect(result.params[8]).toBe(0); // restTime
+    });
+
+    it('still provides defaults for empty/NaN strings', () => {
+      const exercise = { ...baseExercise, weight: '', reps: 'abc', sets: '', restTime: '', progression: '' };
+      const result = serializeExerciseToSqlParams(exercise as any, 0, 'day-1');
+      expect(result.params[5]).toBe(0);  // weight default
+      expect(result.params[6]).toBe(8);  // reps default
+      expect(result.params[7]).toBe(3);  // sets default
+      expect(result.params[8]).toBe(180); // restTime default
+      expect(result.params[9]).toBeCloseTo(0); // progression default
     });
   });
 

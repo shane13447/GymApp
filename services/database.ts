@@ -20,6 +20,7 @@ import * as SQLite from 'expo-sqlite';
 import {
   serializeVariant,
 } from '@/services/db/serialization';
+import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 import {
   getDb,
   setDb,
@@ -56,8 +57,6 @@ import {
   getUserProfile as prefsGetUserProfile,
   updateUserProfile as prefsUpdateUserProfile,
   getMuscleGroupTargets as prefsGetMuscleGroupTargets,
-  getMuscleGroupTarget as prefsGetMuscleGroupTarget,
-  setMuscleGroupTarget as prefsSetMuscleGroupTarget,
   removeMuscleGroupTarget as prefsRemoveMuscleGroupTarget,
   saveMuscleGroupTargets as prefsSaveMuscleGroupTargets,
   registerPreferencesDeps,
@@ -196,11 +195,11 @@ const createProgramWithDatabase = async (
             exercise.equipment ?? '',
             JSON.stringify(exercise.muscle_groups_worked ?? []),
             exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
+            safeParseFloat(exercise.weight, 0),
+            safeParseInt(exercise.reps, 8),
+            safeParseInt(exercise.sets, 3),
+            safeParseInt(exercise.restTime, 180),
+            safeParseFloat(exercise.progression, 0),
             exercise.hasCustomisedSets ? 1 : 0,
             serializeVariant(exercise.variant),
             i,
@@ -864,8 +863,6 @@ export const updateUserProfile = prefsUpdateUserProfile;
 // =============================================================================
 
 export const getMuscleGroupTargets = prefsGetMuscleGroupTargets;
-export const getMuscleGroupTarget = prefsGetMuscleGroupTarget;
-export const setMuscleGroupTarget = prefsSetMuscleGroupTarget;
 export const removeMuscleGroupTarget = prefsRemoveMuscleGroupTarget;
 export const saveMuscleGroupTargets = prefsSaveMuscleGroupTargets;
 
@@ -999,7 +996,6 @@ import {
   clearAllActiveTimers as timerClearAllActiveTimers,
   clearTimersForContext as timerClearTimersForContext,
   updateTimerSetsCompleted as timerUpdateTimerSetsCompleted,
-  cleanupOrphanedTimers as timerCleanupOrphanedTimers,
   cleanupOrphanedTimersWithDatabase as timerCleanupOrphanedTimersWithDatabase,
 } from '@/services/db/timers';
 
@@ -1013,68 +1009,9 @@ export const updateTimerSetsCompleted = timerUpdateTimerSetsCompleted;
 
 const cleanupOrphanedTimersWithDatabase = timerCleanupOrphanedTimersWithDatabase;
 
-/**
- * Clean up orphaned/expired timer records
- */
-export const cleanupOrphanedTimers = timerCleanupOrphanedTimers;
-
 // =============================================================================
 // MIGRATION / DATA IMPORT
 // =============================================================================
-
-/**
- * Import data from AsyncStorage (for migration)
- */
-export const importFromLegacyStorage = async (
-  programs: Program[],
-  workouts: Workout[],
-  queue: WorkoutQueueItem[],
-  currentProgramId: string | null
-): Promise<void> => {
-  // Import programs
-  for (const program of programs) {
-    try {
-      await createProgram(program);
-    } catch (e) {
-      console.warn('Failed to import program:', program.id, e);
-    }
-  }
-
-  // Import workouts
-  for (const workout of workouts) {
-    try {
-      await saveWorkout(workout);
-    } catch (e) {
-      console.warn('Failed to import workout:', workout.id, e);
-    }
-  }
-
-  // Import queue
-  try {
-    await saveWorkoutQueue(queue);
-  } catch (e) {
-    console.warn('Failed to import workout queue:', e);
-  }
-
-  // Set current program
-  if (currentProgramId) {
-    await setCurrentProgramId(currentProgramId);
-  }
-};
-
-/**
- * Close the database connection
- */
-export const closeDatabase = async (): Promise<void> => {
-  const currentDb = getDb();
-  if (currentDb) {
-    await currentDb.closeAsync();
-    setDb(null);
-    setInitPromise(null);
-    setMaintenancePromise(null);
-    setMaintenanceCompleted(false);
-  }
-};
 
 // Register cross-module dependencies after all exports are defined
 registerPreferencesDeps({

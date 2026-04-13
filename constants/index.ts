@@ -7,13 +7,6 @@
 // =============================================================================
 
 export const DATABASE_NAME = 'gymapp.db';
-export const DATABASE_VERSION = 1;
-
-// =============================================================================
-// DEFAULT VALUES
-// =============================================================================
-
-export const DEFAULT_WEIGHT_UNIT = 'kg' as const;
 export const DEFAULT_QUEUE_SIZE = 9;
 export const DEFAULT_REST_TIME = '180';
 export const DEFAULT_SETS = '3';
@@ -42,14 +35,6 @@ export const MAX_EXERCISES_PER_DAY = 20;
 export const MAX_QUEUE_SIZE = 10;
 
 // =============================================================================
-// UI CONSTANTS
-// =============================================================================
-
-export const ANIMATION_DURATION = 200;
-export const DEBOUNCE_DELAY = 300;
-export const LIST_ITEM_HEIGHT = 80;
-
-// =============================================================================
 // MUSCLE GROUPS
 // =============================================================================
 
@@ -71,21 +56,6 @@ export const MUSCLE_GROUPS = [
 export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
 
 // =============================================================================
-// EQUIPMENT TYPES
-// =============================================================================
-
-export const EQUIPMENT_TYPES = [
-  'Barbell',
-  'Dumbbell',
-  'Cable',
-  'Machine',
-  'Bodyweight',
-  '',
-] as const;
-
-export type EquipmentType = (typeof EQUIPMENT_TYPES)[number];
-
-// =============================================================================
 // TRAINING GOALS
 // =============================================================================
 
@@ -96,21 +66,9 @@ export const TRAINING_GOAL_LABELS = {
 } as const;
 
 // =============================================================================
-// PROFILE DEFAULTS
-// =============================================================================
-
-export const DEFAULT_TARGET_SETS_PER_WEEK = 10;
-
-// =============================================================================
 // HIERARCHICAL EXERCISE MENU STRUCTURE
 // =============================================================================
-
-/**
- * Exercise type - top level classification
- */
-export type ExerciseType = 'compound' | 'isolation';
-
-/**
+ /**
  * Broad muscle categories for the hierarchical menu
  */
 export const BROAD_MUSCLE_CATEGORIES = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Abs'] as const;

@@ -9,6 +9,7 @@
 
 import type { ExerciseVariant, ProgramExercise } from '@/types';
 import type { SQLiteBindValue } from 'expo-sqlite';
+import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 
 export const serializeVariant = (variant?: ExerciseVariant | null): string =>
   variant ? JSON.stringify(variant) : '';
@@ -146,11 +147,11 @@ export function serializeExerciseToSqlParams(
       exercise.equipment ?? '',
       JSON.stringify(muscleGroups),
       exercise.isCompound ? 1 : 0,
-      parseFloat(exercise.weight) || 0,
-      parseInt(exercise.reps, 10) || 8,
-      parseInt(exercise.sets, 10) || 3,
-      parseInt(exercise.restTime, 10) || 180,
-      parseFloat(exercise.progression) || 0,
+      safeParseFloat(exercise.weight, 0),
+      safeParseInt(exercise.reps, 8),
+      safeParseInt(exercise.sets, 3),
+      safeParseInt(exercise.restTime, 180),
+      safeParseFloat(exercise.progression, 0),
       exercise.hasCustomisedSets ? 1 : 0,
       serializeVariant(exercise.variant),
       position,
@@ -177,11 +178,11 @@ export function serializeQueueExerciseToSqlParams(
       exercise.equipment ?? '',
       JSON.stringify(muscleGroups),
       exercise.isCompound ? 1 : 0,
-      parseFloat(exercise.weight) || 0,
-      parseInt(exercise.reps, 10) || 8,
-      parseInt(exercise.sets, 10) || 3,
-      parseInt(exercise.restTime, 10) || 180,
-      parseFloat(exercise.progression) || 0,
+      safeParseFloat(exercise.weight, 0),
+      safeParseInt(exercise.reps, 8),
+      safeParseInt(exercise.sets, 3),
+      safeParseInt(exercise.restTime, 180),
+      safeParseFloat(exercise.progression, 0),
       exercise.hasCustomisedSets ? 1 : 0,
       serializeVariant(exercise.variant),
       position,
