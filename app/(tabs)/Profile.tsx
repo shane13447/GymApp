@@ -3,23 +3,20 @@
  * User profile information and training preferences
  */
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import React from 'react';
+import { Pressable, TextInput, View } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
+import { MuscleGroupTargetsModal } from '@/components/MuscleGroupTargetsModal';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { showConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { MuscleGroupTargetsModal } from '@/components/MuscleGroupTargetsModal';
-import { MAX_WORKOUT_DAYS, MIN_WORKOUT_DAYS, TRAINING_GOAL_LABELS, MUSCLE_GROUPS } from '@/constants';
+import { MUSCLE_GROUPS, TRAINING_GOAL_LABELS } from '@/constants';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { validatePositiveDecimal, validatePositiveInteger } from '@/lib/validation';
-import * as db from '@/services/database';
-import { TrainingGoal, type ExperienceLevel, type MuscleGroupTarget, type UserProfile } from '@/types';
+import { useProfileScreen } from '@/hooks/use-profile-screen';
+import { TrainingGoal, type ExperienceLevel } from '@/types';
 
-// Training goal options for button selection
 const TRAINING_GOALS = [
   { value: TrainingGoal.Strength, label: TRAINING_GOAL_LABELS.strength },
   { value: TrainingGoal.Hypertrophy, label: TRAINING_GOAL_LABELS.hypertrophy },
@@ -32,7 +29,6 @@ const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [
   { value: 'advanced', label: 'Advanced' },
 ];
 
-// Session duration presets (label in minutes for display, value in minutes for storage)
 const SESSION_DURATION_OPTIONS = [
   { label: '30 min', value: 30 },
   { label: '45 min', value: 45 },
@@ -42,238 +38,34 @@ const SESSION_DURATION_OPTIONS = [
 ];
 
 /**
- * Custom hook for numeric input fields with validation and auto-save
+ * Renders the Profile screen while delegating persistence and autosave behavior to useProfileScreen.
+ * The component focuses on presentation and wiring screen controls to the extracted controller hook.
  */
-const useNumericInput = (
-  initialValue: number | null,
-  validate: (input: string) => { value: number | null; isValid: boolean; error: string | null },
-  onSave: (value: number | null) => Promise<void>
-) => {
-  const [localValue, setLocalValue] = useState(initialValue?.toString() || '');
-  const [error, setError] = useState<string | null>(null);
-  const isFocusedRef = useRef(false);
-  const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
-
-  // Sync from parent when value changes externally (only if not focused)
-  useEffect(() => {
-    if (isFocusedRef.current) return;
-    setLocalValue(initialValue?.toString() || '');
-  }, [initialValue]);
-
-  const handleFocus = useCallback(() => {
-    isFocusedRef.current = true;
-  }, []);
-
-  const handleChange = useCallback((text: string) => {
-    setLocalValue(text);
-    setError(null);
-  }, []);
-
-  const handleBlur = useCallback(async () => {
-    isFocusedRef.current = false;
-    const result = validate(localValue);
-    
-    if (!result.isValid) {
-      setError(result.error);
-      return;
-    }
-    
-    setError(null);
-    // Normalize display value
-    setLocalValue(result.value?.toString() || '');
-    // Save to database
-    await onSaveRef.current(result.value);
-  }, [localValue, validate]);
-
-  return { localValue, error, handleFocus, handleChange, handleBlur };
-};
-
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [muscleGroupTargets, setMuscleGroupTargets] = useState<MuscleGroupTarget[]>([]);
-  const [showMuscleTargetsModal, setShowMuscleTargetsModal] = useState(false);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [stats, setStats] = useState({
-    totalWorkouts: 0,
-    totalPrograms: 0,
-  });
-
-  // Name input state
-  const [name, setName] = useState('');
-  const nameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const [workouts, programs, userProfile, targets] = await Promise.all([
-        db.getAllWorkouts(),
-        db.getAllPrograms(),
-        db.getUserProfile(),
-        db.getMuscleGroupTargets(),
-      ]);
-
-      setStats({
-        totalWorkouts: workouts.length,
-        totalPrograms: programs.length,
-      });
-      setProfile(userProfile);
-      setName(userProfile.name || '');
-      setMuscleGroupTargets(targets);
-    } catch (error) {
-      console.error('Error loading profile data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Auto-save name with debounce
-  const handleNameChange = useCallback((text: string) => {
-    setName(text);
-    
-    // Clear existing timeout
-    if (nameTimeoutRef.current) {
-      clearTimeout(nameTimeoutRef.current);
-    }
-    
-    // Debounce save
-    nameTimeoutRef.current = setTimeout(async () => {
-      try {
-        await db.updateUserProfile({ name: text || null });
-      } catch (error) {
-        console.error('Error saving name:', error);
-      }
-    }, 500);
-  }, []);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (nameTimeoutRef.current) {
-        clearTimeout(nameTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Weight inputs with validation
-  const currentWeightInput = useNumericInput(
-    profile?.currentWeight ?? null,
-    validatePositiveDecimal,
-    async (value) => {
-      await db.updateUserProfile({ currentWeight: value });
-      setProfile((prev) => prev ? { ...prev, currentWeight: value } : null);
-    }
-  );
-
-  const goalWeightInput = useNumericInput(
-    profile?.goalWeight ?? null,
-    validatePositiveDecimal,
-    async (value) => {
-      await db.updateUserProfile({ goalWeight: value });
-      setProfile((prev) => prev ? { ...prev, goalWeight: value } : null);
-    }
-  );
-
-  const trainingDaysInput = useNumericInput(
-    profile?.trainingDaysPerWeek ?? null,
-    (input: string) => {
-      const num = parseInt(input, 10);
-      if (isNaN(num) || num < MIN_WORKOUT_DAYS || num > MAX_WORKOUT_DAYS) {
-        return { value: null, isValid: false, error: `Training days must be between ${MIN_WORKOUT_DAYS} and ${MAX_WORKOUT_DAYS}` };
-      }
-      return { value: num, isValid: true, error: null };
-    },
-    async (value) => {
-      await db.updateUserProfile({ trainingDaysPerWeek: value });
-      setProfile((prev) => prev ? { ...prev, trainingDaysPerWeek: value } : null);
-    }
-  );
-
-  const handleSessionDurationSelect = useCallback(async (durationMinutes: number) => {
-    try {
-      await db.updateUserProfile({ sessionDurationMinutes: durationMinutes });
-      setProfile((prev) => prev ? { ...prev, sessionDurationMinutes: durationMinutes } : null);
-    } catch (error) {
-      console.error('Error saving session duration:', error);
-      Alert.alert('Error', 'Failed to save session duration');
-    }
-  }, []);
-
-  const handleExperienceLevelSelect = useCallback(async (experienceLevel: ExperienceLevel) => {
-    try {
-      await db.updateUserProfile({ experienceLevel });
-      setProfile((prev) => prev ? { ...prev, experienceLevel } : null);
-    } catch (error) {
-      console.error('Error saving experience level:', error);
-      Alert.alert('Error', 'Failed to save experience level');
-    }
-  }, []);
-
-  const targetSetsInput = useNumericInput(
-    profile?.targetSetsPerWeek ?? null,
-    validatePositiveInteger,
-    async (value) => {
-      await db.updateUserProfile({ targetSetsPerWeek: value });
-      setProfile((prev) => prev ? { ...prev, targetSetsPerWeek: value } : null);
-    }
-  );
-
-  // Training goal selection
-  const handleTrainingGoalSelect = useCallback(async (goal: TrainingGoal) => {
-    try {
-      await db.updateUserProfile({ trainingGoal: goal });
-      setProfile((prev) => prev ? { ...prev, trainingGoal: goal } : null);
-    } catch (error) {
-      console.error('Error saving training goal:', error);
-      Alert.alert('Error', 'Failed to save training goal');
-    }
-  }, []);
-
-  // Muscle group targets modal
-  const handleOpenMuscleTargets = useCallback(() => {
-    setShowMuscleTargetsModal(true);
-  }, []);
-
-  const handleSaveMuscleTargets = useCallback(async (targets: MuscleGroupTarget[]) => {
-    try {
-      await db.saveMuscleGroupTargets(targets);
-      setMuscleGroupTargets(targets);
-      setShowMuscleTargetsModal(false);
-    } catch (error) {
-      console.error('Error saving muscle group targets:', error);
-      Alert.alert('Error', 'Failed to save muscle group targets');
-    }
-  }, []);
-
-  const handleClearWorkoutHistory = () => {
-    showConfirmDialog({
-      title: 'Clear Workout History',
-      message:
-        'Are you sure you want to delete all workout history? This action cannot be undone.',
-      confirmText: 'Clear All',
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          const workouts = await db.getAllWorkouts();
-          for (const workout of workouts) {
-            await db.deleteWorkout(workout.id);
-          }
-          setStats((prev) => ({ ...prev, totalWorkouts: 0 }));
-          Alert.alert('Success', 'Workout history has been cleared');
-        } catch (error) {
-          console.error('Error clearing history:', error);
-          Alert.alert('Error', 'Failed to clear workout history');
-        }
-      },
-    });
-  };
+  const {
+    isLoading,
+    profile,
+    muscleGroupTargets,
+    showMuscleTargetsModal,
+    showAdvancedSettings,
+    stats,
+    name,
+    currentWeightInput,
+    goalWeightInput,
+    trainingDaysInput,
+    targetSetsInput,
+    handleNameChange,
+    handleSessionDurationSelect,
+    handleExperienceLevelSelect,
+    handleTrainingGoalSelect,
+    handleOpenMuscleTargets,
+    handleCloseMuscleTargets,
+    toggleAdvancedSettings,
+    handleSaveMuscleTargets,
+    handleClearWorkoutHistory,
+  } = useProfileScreen();
 
   if (isLoading) {
     return (
@@ -291,11 +83,9 @@ export default function ProfileScreen() {
       </ThemedView>
 
       <ThemedView className="mt-5 gap-6">
-        {/* Profile Information Section */}
         <ThemedView className="gap-4">
           <ThemedText type="subtitle">Profile Information</ThemedText>
 
-          {/* Name */}
           <ThemedView className="gap-1">
             <ThemedText className="text-sm font-semibold">Name</ThemedText>
             <TextInput
@@ -310,13 +100,12 @@ export default function ProfileScreen() {
             />
           </ThemedView>
 
-          {/* Current Weight */}
           <ThemedView className="gap-1">
             <ThemedText className="text-sm font-semibold">Current Weight (kg)</ThemedText>
             <TextInput
               className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
-                currentWeightInput.error 
-                  ? 'border-red-500' 
+                currentWeightInput.error
+                  ? 'border-red-500'
                   : 'border-gray-300 dark:border-gray-600'
               }`}
               placeholder="e.g., 72.5"
@@ -329,18 +118,17 @@ export default function ProfileScreen() {
               style={{ color: textColor }}
               accessibilityLabel="Current weight"
             />
-            {currentWeightInput.error && (
+            {currentWeightInput.error ? (
               <ThemedText className="text-xs text-red-500">{currentWeightInput.error}</ThemedText>
-            )}
+            ) : null}
           </ThemedView>
 
-          {/* Goal Weight */}
           <ThemedView className="gap-1">
             <ThemedText className="text-sm font-semibold">Goal Weight (kg)</ThemedText>
             <TextInput
               className={`bg-white dark:bg-gray-700 border rounded-lg px-3 py-3 text-base ${
-                goalWeightInput.error 
-                  ? 'border-red-500' 
+                goalWeightInput.error
+                  ? 'border-red-500'
                   : 'border-gray-300 dark:border-gray-600'
               }`}
               placeholder="e.g., 75.0"
@@ -353,13 +141,12 @@ export default function ProfileScreen() {
               style={{ color: textColor }}
               accessibilityLabel="Goal weight"
             />
-            {goalWeightInput.error && (
+            {goalWeightInput.error ? (
               <ThemedText className="text-xs text-red-500">{goalWeightInput.error}</ThemedText>
-            )}
+            ) : null}
           </ThemedView>
         </ThemedView>
 
-        {/* Training Goals Section */}
         <ThemedView className="gap-4">
           <ThemedText type="subtitle">Training Goal</ThemedText>
           <ThemedView className="gap-2">
@@ -380,9 +167,7 @@ export default function ProfileScreen() {
                   >
                     <ThemedText
                       className={`font-semibold text-center ${
-                        profile?.trainingGoal === goal.value
-                          ? 'text-white'
-                          : ''
+                        profile?.trainingGoal === goal.value ? 'text-white' : ''
                       }`}
                     >
                       {goal.label}
@@ -394,7 +179,6 @@ export default function ProfileScreen() {
           </ThemedView>
         </ThemedView>
 
-        {/* Training Context Section */}
         <ThemedView className="gap-4">
           <ThemedText type="subtitle">Training Context</ThemedText>
 
@@ -444,9 +228,9 @@ export default function ProfileScreen() {
               style={{ color: textColor }}
               accessibilityLabel="Training days per week"
             />
-            {trainingDaysInput.error && (
+            {trainingDaysInput.error ? (
               <ThemedText className="text-xs text-red-500">{trainingDaysInput.error}</ThemedText>
-            )}
+            ) : null}
           </ThemedView>
 
           <ThemedView className="gap-1">
@@ -482,12 +266,11 @@ export default function ProfileScreen() {
           </ThemedView>
         </ThemedView>
 
-        {/* Weekly Volume Section */}
         <ThemedView className="gap-4">
           <ThemedText type="subtitle">Weekly Volume</ThemedText>
 
           <Pressable
-            onPress={() => setShowAdvancedSettings((prev) => !prev)}
+            onPress={toggleAdvancedSettings}
             accessibilityRole="button"
             accessibilityLabel="Toggle advanced settings"
           >
@@ -503,9 +286,8 @@ export default function ProfileScreen() {
             )}
           </Pressable>
 
-          {showAdvancedSettings && (
+          {showAdvancedSettings ? (
             <>
-              {/* Target Sets Per Week */}
               <ThemedView className="gap-1">
                 <ThemedText className="text-sm font-semibold">Target Sets Per Week (Global)</ThemedText>
                 <TextInput
@@ -524,15 +306,14 @@ export default function ProfileScreen() {
                   style={{ color: textColor }}
                   accessibilityLabel="Target sets per week"
                 />
-                {targetSetsInput.error && (
+                {targetSetsInput.error ? (
                   <ThemedText className="text-xs text-red-500">{targetSetsInput.error}</ThemedText>
-                )}
+                ) : null}
                 <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   This is the default target for all muscle groups
                 </ThemedText>
               </ThemedView>
 
-              {/* Customize Per Muscle Group Button */}
               <Pressable onPress={handleOpenMuscleTargets} accessibilityRole="button">
                 {({ pressed }) => (
                   <View
@@ -545,17 +326,16 @@ export default function ProfileScreen() {
                       <ThemedText className="text-gray-500 dark:text-gray-400">
                         {muscleGroupTargets.length > 0
                           ? `${muscleGroupTargets.length} custom`
-                          : '→'}
+                          : 'Open'}
                       </ThemedText>
                     </View>
                   </View>
                 )}
               </Pressable>
             </>
-          )}
+          ) : null}
         </ThemedView>
 
-        {/* Stats Section */}
         <ThemedView className="gap-3">
           <ThemedText type="subtitle">Statistics</ThemedText>
           <View className="flex-row gap-4">
@@ -578,7 +358,6 @@ export default function ProfileScreen() {
           </View>
         </ThemedView>
 
-        {/* Data Management */}
         <ThemedView className="gap-3">
           <ThemedText type="subtitle">Data Management</ThemedText>
 
@@ -593,7 +372,6 @@ export default function ProfileScreen() {
           </Pressable>
         </ThemedView>
 
-        {/* App Info */}
         <ThemedView className="gap-2 mt-4 items-center">
           <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
             Shane&apos;s Gym App v1.0.0
@@ -604,10 +382,9 @@ export default function ProfileScreen() {
         </ThemedView>
       </ThemedView>
 
-      {/* Muscle Group Targets Modal */}
       <MuscleGroupTargetsModal
         visible={showMuscleTargetsModal}
-        onClose={() => setShowMuscleTargetsModal(false)}
+        onClose={handleCloseMuscleTargets}
         onSave={handleSaveMuscleTargets}
         initialTargets={muscleGroupTargets}
         globalTarget={profile?.targetSetsPerWeek ?? null}
