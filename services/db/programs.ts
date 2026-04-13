@@ -17,6 +17,7 @@ import {
   deserializeProgramExerciseRow,
 } from '@/services/db/serialization';
 import type { SqlExerciseRow } from '@/services/db/serialization';
+import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -172,11 +173,11 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
             exercise.equipment ?? '',
             JSON.stringify(muscleGroups),
             exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
+            safeParseFloat(exercise.weight, 0),
+            safeParseInt(exercise.reps, 8),
+            safeParseInt(exercise.sets, 3),
+            safeParseInt(exercise.restTime, 180),
+            safeParseFloat(exercise.progression, 0),
             exercise.hasCustomisedSets ? 1 : 0,
             serializeVariant(exercise.variant),
             i,
@@ -226,11 +227,11 @@ export const updateProgram = async (program: Program): Promise<void> => {
             exercise.equipment ?? '',
             JSON.stringify(muscleGroups),
             exercise.isCompound ? 1 : 0,
-            parseFloat(exercise.weight) || 0,
-            parseInt(exercise.reps, 10) || 8,
-            parseInt(exercise.sets, 10) || 3,
-            parseInt(exercise.restTime, 10) || 180,
-            parseFloat(exercise.progression) || 0,
+            safeParseFloat(exercise.weight, 0),
+            safeParseInt(exercise.reps, 8),
+            safeParseInt(exercise.sets, 3),
+            safeParseInt(exercise.restTime, 180),
+            safeParseFloat(exercise.progression, 0),
             exercise.hasCustomisedSets ? 1 : 0,
             serializeVariant(exercise.variant),
             i,

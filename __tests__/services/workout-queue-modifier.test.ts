@@ -12,35 +12,40 @@ jest.mock('@/services/database', () => ({
 }));
 
 import {
-    analyzeTestPromptQueueCoverage,
     buildCompressedPrompt,
     COMPRESSED_SYSTEM_PROMPT,
-    compareWorkoutQueues,
-    detectRequestedChangeType,
-    differencesToProposedChanges,
     encodeQueueForLLM,
-    enforceColumnChanges,
+    normalizeCoachModifiedWeight,
+    normalizeCustomisedSetPayload,
+    roundCoachModifiedQueueWeights,
+} from '@/services/queue/codec';
+import {
+    compareWorkoutQueues,
+    differencesToProposedChanges,
     evaluateInjurySemanticOutcome,
     evaluatePromptIntentOutcome,
     evaluateVariantSemanticOutcome,
-    extractTargetExerciseRefs,
-    extractTargetExercises,
-    findExerciseByName,
+    validateChanges,
+    validateQueueStructure,
+    analyzeTestPromptQueueCoverage,
     fuzzyMatchExerciseName,
+} from '@/services/queue/diff';
+import {
+    detectRequestedChangeType,
+    enforceColumnChanges,
+    extractTargetExercises,
+    extractTargetExerciseRefs,
+    findExerciseByName,
     getLastQueueParseFailureReason,
-    getSimilarity,
-    normalizeCoachModifiedWeight,
-    normalizeCustomisedSetPayload,
     parseQueueFormatResponse,
     preprocessMuscleGroupRequest,
     repairQueue,
     repairQueueWithIntent,
     resolveExerciseAlias,
     restoreDroppedExercises,
-    roundCoachModifiedQueueWeights,
-    validateChanges,
-    validateQueueStructure,
-} from '@/services/workout-queue-modifier';
+    EXERCISE_ALIASES,
+    getSimilarity,
+} from '@/services/queue/repair';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
 // =============================================================================

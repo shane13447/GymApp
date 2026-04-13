@@ -199,15 +199,6 @@ export enum ProgramViewMode {
 }
 
 /**
- * View modes for the Coach screen
- */
-export enum CoachMode {
-  Chat = 'chat',
-  ModifyWorkout = 'modify_workout',
-  GenerateProgram = 'generate_program',
-}
-
-/**
  * Create step enum for program creation wizard
  */
 export enum CreateProgramStep {

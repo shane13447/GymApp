@@ -17,13 +17,20 @@ import {
   evaluateInjurySemanticOutcome,
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
-  mergeScopedQueueChanges,
-  parseQueueFormatResponse,
   validateChanges,
   validateQueueStructure,
-  type ProposedChanges,
-  type TargetedExerciseRef,
+} from '@/services/queue/diff';
+import {
+  mergeScopedQueueChanges,
 } from '@/services/workout-queue-modifier';
+import {
+  parseQueueFormatResponse,
+} from '@/services/queue/repair';
+import type {
+  ProposedChanges,
+  TargetedExerciseRef,
+  SemanticEvaluationResult,
+} from '@/services/queue/types';
 import type { CoachPromptCase } from '@/services/coach/prompt-test-runner';
 
 // ---------------------------------------------------------------------------
@@ -176,7 +183,7 @@ function evaluateTestResult(
   const isVariantTest = currentTest.type.startsWith('Variant -');
   const isInjuryTest = currentTest.type.startsWith('Injury -');
 
-  let semanticResult: { passed: boolean; reason?: string } = { passed: true };
+  let semanticResult: SemanticEvaluationResult = { passed: true };
 
   if (isVariantTest) {
     const requestedVariant = inferRequestedVariant(currentTest.prompt) ?? '';

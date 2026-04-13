@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type CoachProxyMessage } from '@/lib/coach-utils';
+import { COACH_API_TIMEOUT_MS, extractProxyResponseText, resolveProxyUrlFromCandidates } from '@/lib/coach-proxy';
 import { getSupabaseAccessToken } from '@/lib/supabase';
 import { formatExerciseDisplayName } from '@/lib/utils';
 import * as db from '@/services/database';
@@ -31,11 +32,15 @@ import { processCoachResponse } from '@/services/coach/response-processor';
 import {
   buildCompressedPrompt,
   COMPRESSED_SYSTEM_PROMPT,
+} from '@/services/queue/codec';
+import {
   extractTargetExerciseRefs,
   preprocessMuscleGroupRequest,
-  type TargetedExerciseRef,
-  type ProposedChanges,
-} from '@/services/workout-queue-modifier';
+} from '@/services/queue/repair';
+import type {
+  TargetedExerciseRef,
+  ProposedChanges,
+} from '@/services/queue/types';
 import type { DraftProgram, WorkoutQueueItem } from '@/types';
 
 // Test prompts for automated testing
@@ -92,8 +97,11 @@ type CoachTestResult = {
   error?: string;
 };
 
-const COACH_API_TIMEOUT_MS = 60000;
-
+/**
+ * Resolves coach proxy URL from platform-specific config sources.
+ * Delegates candidate resolution to the pure resolveProxyUrlFromCandidates
+ * function from lib/coach-proxy.
+ */
 const getCoachProxyUrl = (): string => {
   const constantsWithManifests = Constants as typeof Constants & {
     manifest?: { extra?: { coachProxyUrl?: unknown } };
@@ -107,49 +115,7 @@ const getCoachProxyUrl = (): string => {
     process.env.EXPO_PUBLIC_COACH_PROXY_URL,
   ];
 
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string') {
-      const trimmed = candidate.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-
-  return '';
-};
-
-const extractProxyResponseText = (rawBody: string): string => {
-  const trimmedBody = rawBody.trim();
-  if (!trimmedBody) return '';
-
-  try {
-    const parsed = JSON.parse(trimmedBody) as unknown;
-
-    if (typeof parsed === 'string') return parsed;
-    if (!parsed || typeof parsed !== 'object') return trimmedBody;
-
-    const payload = parsed as {
-      response?: unknown;
-      content?: unknown;
-      output?: unknown;
-      text?: unknown;
-      message?: { content?: unknown };
-      choices?: { text?: unknown; message?: { content?: unknown } }[];
-    };
-
-    if (typeof payload.response === 'string') return payload.response;
-    if (typeof payload.content === 'string') return payload.content;
-    if (typeof payload.output === 'string') return payload.output;
-    if (typeof payload.text === 'string') return payload.text;
-    if (typeof payload.message?.content === 'string') return payload.message.content;
-
-    const firstChoice = payload.choices?.[0];
-    if (typeof firstChoice?.text === 'string') return firstChoice.text;
-    if (typeof firstChoice?.message?.content === 'string') return firstChoice.message.content;
-
-    return trimmedBody;
-  } catch {
-    return trimmedBody;
-  }
+  return resolveProxyUrlFromCandidates(candidates);
 };
 
 const callCoachProxy = async (

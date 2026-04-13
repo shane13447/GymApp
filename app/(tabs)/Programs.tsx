@@ -1042,6 +1042,3 @@ const updatedDays = commitCurrentDay(workoutDays, currentDayIndex, selectedExerc
   // Fallback
   return null;
 }
-
-// Re-export types for backward compatibility
-export type { Exercise, Program, ProgramExercise, WorkoutDay };
