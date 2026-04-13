@@ -26,7 +26,7 @@ const TRAINING_GOALS = [
   { value: TrainingGoal.ImproveOverallHealth, label: TRAINING_GOAL_LABELS.improve_overall_health },
 ];
 
-const EXPERIENCE_LEVELS: Array<{ value: ExperienceLevel; label: string }> = [
+const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [
   { value: 'beginner', label: 'Beginner' },
   { value: 'intermediate', label: 'Intermediate' },
   { value: 'advanced', label: 'Advanced' },
@@ -105,7 +105,7 @@ export default function ProfileScreen() {
 
   // Name input state
   const [name, setName] = useState('');
-  const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const nameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadData();

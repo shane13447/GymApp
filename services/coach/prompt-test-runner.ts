@@ -1,20 +1,25 @@
 import {
   buildCompressedPrompt,
-  compareWorkoutQueues,
   COMPRESSED_SYSTEM_PROMPT,
+} from '@/services/queue/codec';
+import {
+  compareWorkoutQueues,
   differencesToProposedChanges,
   evaluateInjurySemanticOutcome,
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
+  validateChanges,
+  validateQueueStructure,
+} from '@/services/queue/diff';
+import {
   extractTargetExerciseRefs,
   findExerciseByName,
   parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
-  validateChanges,
-  validateQueueStructure,
-} from '@/services/workout-queue-modifier';
+} from '@/services/queue/repair';
 import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
 import { inferInjurySeverity, inferRequestedVariant, type CoachProxyMessage } from '@/lib/coach-utils';
+import type { ProposedChanges } from '@/services/queue/types';
 import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
 
 export type CoachPromptCase = {
@@ -112,7 +117,7 @@ const toProgramExercise = (exercise: CanonicalFixtureExercise): ProgramExercise 
     isCompound: exerciseData?.isCompound ?? false,
     variantOptions: exerciseData?.variantOptions,
     aliases: exerciseData?.aliases,
-    variant: exercise.variant ?? null,
+variant: exercise.variant ?? null,
     weight: JSON.stringify(exercise.weight),
     reps: JSON.stringify(exercise.reps),
     sets: String(exercise.reps.length),
@@ -143,6 +148,7 @@ export type ExecutePromptInput = {
 export type ExecutePromptOutput = {
   status: Exclude<PromptResultStatus, 'ERROR'>;
   reasons?: string[];
+  proposedChanges?: ProposedChanges;
 };
 
 export type RunCoachPromptSuiteArgs = {
@@ -309,11 +315,7 @@ export const executePromptThroughCoachPipeline = async (
     };
   }
 
-  // BUG: differencesToProposedChanges is called but its return value is discarded.
-  // The new headless gate never validates the user-facing proposal mapping it appears
-  // to be exercising. The result should be used for validation or the call removed.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _proposedChanges = differencesToProposedChanges(differences);
+  const proposedChanges = differencesToProposedChanges(differences);
   const validation = validateChanges(promptCase.prompt, differences);
   const isVariantTest = promptCase.type.startsWith('Variant -');
   const isInjuryTest = promptCase.type.startsWith('Injury -');
@@ -357,5 +359,6 @@ export const executePromptThroughCoachPipeline = async (
         ? []
         : [deterministicIntentResult.reason ?? 'Intent mismatch']),
     ],
+    proposedChanges,
   };
 };
