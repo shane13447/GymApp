@@ -87,6 +87,28 @@ describe('prompt-test-runner', () => {
     ]);
   });
 
+  it('returns proposed changes when the pipeline detects a valid modification', async () => {
+    const queue = materializeCanonicalFixtureQueue(createFixture());
+
+    const result = await executePromptThroughCoachPipeline(
+      {
+        callCoachProxy: async () => 'Q0:D1:Barbell Bench Press|95|5|3|Flat',
+      },
+      { type: 'Single - Weight', prompt: 'change barbell bench press weight to 95' },
+      queue
+    );
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.proposedChanges).not.toBeUndefined();
+    expect(result.proposedChanges?.weightChanges).toEqual([
+      expect.objectContaining({
+        exerciseName: 'Barbell Bench Press (Flat)',
+        oldWeight: '92.5',
+        newWeight: '95',
+      }),
+    ]);
+  });
+
   it('continues through all prompts after failures', async () => {
     const prompts: CoachPromptCase[] = [
       { type: 'T1', prompt: 'first' },

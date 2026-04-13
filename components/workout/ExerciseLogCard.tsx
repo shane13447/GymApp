@@ -145,7 +145,7 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
 
   // Get rest time in seconds from exercise (defaults to 180)
   // Uses sanitizeRestTime from timer-utils for consistent validation
-  const restTimeSeconds = sanitizeRestTime(exercise.restTime);
+  const restTimeSeconds = sanitizeRestTime(Number(exercise.restTime));
   
   // Get target sets for display
   const targetSets = Number(exercise.sets) || 0;

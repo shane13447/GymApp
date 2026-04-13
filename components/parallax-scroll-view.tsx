@@ -4,14 +4,14 @@
  */
 
 import type { PropsWithChildren, ReactElement } from 'react';
-import { StyleSheet, type ViewStyle } from 'react-native';
+import { StyleSheet, type RefreshControlProps, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type Props = PropsWithChildren<{
-  refreshControl?: ReactElement;
+  refreshControl?: ReactElement<RefreshControlProps>;
   style?: ViewStyle;
 }>;
 

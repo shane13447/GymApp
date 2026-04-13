@@ -3,13 +3,9 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": [
-    "constants/**/*.ts",
-    "lib/**/*.ts",
-    "services/coach/**/*.ts",
-    "services/workout-queue-modifier.ts"
-  ],
   "exclude": [
-    "__tests__/**"
+    "__tests__/**",
+    "supabase/functions/**",
+    "services/coach/headless-gate-baseline.ts"
   ]
 }

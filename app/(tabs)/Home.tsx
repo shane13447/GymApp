@@ -1,24 +1,18 @@
 /**
  * Home Screen
  * Dashboard with quick actions and workout summary
- *
- * BUG (ChatGPT audit): HomeLoadingSkeleton (line 75) is defined but never rendered.
- * When loadState === 'initial_loading', a generic spinner is shown instead of the
- * purpose-built skeleton. Fix: render HomeLoadingSkeleton during initial load; the
- * UI update will integrate this naturally.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import * as db from '@/services/database';
-import type { Program, Workout, WorkoutQueueItem } from '@/types';
+import { useHomeData } from '@/hooks/use-home-data';
+import { formatRelativeDate, getMuscleGroupSummary } from '@/lib/home-stats';
 
 type RingVariant = 'primary' | 'secondary' | 'indigo';
 
@@ -169,160 +163,25 @@ function HomeLoadingSkeleton({ theme }: { theme: 'light' | 'dark' }) {
   );
 }
 
-const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
-  const muscleGroups = new Set<string>();
-  workout.exercises.forEach((exercise) => {
-    exercise.muscle_groups_worked.forEach((group) => {
-      muscleGroups.add(group);
-    });
-  });
-  return Array.from(muscleGroups).sort();
-};
-
-const getMuscleGroupSummary = (workout: WorkoutQueueItem): string => {
-  const groups = getMuscleGroups(workout);
-  if (groups.length === 0) return 'mixed focus';
-  if (groups.length <= 3) return groups.join(', ');
-  return `${groups.slice(0, 3).join(', ')} +${groups.length - 3}`;
-};
-
-type HomeLoadState = 'initial_loading' | 'refreshing' | 'loaded' | 'failed';
-
 export default function HomeScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
 
-  const [loadState, setLoadState] = useState<HomeLoadState>('initial_loading');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const loadRequestIdRef = useRef(0);
-  const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
-  const [nextWorkout, setNextWorkout] = useState<WorkoutQueueItem | null>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<Workout[]>([]);
-  const [stats, setStats] = useState({
-    totalWorkouts: 0,
-    thisWeek: 0,
-    streak: 0,
-  });
+  const {
+    loadState,
+    isRefreshing,
+    loadError,
+    currentProgram,
+    nextWorkout,
+    recentWorkouts,
+    stats,
+    handleRefresh,
+    retry,
+  } = useHomeData();
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData('initial');
-    }, [])
-  );
-
-  const loadData = async (mode: 'initial' | 'refresh') => {
-    const requestId = ++loadRequestIdRef.current;
-
-    if (mode === 'refresh') {
-      setIsRefreshing(true);
-      setLoadState('refreshing');
-    } else if (loadState !== 'loaded') {
-      setLoadState('initial_loading');
-    }
-
-    console.log('[startup][home_load_start]', { mode, requestId });
-
-    try {
-      const currentProgramId = await db.getCurrentProgramId();
-      if (loadRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      if (currentProgramId) {
-        const program = await db.getProgramById(currentProgramId);
-        if (loadRequestIdRef.current !== requestId) {
-          return;
-        }
-        setCurrentProgram(program);
-      } else {
-        setCurrentProgram(null);
-      }
-
-      const queue = await db.getWorkoutQueue();
-      if (loadRequestIdRef.current !== requestId) {
-        return;
-      }
-      setNextWorkout(queue.length > 0 ? queue[0] : null);
-
-      const workouts = await db.getAllWorkouts();
-      if (loadRequestIdRef.current !== requestId) {
-        return;
-      }
-      setRecentWorkouts(workouts.slice(0, 3));
-
-      const now = new Date();
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - now.getDay());
-      weekStart.setHours(0, 0, 0, 0);
-
-      const thisWeekWorkouts = workouts.filter(
-        (workout) => new Date(workout.date) >= weekStart && workout.completed
-      );
-
-      let streak = 0;
-      const completedWorkouts = workouts.filter((workout) => workout.completed);
-      if (completedWorkouts.length > 0) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        let checkDate = new Date(today);
-        for (let i = 0; i < 365; i++) {
-          const dateStr = checkDate.toISOString().split('T')[0];
-          const hasWorkout = completedWorkouts.some(
-            (workout) => workout.date.split('T')[0] === dateStr
-          );
-
-          if (hasWorkout) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else if (i === 0) {
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else {
-            break;
-          }
-        }
-      }
-
-      setStats({
-        totalWorkouts: completedWorkouts.length,
-        thisWeek: thisWeekWorkouts.length,
-        streak,
-      });
-      setLoadError(null);
-      setLoadState('loaded');
-      console.log('[startup][home_load_end]', { mode, requestId, status: 'ok' });
-    } catch (error) {
-      if (loadRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      console.error('Error loading home data:', error);
-      setLoadError('Unable to load dashboard data right now.');
-      setLoadState('failed');
-      console.log('[startup][home_load_end]', { mode, requestId, status: 'error' });
-    } finally {
-      if (loadRequestIdRef.current === requestId && mode === 'refresh') {
-        setIsRefreshing(false);
-      }
-    }
-  };
-
-  const handleRefresh = useCallback(async () => {
-    await loadData('refresh');
-  }, []);
-
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  if (loadState === 'initial_loading') {
+    return <HomeLoadingSkeleton theme={theme} />;
+  }
 
   if (loadState === 'failed') {
     return (
@@ -341,7 +200,7 @@ export default function HomeScreen() {
           </ThemedText>
 
           <Pressable
-            onPress={() => loadData('initial')}
+            onPress={retry}
             accessibilityRole="button"
             accessibilityLabel="Retry dashboard load"
             className="mt-4"
@@ -380,9 +239,9 @@ export default function HomeScreen() {
       >
         {nextWorkout ? (
           <>
-            <ThemedText className="text-2xl font-bold">Day {nextWorkout.dayNumber} • {nextWorkout.programName}</ThemedText>
+            <ThemedText className="text-2xl font-bold">Day {nextWorkout.dayNumber} - {nextWorkout.programName}</ThemedText>
             <ThemedText className="text-sm mt-1 text-gray-600 dark:text-gray-400 capitalize">
-              {nextWorkout.exercises.length} exercises • {getMuscleGroupSummary(nextWorkout)}
+              {nextWorkout.exercises.length} exercises - {getMuscleGroupSummary(nextWorkout)}
             </ThemedText>
 
             <View className="mt-4 gap-1.5">
@@ -392,7 +251,7 @@ export default function HomeScreen() {
                   className="text-sm"
                   style={{ color: theme === 'dark' ? '#C3CAD3' : '#3A4656' }}
                 >
-                  • {exercise.name}
+                  - {exercise.name}
                 </ThemedText>
               ))}
               {nextWorkout.exercises.length > 4 && (
@@ -549,14 +408,14 @@ export default function HomeScreen() {
               >
                 <View className="flex-1 pr-3">
                   <ThemedText className="font-medium" numberOfLines={1}>
-                    {workout.programName} • Day {workout.dayNumber}
+                    {workout.programName} - Day {workout.dayNumber}
                   </ThemedText>
                   <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {workout.exercises.length} exercises
                   </ThemedText>
                 </View>
                 <ThemedText className="text-xs" style={{ color: '#7A8798' }}>
-                  {formatDate(workout.date)}
+                  {formatRelativeDate(workout.date)}
                 </ThemedText>
               </View>
             ))}
@@ -583,22 +442,26 @@ export default function HomeScreen() {
               <View
                 className="flex-row items-center justify-between rounded-2xl p-4"
                 style={{
-                  borderColor: theme === 'dark' ? '#2A3543' : '#D6DEE8',
-                  borderWidth: 1,
+                  borderColor: pressed ? '#4DA2FF' : theme === 'dark' ? '#2A3543' : '#D6DEE8',
+                  borderWidth: pressed ? 2 : 1,
                   opacity: pressed ? 0.8 : 1,
-                  ...getPressedRingStyle(pressed, 'primary'),
+                  shadowColor: '#4DA2FF',
+                  shadowOpacity: pressed ? 0.35 : 0,
+                  shadowRadius: pressed ? 10 : 0,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: pressed ? 2 : 0,
                 }}
               >
                 <View className="flex-1 pr-3">
                   <ThemedText className="font-semibold text-base">{currentProgram.name}</ThemedText>
                   <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {currentProgram.workoutDays.length} day
-                    {currentProgram.workoutDays.length !== 1 ? 's' : ''} •{' '}
+                    {currentProgram.workoutDays.length !== 1 ? 's' : ''} â€¢{' '}
                     {currentProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercises
                   </ThemedText>
                 </View>
                 <ThemedText className="text-lg" style={{ color: '#007AFF' }}>
-                  ›
+                  {'>'}
                 </ThemedText>
               </View>
             )}
@@ -629,3 +492,4 @@ export default function HomeScreen() {
     </ParallaxScrollView>
   );
 }
+
