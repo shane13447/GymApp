@@ -8,19 +8,13 @@
  */
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
-import exercisesData from '@/data/exerciseSelection.json';
 import type {
   Program,
-  ProgramExercise,
   Workout,
   WorkoutQueueItem
 } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
-import {
-  serializeVariant,
-} from '@/services/db/serialization';
-import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 import {
   getDb,
   setDb,
@@ -30,7 +24,6 @@ import {
   setMaintenancePromise,
   isMaintenanceCompleted,
   setMaintenanceCompleted,
-  runInTransaction,
   logStartupStage,
   registerDatabaseGetter,
 } from '@/services/db/connection';
@@ -61,6 +54,15 @@ import {
   saveMuscleGroupTargets as prefsSaveMuscleGroupTargets,
   registerPreferencesDeps,
 } from '@/services/db/preferences';
+import {
+  type SeedLifecycleState,
+  getSeedStateColumn,
+  getSeedLifecycleStateWithDatabase,
+  mapSeedFixtureToProgram,
+  seedTestProgramsIfMissing,
+  setSeedLifecycleStateWithDatabase,
+  validateSeedFixture,
+} from '@/services/db/seeds';
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -70,387 +72,6 @@ import {
  * Queue generation lock is now managed in services/db/queue.ts.
  * The incrementQueueGenerationId import provides the same functionality.
  */
-
-type SeedFixtureExercise = {
-  name: string;
-  variant?: Record<string, string | string[]>;
-  reps: number[];
-  weight: number[];
-};
-
-type SeedFixtureDay = {
-  dayNumber: number;
-  exercises: SeedFixtureExercise[];
-};
-
-type SeedFixture = SeedFixtureDay[];
-
-type SeedCatalogEntry = {
-  equipment?: string;
-  muscle_groups_worked?: string[];
-  isCompound?: boolean;
-};
-
-// Keep fixture imports on lowercase .json extensions.
-// Metro's resolver extension list is lowercase-only (json), and .JSON can fail during Android bundling.
-const testProgramFixtureRaw = require('../data/TestProgram.json') as unknown;
-const testProgram2FixtureRaw = require('../data/TestProgram2.json') as unknown;
-
-const normaliseSeedFixtureModule = (fixtureModule: unknown): SeedFixture => {
-  const normalised =
-    fixtureModule && typeof fixtureModule === 'object' && 'default' in fixtureModule
-      ? (fixtureModule as { default: unknown }).default
-      : fixtureModule;
-
-  return Array.isArray(normalised) ? (normalised as SeedFixture) : [];
-};
-
-const STATIC_SEED_FIXTURES: Record<'TestProgram.json' | 'TestProgram2.json', SeedFixture> = {
-  'TestProgram.json': normaliseSeedFixtureModule(testProgramFixtureRaw),
-  'TestProgram2.json': normaliseSeedFixtureModule(testProgram2FixtureRaw),
-};
-
-const loadSeedFixture = (fixtureFileName: 'TestProgram.json' | 'TestProgram2.json'): SeedFixture => {
-  const fixture = STATIC_SEED_FIXTURES[fixtureFileName];
-  return Array.isArray(fixture) ? fixture : [];
-};
-
-const SEED_PROGRAMS = [
-  {
-    id: 'seed-test-program',
-    name: 'Test Program',
-    fixtureName: 'TestProgram.json' as const,
-  },
-  {
-    id: 'seed-3day-full-body',
-    name: '3 Day Full body',
-    fixtureName: 'TestProgram2.json' as const,
-  },
-] as const;
-
-const SEED_STATE_KEY_BY_ID: Record<string, 'seed_test_program_state' | 'seed_3day_full_body_state'> = {
-  'seed-test-program': 'seed_test_program_state',
-  'seed-3day-full-body': 'seed_3day_full_body_state',
-};
-
-const ALLOWLISTED_SEED_STATE_COLUMNS = new Set<string>([
-  'seed_test_program_state',
-  'seed_3day_full_body_state',
-]);
-
-const getSeedStateColumn = (seedId: string): 'seed_test_program_state' | 'seed_3day_full_body_state' | null =>
-  SEED_STATE_KEY_BY_ID[seedId] ?? null;
-
-const buildSeedCatalogIndex = (): Record<string, SeedCatalogEntry> =>
-  (exercisesData as Array<SeedCatalogEntry & { name?: string }>).reduce<Record<string, SeedCatalogEntry>>(
-    (acc, entry) => {
-      if (typeof entry.name === 'string' && entry.name.trim()) {
-        acc[entry.name.toLowerCase()] = {
-          equipment: entry.equipment,
-          muscle_groups_worked: Array.isArray(entry.muscle_groups_worked)
-            ? entry.muscle_groups_worked
-            : [],
-          isCompound: Boolean(entry.isCompound),
-        };
-      }
-      return acc;
-    },
-    {}
-  );
-
-const createProgramWithDatabase = async (
-  database: SQLite.SQLiteDatabase,
-  program: Omit<Program, 'createdAt' | 'updatedAt'>
-): Promise<boolean> => {
-  const now = new Date().toISOString();
-
-  return runInTransaction(database, async () => {
-    const result = await database.runAsync(
-      'INSERT OR IGNORE INTO programs (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-      [program.id, program.name, now, now]
-    );
-
-    const insertChanges = typeof result?.changes === 'number' ? result.changes : 1;
-    if (insertChanges === 0) {
-      return false;
-    }
-
-    for (const day of program.workoutDays) {
-      const dayResult = await database.runAsync(
-        'INSERT INTO workout_days (program_id, day_number) VALUES (?, ?)',
-        [program.id, day.dayNumber]
-      );
-
-      const dayId = dayResult?.lastInsertRowId ?? null;
-
-      for (let i = 0; i < day.exercises.length; i++) {
-        const exercise = day.exercises[i];
-        await database.runAsync(
-          `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            dayId,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(exercise.muscle_groups_worked ?? []),
-            exercise.isCompound ? 1 : 0,
-            safeParseFloat(exercise.weight, 0),
-            safeParseInt(exercise.reps, 8),
-            safeParseInt(exercise.sets, 3),
-            safeParseInt(exercise.restTime, 180),
-            safeParseFloat(exercise.progression, 0),
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            i,
-          ]
-        );
-      }
-    }
-
-    return true;
-  });
-};
-
-const setSeedLifecycleStateWithDatabase = async (
-  database: SQLite.SQLiteDatabase,
-  seedId: string,
-  state: SeedLifecycleState
-): Promise<void> => {
-  const column = getSeedStateColumn(seedId);
-  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
-    return;
-  }
-
-  await database.runAsync(
-    `UPDATE user_preferences SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [state, 'default']
-  );
-};
-
-const getSeedLifecycleStateWithDatabase = async (
-  database: SQLite.SQLiteDatabase,
-  seedId: string
-): Promise<SeedLifecycleState> => {
-  const column = getSeedStateColumn(seedId);
-  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
-    return 'pending';
-  }
-
-  const row = await database.getFirstAsync<Record<string, string | null>>(
-    `SELECT ${column} FROM user_preferences WHERE id = ?`,
-    ['default']
-  );
-
-  const value = row?.[column];
-  if (value === 'seeded' || value === 'deleted_by_user') {
-    return value;
-  }
-
-  return 'pending';
-};
-
-const hasSeedProgramStructure = async (
-  database: SQLite.SQLiteDatabase,
-  seedId: string
-): Promise<boolean> => {
-  const workoutDays = await database.getAllAsync<{ id: number }>(
-    'SELECT * FROM workout_days WHERE program_id = ?',
-    [seedId]
-  );
-
-  if (workoutDays.length === 0) {
-    return false;
-  }
-
-  for (const workoutDay of workoutDays) {
-    const exercises = await database.getAllAsync<{ id: number }>(
-      'SELECT * FROM program_exercises WHERE workout_day_id = ?',
-      [workoutDay.id]
-    );
-
-    if (exercises.length > 0) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const seedTestProgramsIfMissing = async (database: SQLite.SQLiteDatabase): Promise<void> => {
-  const catalogIndex = buildSeedCatalogIndex();
-  const seedIds = SEED_PROGRAMS.map((seedProgram) => seedProgram.id);
-
-  const existingRows = await database.getAllAsync<{ id: string }>(
-    `SELECT id FROM programs WHERE id IN (${seedIds.map(() => '?').join(', ')})`,
-    seedIds
-  );
-  const existingProgramIds = new Set(existingRows.map((row) => row.id));
-
-  for (const seedProgram of SEED_PROGRAMS) {
-    const lifecycleState = await getSeedLifecycleStateWithDatabase(database, seedProgram.id);
-
-    if (lifecycleState === 'deleted_by_user') {
-      continue;
-    }
-
-    if (existingProgramIds.has(seedProgram.id)) {
-      const hasStructure = await hasSeedProgramStructure(database, seedProgram.id);
-      if (!hasStructure) {
-        await database.runAsync('DELETE FROM programs WHERE id = ?', [seedProgram.id]);
-        existingProgramIds.delete(seedProgram.id);
-        if (lifecycleState === 'seeded') {
-          await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'pending');
-        }
-      } else {
-        if (lifecycleState !== 'seeded') {
-          await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
-        }
-        continue;
-      }
-    }
-
-    const stateAfterIntegrityCheck = await getSeedLifecycleStateWithDatabase(database, seedProgram.id);
-    if (stateAfterIntegrityCheck !== 'pending') {
-      continue;
-    }
-
-    const fixture = loadSeedFixture(seedProgram.fixtureName);
-    const validation = validateSeedFixture(fixture);
-    if (!validation.isValid) {
-      console.warn('[seed-programs]', {
-        seed_id: seedProgram.id,
-        fixture: seedProgram.fixtureName,
-        reason: 'validation_failed',
-        detail: validation.reason,
-      });
-      continue;
-    }
-
-    try {
-      const mappedProgram = mapSeedFixtureToProgram(
-        seedProgram.id,
-        seedProgram.name,
-        fixture,
-        catalogIndex
-      );
-
-      const inserted = await createProgramWithDatabase(database, mappedProgram);
-      if (inserted) {
-        existingProgramIds.add(seedProgram.id);
-      }
-
-      await setSeedLifecycleStateWithDatabase(database, seedProgram.id, 'seeded');
-    } catch (error) {
-      console.warn('[seed-programs]', {
-        seed_id: seedProgram.id,
-        fixture: seedProgram.fixtureName,
-        reason: 'insert_failed',
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-};
-
-export const validateSeedFixture = (fixture: unknown): { isValid: boolean; reason?: string } => {
-  if (!Array.isArray(fixture)) {
-    return { isValid: false, reason: 'Fixture must be an array of days.' };
-  }
-
-  if (fixture.length === 0) {
-    return { isValid: false, reason: 'Fixture must contain at least one workout day.' };
-  }
-
-  for (let dayIndex = 0; dayIndex < fixture.length; dayIndex++) {
-    const day = fixture[dayIndex] as SeedFixtureDay;
-
-    if (!Number.isInteger(day?.dayNumber) || day.dayNumber < 1) {
-      return { isValid: false, reason: `Invalid dayNumber at index ${dayIndex}.` };
-    }
-
-    if (!Array.isArray(day.exercises) || day.exercises.length === 0) {
-      return { isValid: false, reason: `Invalid exercises array at day index ${dayIndex}.` };
-    }
-
-    for (let exerciseIndex = 0; exerciseIndex < day.exercises.length; exerciseIndex++) {
-      const exercise = day.exercises[exerciseIndex];
-
-      if (typeof exercise?.name !== 'string' || !exercise.name.trim()) {
-        return {
-          isValid: false,
-          reason: `Invalid exercise name at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-
-      if (!Array.isArray(exercise.reps) || !Array.isArray(exercise.weight)) {
-        return {
-          isValid: false,
-          reason: `Missing reps/weight arrays at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-
-      if (exercise.reps.length === 0 || exercise.weight.length === 0) {
-        return {
-          isValid: false,
-          reason: `Empty reps/weight arrays at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-
-      if (exercise.reps.length !== exercise.weight.length) {
-        return {
-          isValid: false,
-          reason: `Mismatched reps/weight lengths at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-
-      if (exercise.reps.some((value) => !Number.isFinite(value))) {
-        return {
-          isValid: false,
-          reason: `Invalid reps values at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-
-      if (exercise.weight.some((value) => !Number.isFinite(value))) {
-        return {
-          isValid: false,
-          reason: `Invalid weight values at day ${dayIndex}, exercise ${exerciseIndex}.`,
-        };
-      }
-    }
-  }
-
-  return { isValid: true };
-};
-
-export const mapSeedFixtureToProgram = (
-  programId: string,
-  programName: string,
-  fixture: SeedFixture,
-  catalogIndex: Record<string, SeedCatalogEntry>
-): Omit<Program, 'createdAt' | 'updatedAt'> => ({
-  id: programId,
-  name: programName,
-  workoutDays: fixture.map((day) => ({
-    dayNumber: day.dayNumber,
-    exercises: day.exercises.map((exercise) => {
-      const catalogEntry = catalogIndex[exercise.name.toLowerCase()];
-
-      return {
-        name: exercise.name,
-        equipment: catalogEntry?.equipment ?? '',
-        muscle_groups_worked: catalogEntry?.muscle_groups_worked ?? [],
-        isCompound: catalogEntry?.isCompound ?? false,
-        variant: exercise.variant ?? null,
-        weight: String(exercise.weight[0]),
-        reps: String(exercise.reps[0]),
-        sets: String(exercise.reps.length),
-        restTime: '180',
-        progression: '0',
-        hasCustomisedSets: true,
-      } as ProgramExercise;
-    }),
-  })),
-});
 
 /**
  * Get the database instance, initializing if necessary
@@ -804,42 +425,28 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
   await ensureColumnExists('user_profile', 'session_duration_minutes', 'INTEGER');
 };
 
-export type SeedLifecycleState = 'pending' | 'seeded' | 'deleted_by_user';
+export { mapSeedFixtureToProgram, validateSeedFixture };
+export type { SeedLifecycleState };
 
+/**
+ * Reads the persisted lifecycle state for a bundled seed program.
+ * Delegates the actual column lookup to the extracted seed service module.
+ */
 export const getSeedLifecycleState = async (seedId: string): Promise<SeedLifecycleState> => {
-  const column = getSeedStateColumn(seedId);
-  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
-    return 'pending';
-  }
-
   const database = await getDatabase();
-  const row = await database.getFirstAsync<Record<typeof column, string | null>>(
-    `SELECT ${column} FROM user_preferences WHERE id = ?`,
-    ['default']
-  );
-
-  const value = row?.[column];
-  if (value === 'seeded' || value === 'deleted_by_user') {
-    return value;
-  }
-
-  return 'pending';
+  return getSeedLifecycleStateWithDatabase(database, seedId);
 };
 
+/**
+ * Persists the lifecycle state for a bundled seed program.
+ * Unknown seed ids are ignored by the underlying seed service implementation.
+ */
 export const setSeedLifecycleState = async (
   seedId: string,
   state: SeedLifecycleState
 ): Promise<void> => {
-  const column = getSeedStateColumn(seedId);
-  if (!column || !ALLOWLISTED_SEED_STATE_COLUMNS.has(column)) {
-    return;
-  }
-
   const database = await getDatabase();
-  await database.runAsync(
-    `UPDATE user_preferences SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [state, 'default']
-  );
+  await setSeedLifecycleStateWithDatabase(database, seedId, state);
 };
 
 // =============================================================================
