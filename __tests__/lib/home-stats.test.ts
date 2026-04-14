@@ -229,4 +229,24 @@ describe('getThisWeekWorkoutCount', () => {
 
     expect(getThisWeekWorkoutCount(workouts, now)).toBe(0);
   });
+
+  it('uses local calendar week boundaries near midnight', () => {
+    const now = new Date(2026, 3, 13, 12, 0, 0, 0);
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+
+    const timezoneOffsetMinutes = weekStart.getTimezoneOffset();
+    if (timezoneOffsetMinutes === 0) {
+      return;
+    }
+
+    const workoutDate = timezoneOffsetMinutes < 0
+      ? new Date(weekStart.getTime() + 30 * 60 * 1000)
+      : new Date(weekStart.getTime() - 30 * 60 * 1000);
+
+    expect(getThisWeekWorkoutCount([makeWorkout(workoutDate.toISOString(), true)], now)).toBe(
+      timezoneOffsetMinutes < 0 ? 1 : 0
+    );
+  });
 });

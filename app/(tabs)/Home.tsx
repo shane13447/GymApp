@@ -456,7 +456,7 @@ export default function HomeScreen() {
                   <ThemedText className="font-semibold text-base">{currentProgram.name}</ThemedText>
                   <ThemedText className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {currentProgram.workoutDays.length} day
-                    {currentProgram.workoutDays.length !== 1 ? 's' : ''} â€¢{' '}
+                    {currentProgram.workoutDays.length !== 1 ? 's' : ''}{' - '}
                     {currentProgram.workoutDays.reduce((sum, day) => sum + day.exercises.length, 0)} exercises
                   </ThemedText>
                 </View>

@@ -547,5 +547,32 @@ describe('operation-applier', () => {
       expect(addedExercise.equipment).toBe('');
       expect(addedExercise.muscle_groups_worked).toEqual([]);
     });
+
+    it('keeps generated exerciseInstanceId unique after remove/add sequences', () => {
+      const queue = makeQueue([
+        makeExercise({ name: 'Bench Press', exerciseInstanceId: 'q-1:e0' }),
+        makeExercise({ name: 'Squat', exerciseInstanceId: 'q-1:e1' }),
+      ]);
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'remove_exercise',
+          target: { exerciseInstanceId: 'q-1:e0' },
+        },
+        {
+          id: 'op_2',
+          type: 'add_exercise',
+          target: { dayNumber: 1 },
+          value: { exerciseName: 'Cable Curl' },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+
+      expect(result[0].exercises.map((exercise) => exercise.exerciseInstanceId)).toEqual([
+        'q-1:e1',
+        'q-1:e2',
+      ]);
+    });
   });
 });
