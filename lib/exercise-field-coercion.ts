@@ -40,6 +40,9 @@ export const coerceExerciseFieldValue = (
   if (field === 'hasCustomisedSets') return Boolean(value);
   if (field === 'variant') return value as ExerciseVariant | null;
   if ((NUMERIC_STRING_FIELDS as readonly string[]).includes(field)) return String(value);
-  if ((NUMERIC_FIELDS as readonly string[]).includes(field)) return value as number;
+  if ((NUMERIC_FIELDS as readonly string[]).includes(field)) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  }
   return String(value);
 };
