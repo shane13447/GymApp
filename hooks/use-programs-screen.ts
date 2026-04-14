@@ -557,6 +557,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
       const draftWorkoutDays = cloneWorkoutDays(program.workoutDays);
       setSelectedProgramId(programId);
       setProgramName(program.name);
+      setNumberOfDays(program.workoutDays.length.toString());
       setWorkoutDays(draftWorkoutDays);
       setCurrentDayIndex(0);
       setSelectedExercises(draftWorkoutDays[0]?.exercises.map(cloneExercise) || []);
