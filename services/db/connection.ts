@@ -92,6 +92,17 @@ export const getDatabaseCore = async (
   return initPromise;
 };
 
+/**
+ * Reset all module-level connection state. Only intended for test teardown.
+ */
+export const resetConnectionState = (): void => {
+  db = null;
+  initPromise = null;
+  maintenancePromise = null;
+  maintenanceCompleted = false;
+  _getDatabase = null;
+};
+
 export const runInTransaction = async <T>(
   database: SQLite.SQLiteDatabase,
   operation: () => Promise<T>
