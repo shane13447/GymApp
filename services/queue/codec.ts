@@ -28,9 +28,9 @@ export const roundWeightToNearestHalfKg = (weight: string): string => {
   if (!Number.isFinite(numericWeight)) {
     return String(weight);
   }
-  // Round to nearest 0.5: multiply by 2, round, divide by 2
-  const rounded = Math.round(numericWeight * 2) / 2;
-  return rounded.toFixed(1);
+  // Round to nearest 0.25 to match queue generation precision
+  const rounded = Math.round(numericWeight * 4) / 4;
+  return rounded.toFixed(2).replace(/0$/, '').replace(/\.$/, '.0');
 };
 
 /**
