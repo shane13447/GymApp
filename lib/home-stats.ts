@@ -106,8 +106,10 @@ export const getThisWeekWorkoutCount = (workouts: Workout[], now?: Date): number
 export const formatRelativeDate = (dateString: string): string => {
   const date = new Date(dateString);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / (1000 * 60 * 60 * 24));
 
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
