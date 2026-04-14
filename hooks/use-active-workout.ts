@@ -579,7 +579,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
   }, [currentProgram, getDayNumberAtIndex, selectedDayIndex]);
 
   /** Advance the workout queue after a completed workout is saved. */
-  const updateWorkoutQueue = async () => {
+  const updateWorkoutQueue = useCallback(async () => {
     if (!currentProgram) return;
 
     try {
@@ -628,10 +628,10 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
     } catch (error) {
       console.error('Error updating workout queue:', error);
     }
-  };
+  }, [currentProgram, selectedDayIndex, getDayNumberAtIndex]);
 
   /** Save the completed workout, verify program still exists, and clear timers. */
-  const saveWorkout = async () => {
+  const saveWorkout = useCallback(async () => {
     if (!currentProgram || isSavingRef.current) return;
     isSavingRef.current = true;
 
@@ -677,7 +677,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       setIsSaving(false);
       isSavingRef.current = false;
     }
-  };
+  }, [currentProgram, selectedDayIndex, workoutExercises, getDayNumberAtIndex, updateWorkoutQueue, router]);
 
   return {
     currentProgram,
