@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Alert, Keyboard } from 'react-native';
 
 import exercisesData from '@/data/exerciseSelection.json';
@@ -89,6 +89,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
   const [currentProgramId, setCurrentProgramId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [programName, setProgramName] = useState('');
   const [numberOfDays, setNumberOfDays] = useState('');
   const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([]);
@@ -323,6 +324,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
    * The workflow resets back to the list view after a successful create.
    */
   const handleCreateProgram = useCallback(async () => {
+    if (isSavingRef.current) return;
     Keyboard.dismiss();
 
     const nameValidation = validateProgramName(programName);
@@ -344,6 +346,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
       }
     }
 
+    isSavingRef.current = true;
     try {
       setIsSaving(true);
       const newProgram: DraftProgram = {
@@ -375,6 +378,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
       Alert.alert('Error', 'Failed to create program');
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   }, [clearForm, loadPrograms, programName, workoutDays]);
 
@@ -383,7 +387,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
    * Successful saves return the workflow to the list view and clear the edit draft state.
    */
   const handleUpdateProgram = useCallback(async () => {
-    if (!selectedProgramId) {
+    if (!selectedProgramId || isSavingRef.current) {
       return;
     }
 
@@ -408,6 +412,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
       }
     }
 
+    isSavingRef.current = true;
     try {
       setIsSaving(true);
       const updatedProgram: Program = {
@@ -439,6 +444,7 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
       Alert.alert('Error', 'Failed to update program');
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   }, [clearForm, currentProgramId, loadPrograms, programName, programs, selectedProgramId, workoutDays]);
 
