@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { showConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MAX_WORKOUT_DAYS, MIN_WORKOUT_DAYS } from '@/constants';
@@ -155,9 +156,11 @@ export const useProfileScreen = (): ProfileScreenResult => {
     }
   }, []);
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData])
+  );
 
   /**
    * Debounces profile-name persistence so rapid typing does not spam database writes.
