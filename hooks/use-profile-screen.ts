@@ -330,10 +330,7 @@ export const useProfileScreen = (): ProfileScreenResult => {
       destructive: true,
       onConfirm: async () => {
         try {
-          const workouts = await db.getAllWorkouts();
-          for (const workout of workouts) {
-            await db.deleteWorkout(workout.id);
-          }
+          await db.clearAllWorkouts();
           setStats((prev) => ({ ...prev, totalWorkouts: 0 }));
         } catch (error) {
           console.error('Error clearing history:', error);
