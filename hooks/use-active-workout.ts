@@ -79,6 +79,9 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
   // STALE LOAD FIX: Track which day-load request is "current"
   const dayLoadRequestRef = useRef(0);
 
+  // DOUBLE-TAP GUARD: Ref-based because setState is async and can't prevent concurrent calls
+  const isSavingRef = useRef(false);
+
   /** Reload the workout queue from the database, normalizing to max size. */
   const reloadQueue = async () => {
     try {
@@ -629,7 +632,8 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
 
   /** Save the completed workout, verify program still exists, and clear timers. */
   const saveWorkout = async () => {
-    if (!currentProgram) return;
+    if (!currentProgram || isSavingRef.current) return;
+    isSavingRef.current = true;
 
     const selectedDayNumber = getDayNumberAtIndex(selectedDayIndex);
 
@@ -671,6 +675,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       Alert.alert('Error', 'Failed to save workout');
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   };
 
