@@ -685,6 +685,24 @@ export default function ProgramsScreen() {
     );
   }
 
-  // Fallback
-  return null;
+  // Fallback: reset to list view if state machine reaches an unhandled combination
+  return (
+    <ThemedView className="flex-1 items-center justify-center p-6">
+      <ThemedText className="text-lg font-semibold mb-2">Something went wrong</ThemedText>
+      <ThemedText className="text-center text-gray-500 mb-4">
+        The screen reached an unexpected state. Tap below to go back to the program list.
+      </ThemedText>
+      <Pressable
+        onPress={() => {
+          clearForm();
+          setViewMode(ProgramViewMode.List);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Return to programs list"
+        className="bg-blue-500 rounded-full py-3 px-6"
+      >
+        <ThemedText className="text-white font-semibold">Back to Programs</ThemedText>
+      </Pressable>
+    </ThemedView>
+  );
 }
