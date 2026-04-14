@@ -85,8 +85,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const [setsCompleted, setSetsCompleted] = useState(0);
   const [timerCompleted, setTimerCompleted] = useState(false);
   // LOADING STATE FIX: Track when async timer operations are in progress
-  // This prevents rapid clicks from causing race conditions
   const [isOperationPending, setIsOperationPending] = useState(false);
+  const isOperationPendingRef = useRef(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasVibratedRef = useRef(false);
   
@@ -340,20 +340,16 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     // RACE CONDITION FIX: Check mounted state
     if (!isMountedRef.current) return;
     
-    // RAPID CLICK FIX: Prevent starting if an operation is already in progress
-    if (isOperationPending) return;
-    
+    if (isOperationPendingRef.current) return;
+    isOperationPendingRef.current = true;
     setIsOperationPending(true);
     
     try {
       const newEndTimestamp = Date.now() + restTimeSeconds * 1000;
       
-      // FIX: Increment the ref (source of truth) directly
-      // This is synchronous and gives us the exact value we need
       setsCompletedRef.current += 1;
       const newSetsCompleted = setsCompletedRef.current;
       
-      // Update state to trigger UI re-render
       setSetsCompleted(newSetsCompleted);
       
       setEndTimestamp(newEndTimestamp);
@@ -362,9 +358,6 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
       setTimerCompleted(false);
       hasVibratedRef.current = false;
 
-      // Persist to database - we use the ref value which is guaranteed correct
-      // VALIDATION: Only save to DB if we have valid context
-      // Timer will still work locally (countdown, vibration) even without persistence
       if (hasValidContext) {
         await db.saveActiveTimer({
           ...timerContext,
@@ -374,17 +367,16 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
         });
       }
     } catch (error) {
-      // Only log if still mounted
       if (isMountedRef.current) {
         console.error('Error saving timer state:', error);
       }
     } finally {
-      // Only update state if still mounted
+      isOperationPendingRef.current = false;
       if (isMountedRef.current) {
         setIsOperationPending(false);
       }
     }
-  }, [restTimeSeconds, timerContext, isOperationPending, hasValidContext]);
+  }, [restTimeSeconds, timerContext, hasValidContext]);
 
   // =============================================================================
   // Stop/reset the timer
@@ -394,33 +386,29 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
     // RACE CONDITION FIX: Check mounted state
     if (!isMountedRef.current) return;
     
-    // RAPID CLICK FIX: Prevent stopping if an operation is already in progress
-    if (isOperationPending) return;
-    
+    if (isOperationPendingRef.current) return;
+    isOperationPendingRef.current = true;
     setIsOperationPending(true);
     
     try {
-      // Clear interval first to stop any pending ticks
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
       
-      // Update UI state
       setIsTimerRunning(false);
       setTimerSeconds(0);
       setEndTimestamp(null);
       setTimerCompleted(false);
 
-      // RACE CONDITION FIX: Use safe clear with proper error handling
       await safeClearTimer(endTimestampRef.current ?? undefined);
     } finally {
-      // Only update state if still mounted
+      isOperationPendingRef.current = false;
       if (isMountedRef.current) {
         setIsOperationPending(false);
       }
     }
-  }, [safeClearTimer, isOperationPending]);
+  }, [safeClearTimer]);
 
   // =============================================================================
   // Timer countdown effect - recalculates from timestamp each tick
