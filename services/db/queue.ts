@@ -169,10 +169,13 @@ export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> =>
   const first = queue[0];
   const database = await getDatabase();
 
-  await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
-  await database.runAsync(
-    'UPDATE workout_queue SET position = position - 1 WHERE position > 0'
-  );
+  await runInTransaction(database, async () => {
+    await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
+    await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [first.id]);
+    await database.runAsync(
+      'UPDATE workout_queue SET position = position - 1 WHERE position > 0'
+    );
+  });
 
   return first;
 };
