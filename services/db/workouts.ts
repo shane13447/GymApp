@@ -160,6 +160,11 @@ export const deleteWorkout = async (workoutId: string): Promise<void> => {
   await database.runAsync('DELETE FROM workouts WHERE id = ?', [workoutId]);
 };
 
+export const clearAllWorkouts = async (): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM workouts');
+};
+
 export const getLastLoggedWeight = async (
   exerciseName: string,
   programId: string,

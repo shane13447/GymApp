@@ -9,60 +9,70 @@
 
 import { DATABASE_NAME, DEFAULT_QUEUE_SIZE } from '@/constants';
 import type {
-  Program,
-  Workout,
-  WorkoutQueueItem
+    Program,
+    Workout,
+    WorkoutQueueItem
 } from '@/types';
 import * as SQLite from 'expo-sqlite';
 
 import {
-  getDb,
-  setDb,
-  getInitPromise,
-  setInitPromise,
-  getMaintenancePromise,
-  setMaintenancePromise,
-  isMaintenanceCompleted,
-  setMaintenanceCompleted,
-  logStartupStage,
-  registerDatabaseGetter,
+    getDb,
+    getInitPromise,
+    getMaintenancePromise,
+    isMaintenanceCompleted,
+    logStartupStage,
+    registerDatabaseGetter,
+    setDb,
+    setInitPromise,
+    setMaintenanceCompleted,
+    setMaintenancePromise,
 } from '@/services/db/connection';
 import {
-  validateWorkoutQueueForPersistence as queueValidateWorkoutQueueForPersistence,
-  getWorkoutQueue as queueGetWorkoutQueue,
-  saveWorkoutQueue as queueSaveWorkoutQueue,
-  addToWorkoutQueue as queueAddToWorkoutQueue,
-  dequeueFirstWorkout as queueDequeueFirstWorkout,
-  clearWorkoutQueue as queueClearWorkoutQueue,
-  updateQueueItem as queueUpdateQueueItem,
-  generateWorkoutQueue as queueGenerateWorkoutQueue,
-  skipQueueToDay as queueSkipQueueToDay,
-  getQueueItemForDay as queueGetQueueItemForDay,
-  incrementQueueGenerationId,
-} from '@/services/db/queue';
-import * as programsDb from '@/services/db/programs';
-import * as workoutsDb from '@/services/db/workouts';
-import {
-  getUserPreferences as prefsGetUserPreferences,
-  updateUserPreferences as prefsUpdateUserPreferences,
-  getCurrentProgramId as prefsGetCurrentProgramId,
-  setCurrentProgramId as prefsSetCurrentProgramId,
-  getUserProfile as prefsGetUserProfile,
-  updateUserProfile as prefsUpdateUserProfile,
-  getMuscleGroupTargets as prefsGetMuscleGroupTargets,
-  removeMuscleGroupTarget as prefsRemoveMuscleGroupTarget,
-  saveMuscleGroupTargets as prefsSaveMuscleGroupTargets,
-  registerPreferencesDeps,
+    getCurrentProgramId as prefsGetCurrentProgramId,
+    getMuscleGroupTargets as prefsGetMuscleGroupTargets,
+    getUserPreferences as prefsGetUserPreferences,
+    getUserProfile as prefsGetUserProfile,
+    removeMuscleGroupTarget as prefsRemoveMuscleGroupTarget,
+    saveMuscleGroupTargets as prefsSaveMuscleGroupTargets,
+    setCurrentProgramId as prefsSetCurrentProgramId,
+    updateUserPreferences as prefsUpdateUserPreferences,
+    updateUserProfile as prefsUpdateUserProfile,
+    registerPreferencesDeps,
 } from '@/services/db/preferences';
+import * as programsDb from '@/services/db/programs';
 import {
-  type SeedLifecycleState,
-  getSeedStateColumn,
-  getSeedLifecycleStateWithDatabase,
-  mapSeedFixtureToProgram,
-  seedTestProgramsIfMissing,
-  setSeedLifecycleStateWithDatabase,
-  validateSeedFixture,
+    incrementQueueGenerationId,
+    addToWorkoutQueue as queueAddToWorkoutQueue,
+    clearWorkoutQueue as queueClearWorkoutQueue,
+    dequeueFirstWorkout as queueDequeueFirstWorkout,
+    generateWorkoutQueue as queueGenerateWorkoutQueue,
+    getQueueItemForDay as queueGetQueueItemForDay,
+    getWorkoutQueue as queueGetWorkoutQueue,
+    saveWorkoutQueue as queueSaveWorkoutQueue,
+    skipQueueToDay as queueSkipQueueToDay,
+    updateQueueItem as queueUpdateQueueItem,
+    validateWorkoutQueueForPersistence as queueValidateWorkoutQueueForPersistence,
+} from '@/services/db/queue';
+import {
+    type SeedLifecycleState,
+    getSeedLifecycleStateWithDatabase,
+    getSeedStateColumn,
+    mapSeedFixtureToProgram,
+    seedTestProgramsIfMissing,
+    setSeedLifecycleStateWithDatabase,
+    validateSeedFixture,
 } from '@/services/db/seeds';
+import {
+    cleanupOrphanedTimersWithDatabase as timerCleanupOrphanedTimersWithDatabase,
+    clearActiveTimer as timerClearActiveTimer,
+    clearAllActiveTimers as timerClearAllActiveTimers,
+    clearTimersForContext as timerClearTimersForContext,
+    getActiveTimer as timerGetActiveTimer,
+    getAllActiveTimers as timerGetAllActiveTimers,
+    saveActiveTimer as timerSaveActiveTimer,
+    updateTimerSetsCompleted as timerUpdateTimerSetsCompleted,
+} from '@/services/db/timers';
+import * as workoutsDb from '@/services/db/workouts';
 
 // =============================================================================
 // DATABASE INITIALIZATION
@@ -520,6 +530,8 @@ export const saveWorkout = workoutsDb.saveWorkout;
 
 export const deleteWorkout = workoutsDb.deleteWorkout;
 
+export const clearAllWorkouts = workoutsDb.clearAllWorkouts;
+
 export const getLastLoggedWeight = workoutsDb.getLastLoggedWeight;
 
 // =============================================================================
@@ -594,17 +606,7 @@ export const generateWorkoutQueue = async (programId: string): Promise<void> => 
 // REST TIMER PERSISTENCE (delegated to services/db/timers.ts)
 // =============================================================================
 
-export type { TimerContext, ActiveTimerState } from '@/services/db/timers';
-import {
-  saveActiveTimer as timerSaveActiveTimer,
-  getActiveTimer as timerGetActiveTimer,
-  getAllActiveTimers as timerGetAllActiveTimers,
-  clearActiveTimer as timerClearActiveTimer,
-  clearAllActiveTimers as timerClearAllActiveTimers,
-  clearTimersForContext as timerClearTimersForContext,
-  updateTimerSetsCompleted as timerUpdateTimerSetsCompleted,
-  cleanupOrphanedTimersWithDatabase as timerCleanupOrphanedTimersWithDatabase,
-} from '@/services/db/timers';
+export type { ActiveTimerState, TimerContext } from '@/services/db/timers';
 
 export const saveActiveTimer = timerSaveActiveTimer;
 export const getActiveTimer = timerGetActiveTimer;
