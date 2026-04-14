@@ -138,28 +138,30 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
 export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> => {
   const database = await getDatabase();
 
-  const maxPos = await database.getFirstAsync<{ max_pos: number | null }>(
-    'SELECT MAX(position) as max_pos FROM workout_queue'
-  );
-  const position = (maxPos?.max_pos ?? -1) + 1;
+  await runInTransaction(database, async () => {
+    const maxPos = await database.getFirstAsync<{ max_pos: number | null }>(
+      'SELECT MAX(position) as max_pos FROM workout_queue'
+    );
+    const position = (maxPos?.max_pos ?? -1) + 1;
 
-  await database.runAsync(
-    `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      item.id,
-      item.programId,
-      item.programName,
-      item.dayNumber,
-      item.scheduledDate ?? null,
-      position,
-    ]
-  );
+    await database.runAsync(
+      `INSERT INTO workout_queue (id, program_id, program_name, day_number, scheduled_date, position)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        item.programId,
+        item.programName,
+        item.dayNumber,
+        item.scheduledDate ?? null,
+        position,
+      ]
+    );
 
-  for (let j = 0; j < item.exercises.length; j++) {
-    const { sql, params } = serializeQueueExerciseToSqlParams(item.exercises[j], j, item.id);
-    await database.runAsync(sql, params);
-  }
+    for (let j = 0; j < item.exercises.length; j++) {
+      const { sql, params } = serializeQueueExerciseToSqlParams(item.exercises[j], j, item.id);
+      await database.runAsync(sql, params);
+    }
+  });
 };
 
 export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> => {
