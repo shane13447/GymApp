@@ -9,16 +9,16 @@ export const JOINT_INJURY_MAP = {
   wrist: ['forearms', 'biceps', 'triceps', 'shoulders'],
   shoulder: ['shoulders', 'chest', 'triceps'],
   elbow: ['forearms', 'biceps', 'triceps'],
-  neck: ['traps', 'shoulders', 'back'],
+  neck: ['traps', 'shoulders', 'lats'],
 
   // Lower body joints
   knee: ['quads', 'hamstrings', 'glutes', 'calves'],
   ankle: ['calves', 'hamstrings', 'glutes', 'quads'],
-  hip: ['glutes', 'hamstrings', 'quads', 'hip-flexors'],
+  hip: ['glutes', 'hamstrings', 'quads', 'abs'],
 
   // Core/spine
-  'lower back': ['lower-back', 'glutes', 'hamstrings'],
-  'lower-back': ['lower-back', 'glutes', 'hamstrings'],
+  'lower back': ['lats', 'abs', 'glutes', 'hamstrings'],
+  'lower-back': ['lats', 'abs', 'glutes', 'hamstrings'],
 } as const;
 
 /**
