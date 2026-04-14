@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Alert, Keyboard } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import exercisesData from '@/data/exerciseSelection.json';
 import { coerceExerciseFieldValue } from '@/lib/exercise-field-coercion';
@@ -129,9 +130,11 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
     }
   }, []);
 
-  useEffect(() => {
-    void loadPrograms();
-  }, [loadPrograms]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadPrograms();
+    }, [loadPrograms])
+  );
 
   /**
    * Resets all create/edit form state back to its initial baseline.
