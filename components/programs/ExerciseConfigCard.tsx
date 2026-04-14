@@ -227,12 +227,15 @@ export const ExerciseConfigCard = memo(function ExerciseConfigCard({
           {formatExerciseDisplayName(exercise.name, exercise.variant)}
         </ThemedText>
         {showRemove && onRemove && (
-          <View
+          <Pressable
+            onPress={onRemove}
+            accessibilityRole="button"
+            accessibilityLabel="Remove exercise"
             className="bg-red-500 w-8 h-8 rounded-full items-center justify-center"
-            onTouchEnd={onRemove}
+            style={({ pressed }) => pressed ? { opacity: 0.7 } : undefined}
           >
             <ThemedText className="text-white font-bold text-sm">×</ThemedText>
-          </View>
+          </Pressable>
         )}
       </View>
 
