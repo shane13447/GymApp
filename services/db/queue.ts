@@ -268,6 +268,8 @@ export const generateWorkoutQueue = async (
 
   const queueItems: WorkoutQueueItem[] = [];
   const numDays = program.workoutDays.length;
+  const batchTs = Date.now();
+  const batchRand = Math.random().toString(36).slice(2, 8);
 
   for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
     if (thisRequestId !== getQueueGenerationId()) return;
@@ -278,7 +280,7 @@ export const generateWorkoutQueue = async (
     const exercisesWithProgression = await applyProgressionToExercises(workoutDay.exercises, programId, getLastLoggedWeight);
 
     queueItems.push({
-      id: `queue-${Date.now()}-${i}`,
+      id: `queue-${batchTs}-${batchRand}-${i}`,
       programId: program.id,
       programName: program.name,
       dayNumber: workoutDay.dayNumber,
@@ -342,6 +344,9 @@ export const skipQueueToDay = async (
     return referenceQueue;
   }
 
+  const skipTs = Date.now();
+  const skipRand = Math.random().toString(36).slice(2, 8);
+
   while (newQueue.length < DEFAULT_QUEUE_SIZE) {
     const lastDayNumber = newQueue.length > 0
       ? newQueue[newQueue.length - 1].dayNumber
@@ -357,7 +362,7 @@ export const skipQueueToDay = async (
     const exercisesWithProgression = await applyProgressionToExercises(nextDay.exercises, programId, getLastLoggedWeight);
 
     newQueue.push({
-      id: `queue-${Date.now()}-${newQueue.length}`,
+      id: `queue-${skipTs}-${skipRand}-${newQueue.length}`,
       programId: program.id,
       programName: program.name,
       dayNumber: nextDay.dayNumber,
