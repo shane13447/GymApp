@@ -147,7 +147,7 @@ export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
     return existing;
   }
 
-  const promise = (async () => {
+  const maintenanceWork = (async () => {
     const database = await getDatabase();
 
     logStartupStage('seed_start');
@@ -159,13 +159,15 @@ export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
     logStartupStage('timer_cleanup_end');
 
     setMaintenanceCompleted(true);
-  })().catch((error) => {
+  })();
+
+  const guarded = maintenanceWork.catch((error) => {
     setMaintenancePromise(null);
     throw error;
   });
 
-  setMaintenancePromise(promise);
-  return promise;
+  setMaintenancePromise(guarded);
+  return guarded;
 };
 
 export const validateWorkoutQueueForPersistence = queueValidateWorkoutQueueForPersistence;
