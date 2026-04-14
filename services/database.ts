@@ -518,12 +518,10 @@ export const deleteProgram = async (programId: string): Promise<void> => {
 
 export const getAllWorkouts = workoutsDb.getAllWorkouts;
 
-export const getWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
-  return workoutsDb.getWorkoutsForProgram(programId, workoutsDb.getAllWorkouts);
-};
+export const getWorkoutsForProgram = workoutsDb.getWorkoutsForProgram;
 
 export const getCompletedWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
-  return workoutsDb.getCompletedWorkoutsForProgram(programId, (id: string) => workoutsDb.getWorkoutsForProgram(id, workoutsDb.getAllWorkouts));
+  return workoutsDb.getCompletedWorkoutsForProgram(programId, workoutsDb.getWorkoutsForProgram);
 };
 
 export const saveWorkout = workoutsDb.saveWorkout;

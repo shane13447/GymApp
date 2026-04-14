@@ -95,12 +95,70 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
   return result;
 };
 
-export const getWorkoutsForProgram = async (programId: string, getAllWorkoutsFn: () => Promise<Workout[]>): Promise<Workout[]> => {
-  const allWorkouts = await getAllWorkoutsFn();
-  return allWorkouts.filter((w) => w.programId === programId);
+export const getWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
+  const database = await getDatabase();
+
+  const workouts = await database.getAllAsync<{
+    id: string;
+    date: string;
+    program_id: string;
+    program_name: string;
+    day_number: number;
+    completed: number;
+    duration: number | null;
+    notes: string | null;
+  }>('SELECT * FROM workouts WHERE program_id = ? ORDER BY date DESC', [programId]);
+
+  const result: Workout[] = [];
+
+  for (const workout of workouts) {
+    const exercises = await database.getAllAsync<WorkoutExerciseRow>(
+      'SELECT * FROM workout_exercises WHERE workout_id = ? ORDER BY position',
+      [workout.id]
+    );
+
+    result.push({
+      id: workout.id,
+      date: workout.date,
+      programId: workout.program_id,
+      programName: workout.program_name,
+      dayNumber: workout.day_number,
+      completed: workout.completed === 1,
+      duration: workout.duration ?? undefined,
+      notes: workout.notes ?? undefined,
+      exercises: exercises.map((ex) => ({
+        name: ex.name,
+        equipment: ex.equipment,
+        muscle_groups_worked: parseStringArrayField(ex.muscle_groups, 'workout_exercises.muscle_groups', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
+        isCompound: !!ex.is_compound,
+        weight: ex.weight.toString(),
+        reps: ex.reps.toString(),
+        sets: ex.sets.toString(),
+        restTime: ex.rest_time.toString(),
+        progression: ex.progression.toString(),
+        hasCustomisedSets: ex.has_customised_sets === 1,
+        variant: parseVariant(ex.variant_json),
+        loggedWeight: ex.logged_weight,
+        loggedReps: ex.logged_reps,
+        loggedSetWeights: parseNumberArrayField(ex.logged_set_weights ?? '[]', 'workout_exercises.logged_set_weights', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
+        loggedSetReps: parseNumberArrayField(ex.logged_set_reps ?? '[]', 'workout_exercises.logged_set_reps', {
+          workout_id: workout.id,
+          exercise: ex.name,
+        }),
+      })),
+    });
+  }
+
+  return result;
 };
 
-export const getCompletedWorkoutsForProgram = async (programId: string, getWorkoutsForProgramFn: (id: string) => Promise<Workout[]>): Promise<Workout[]> => {
+export const getCompletedWorkoutsForProgram = async (programId: string, getWorkoutsForProgramFn: (id: string) => Promise<Workout[]> = getWorkoutsForProgram): Promise<Workout[]> => {
   const workouts = await getWorkoutsForProgramFn(programId);
   return workouts.filter((w) => w.completed);
 };
