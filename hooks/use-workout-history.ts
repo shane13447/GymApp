@@ -6,7 +6,8 @@
  * lib/workout-history.ts for independent testability.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 import * as db from '@/services/database';
 import { groupWorkoutsByDate, type WorkoutsByDate } from '@/lib/workout-history';
@@ -49,9 +50,27 @@ export const useWorkoutHistory = (): WorkoutHistoryResult => {
     }
   };
 
-  useEffect(() => {
-    loadWorkouts();
-  }, []);
+  const loadRequestIdRef = useRef(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const requestId = ++loadRequestIdRef.current;
+      (async () => {
+        try {
+          const loadedWorkouts = await db.getAllWorkouts();
+          if (requestId === loadRequestIdRef.current) {
+            setWorkouts(loadedWorkouts);
+          }
+        } catch (error) {
+          console.error('Error loading workouts:', error);
+        } finally {
+          if (requestId === loadRequestIdRef.current) {
+            setIsLoading(false);
+          }
+        }
+      })();
+    }, [])
+  );
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
