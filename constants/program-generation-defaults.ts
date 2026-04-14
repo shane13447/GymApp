@@ -50,7 +50,8 @@ export const TRAINING_GOAL_DEFAULTS: Record<TrainingGoal | 'default', {
     restTimeByMuscle: {
       // Slow recovery muscles need 3 min rest for strength
       chest: 180,
-      back: 180,
+      lats: 180,
+      traps: 180,
       shoulders: 180,
       quads: 180,
       hamstrings: 180,
@@ -71,7 +72,8 @@ export const TRAINING_GOAL_DEFAULTS: Record<TrainingGoal | 'default', {
     restTimeByMuscle: {
       // Hypertrophy expects 2-3 min depending on muscle group
       chest: 180,
-      back: 180,
+      lats: 180,
+      traps: 180,
       shoulders: 180,
       quads: 180,
       hamstrings: 180,
@@ -90,7 +92,8 @@ export const TRAINING_GOAL_DEFAULTS: Record<TrainingGoal | 'default', {
     setsMultiplier: 1.0,
     restTimeByMuscle: {
       chest: 120,
-      back: 120,
+      lats: 120,
+      traps: 120,
       shoulders: 120,
       quads: 120,
       hamstrings: 120,
@@ -109,7 +112,8 @@ export const TRAINING_GOAL_DEFAULTS: Record<TrainingGoal | 'default', {
     setsMultiplier: 1.0,
     restTimeByMuscle: {
       chest: 180,
-      back: 180,
+      lats: 180,
+      traps: 180,
       shoulders: 180,
       quads: 180,
       hamstrings: 180,
