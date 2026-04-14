@@ -56,7 +56,9 @@ export const callCoachProxy = async (
     });
 
     const rawBody = await response.text();
-    console.log('[COACH PROXY] Raw API response body:', rawBody);
+    if (__DEV__) {
+      console.log('[COACH PROXY] Raw API response body:', rawBody);
+    }
 
     if (!response.ok) {
       throw new Error(rawBody || `Coach proxy request failed (${response.status})`);
