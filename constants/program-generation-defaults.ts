@@ -243,7 +243,7 @@ export const getGenerationConfig = (params: {
   const expLevel = params.experienceLevel ?? PROGRAM_GENERATION_DEFAULTS.experienceLevel;
   const days = params.trainingDaysPerWeek ?? PROGRAM_GENERATION_DEFAULTS.trainingDaysPerWeek;
   const duration = params.sessionDurationMinutes ?? PROGRAM_GENERATION_DEFAULTS.sessionDurationMinutes;
-  const goal = params.trainingGoal ?? 'default';
+  const goal = params.trainingGoal ?? 'hypertrophy';
 
   const expConfig = EXPERIENCE_LEVEL_DEFAULTS[expLevel];
   const goalConfig = TRAINING_GOAL_DEFAULTS[goal] ?? TRAINING_GOAL_DEFAULTS.default;
