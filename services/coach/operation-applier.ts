@@ -117,6 +117,27 @@ const findExerciseInQueue = (
   return null;
 };
 
+/**
+ * Generate the next unused exercise instance ID for a queue item.
+ *
+ * @param queueItem - Queue item receiving a new exercise
+ * @returns Unique exercise instance ID scoped to the queue item
+ */
+const getNextExerciseInstanceId = (queueItem: WorkoutQueueItem): string => {
+  const idPrefix = `${queueItem.id}:e`;
+  const highestExistingIndex = queueItem.exercises.reduce((maxIndex, exercise, exerciseIndex) => {
+    const parsedIndex = exercise.exerciseInstanceId?.startsWith(idPrefix)
+      ? Number.parseInt(exercise.exerciseInstanceId.slice(idPrefix.length), 10)
+      : Number.NaN;
+
+    return Number.isNaN(parsedIndex)
+      ? Math.max(maxIndex, exerciseIndex)
+      : Math.max(maxIndex, parsedIndex);
+  }, -1);
+
+  return `${queueItem.id}:e${highestExistingIndex + 1}`;
+};
+
 // =============================================================================
 // OPERATION APPLICATION
 // =============================================================================
@@ -243,7 +264,7 @@ export const applyOperations = (
         if (targetDay && operation.value?.exerciseName) {
           const catalogEntry = catalogLookup?.(operation.value.exerciseName) ?? null;
           const newExercise: ProgramExercise = {
-            exerciseInstanceId: `${targetDay.id}:e${targetDay.exercises.length}`,
+            exerciseInstanceId: getNextExerciseInstanceId(targetDay),
             name: operation.value.exerciseName,
             equipment: catalogEntry?.equipment ?? '',
             muscle_groups_worked: catalogEntry?.muscle_groups_worked ?? [],
