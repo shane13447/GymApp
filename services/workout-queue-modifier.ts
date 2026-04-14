@@ -3590,24 +3590,15 @@ export const mergeScopedQueueChanges = (
 };
 
 export const loadWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
-  try {
-    return await db.getWorkoutQueue();
-  } catch (error) {
-    console.error('Error loading workout queue:', error);
-    return [];
-  }
+  return db.getWorkoutQueue();
 };
 
 /**
- * Apply new workout queue to database
+ * Apply new workout queue to database.
+ * Throws on failure so callers can surface errors to the user.
  */
 export const applyNewWorkoutQueue = async (newQueue: WorkoutQueueItem[]): Promise<boolean> => {
-  try {
-    const filteredQueue = newQueue.filter((item) => item.exercises.length > 0);
-    await db.saveWorkoutQueue(filteredQueue);
-    return true;
-  } catch (error) {
-    console.error('Error applying new workout queue:', error);
-    return false;
-  }
+  const filteredQueue = newQueue.filter((item) => item.exercises.length > 0);
+  await db.saveWorkoutQueue(filteredQueue);
+  return true;
 };
