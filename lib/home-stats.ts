@@ -79,9 +79,8 @@ export const calculateStreak = (workouts: Workout[], now?: Date): number => {
 export const getThisWeekWorkoutCount = (workouts: Workout[], now?: Date): number => {
   const referenceDate = now ?? new Date();
   const weekStart = new Date(referenceDate);
-  // Preserve local calendar boundaries to match the Home screen's prior behavior.
-  weekStart.setDate(referenceDate.getDate() - referenceDate.getDay());
-  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setUTCDate(referenceDate.getUTCDate() - referenceDate.getUTCDay());
+  weekStart.setUTCHours(0, 0, 0, 0);
 
   return workouts.filter(
     (workout) => new Date(workout.date) >= weekStart && workout.completed
