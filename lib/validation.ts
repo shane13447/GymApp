@@ -127,7 +127,7 @@ export function parseWeight(weight: string): { value: number; unit: string; isVa
     return { value: 0, unit: '', isValid: true };
   }
 
-  const match = weight.trim().match(/^([\d.]+)\s*(kg|lbs?|lb)?$/i);
+  const match = weight.trim().match(/^(\d+\.?\d*)\s*(kg|lbs?)?$/i);
   if (!match) {
     return { value: 0, unit: '', isValid: false };
   }
