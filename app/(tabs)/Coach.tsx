@@ -58,6 +58,7 @@ export default function CoachScreen() {
   const [proposedChanges, setProposedChanges] = useState<ProposedChanges | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
+  const workoutQueueRef = useRef<WorkoutQueueItem[]>([]);
   const [queueHorizon, setQueueHorizon] = useState(3);
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const [generatedProgramDraft, setGeneratedProgramDraft] = useState<DraftProgram | null>(null);
@@ -90,6 +91,7 @@ export default function CoachScreen() {
         db.getUserProfile(),
       ]);
       setWorkoutQueue(queue);
+      workoutQueueRef.current = queue;
       const complete =
         profile.experienceLevel !== null &&
         profile.trainingDaysPerWeek !== null &&
@@ -161,7 +163,7 @@ export default function CoachScreen() {
       const result = processCoachResponse({
         proxyResponse,
         scopedQueue: scopedQueueRef.current,
-        fullQueue: workoutQueue,
+        fullQueue: workoutQueueRef.current,
         inputText,
         targetedExercises: targetedExercisesRef.current,
         isTestMode,
@@ -634,6 +636,7 @@ export default function CoachScreen() {
       await db.saveWorkoutQueue(generatedQueue);
       const updatedQueue = await db.getWorkoutQueue();
       setWorkoutQueue(updatedQueue);
+      workoutQueueRef.current = updatedQueue;
       Alert.alert('Success', 'Workout queue has been updated!');
       setShowModal(false);
       setProposedChanges(null);
