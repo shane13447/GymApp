@@ -190,18 +190,20 @@ export const clearWorkoutQueue = async (): Promise<void> => {
 export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => {
   const database = await getDatabase();
 
-  await database.runAsync(
-    `UPDATE workout_queue SET program_id = ?, program_name = ?, day_number = ?, scheduled_date = ?
-     WHERE id = ?`,
-    [item.programId, item.programName, item.dayNumber, item.scheduledDate ?? null, item.id]
-  );
+  await runInTransaction(database, async () => {
+    await database.runAsync(
+      `UPDATE workout_queue SET program_id = ?, program_name = ?, day_number = ?, scheduled_date = ?
+       WHERE id = ?`,
+      [item.programId, item.programName, item.dayNumber, item.scheduledDate ?? null, item.id]
+    );
 
-  await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [item.id]);
+    await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [item.id]);
 
-  for (let j = 0; j < item.exercises.length; j++) {
-    const { sql, params } = serializeQueueExerciseToSqlParams(item.exercises[j], j, item.id);
-    await database.runAsync(sql, params);
-  }
+    for (let j = 0; j < item.exercises.length; j++) {
+      const { sql, params } = serializeQueueExerciseToSqlParams(item.exercises[j], j, item.id);
+      await database.runAsync(sql, params);
+    }
+  });
 };
 
 function roundWeightToNearestQuarter(weight: number): number {
