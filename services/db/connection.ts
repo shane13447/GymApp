@@ -74,6 +74,7 @@ export const getDatabaseCore = async (
     try {
       logStartupStage('db_open_start');
       const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      await database.execAsync('PRAGMA foreign_keys = ON');
       logStartupStage('db_open_end');
 
       logStartupStage('db_schema_start');
