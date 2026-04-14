@@ -198,18 +198,15 @@ export function validatePositiveInteger(
   }
 
   const trimmed = input.trim();
-  const num = parseInt(trimmed, 10);
 
-  if (isNaN(num)) {
-    return { value: null, isValid: false, error: 'Must be a valid number' };
+  if (!/^\d+$/.test(trimmed)) {
+    return { value: null, isValid: false, error: 'Must be a valid whole number' };
   }
+
+  const num = parseInt(trimmed, 10);
 
   if (num <= 0) {
     return { value: null, isValid: false, error: 'Must be a positive number' };
-  }
-
-  if (!Number.isInteger(parseFloat(trimmed))) {
-    return { value: null, isValid: false, error: 'Must be a whole number' };
   }
 
   return { value: num, isValid: true, error: null };
