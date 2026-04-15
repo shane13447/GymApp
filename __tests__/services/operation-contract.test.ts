@@ -181,6 +181,25 @@ describe('operation contract', () => {
       expect(result.isValid).toBe(false);
       expect(result.errors.some((e) => e.includes('invalid_type'))).toBe(true);
     });
+
+    it('rejects modify_rest because rest edits are not in the workout queue contract', () => {
+      const result = validateOperationResponse(
+        JSON.stringify({
+          version: 1,
+          operations: [
+            {
+              id: 'op_1',
+              type: 'modify_rest',
+              target: { dayNumber: 1, exerciseName: 'Bench Press' },
+              value: { restTime: 120 },
+            },
+          ],
+        })
+      );
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some((e) => e.includes('modify_rest'))).toBe(true);
+    });
   });
 
   // =========================================================================
@@ -191,7 +210,6 @@ describe('operation contract', () => {
       modify_weight: { weight: 80 },
       modify_reps: { reps: 10 },
       modify_sets: { sets: 4 },
-      modify_rest: { restTime: 120 },
       swap_variant: { variant: 'Incline' },
       add_exercise: { exerciseName: 'Cable Curl' },
       remove_exercise: {},

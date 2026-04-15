@@ -5,8 +5,9 @@
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import '../global.css';
 
@@ -14,29 +15,53 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as db from '@/services/database';
 
+SplashScreen.preventAutoHideAsync();
+
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [dbReady, setDbReady] = useState(false);
 
-  // =============================================================================
-  // STARTUP MAINTENANCE: Run deferred after shell mount
-  // =============================================================================
-// Deferred maintenance handles seed reconciliation + cleanup on launch
   useEffect(() => {
+    const init = async () => {
+      try {
+        await db.getDatabase();
+      } catch (error) {
+        console.error('Database initialization failed:', error);
+      } finally {
+        setDbReady(true);
+      }
+    };
+
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (!dbReady) return;
+
     const runStartupMaintenance = async () => {
       try {
         await db.runDeferredDatabaseMaintenance();
       } catch (error) {
-        // Non-critical - keep shell/navigation available even if maintenance fails
         console.error('Error running deferred startup maintenance:', error);
       }
     };
 
     runStartupMaintenance();
-  }, []);
+  }, [dbReady]);
+
+  useEffect(() => {
+    if (dbReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [dbReady]);
+
+  if (!dbReady) {
+    return null;
+  }
 
   return (
     <ErrorBoundary>

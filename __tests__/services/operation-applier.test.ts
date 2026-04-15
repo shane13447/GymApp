@@ -321,26 +321,6 @@ describe('operation-applier', () => {
   });
 
   // =========================================================================
-  // modify_rest
-  // =========================================================================
-  describe('modify_rest', () => {
-    it('modifies exercise rest time', () => {
-      const queue = makeQueue([makeExercise({ restTime: '180' })]);
-      const ops: QueueOperation[] = [
-        {
-          id: 'op_1',
-          type: 'modify_rest',
-          target: { dayNumber: 1, exerciseName: 'Bench Press' },
-          value: { restTime: 120 },
-        },
-      ];
-
-      const result = applyOperations(queue, ops);
-      expect(result[0].exercises[0].restTime).toBe('120');
-    });
-  });
-
-  // =========================================================================
   // remove_exercise
   // =========================================================================
   describe('remove_exercise', () => {

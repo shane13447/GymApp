@@ -35,7 +35,7 @@ const makeQueue = (exercises: ProgramExercise[] = [makeExercise()]): WorkoutQueu
 ];
 
 // =============================================================================
-// 1. DEEP-COPY IMMUTABILITY (all 7 operation types)
+// 1. DEEP-COPY IMMUTABILITY (all supported operation types)
 // =============================================================================
 
 describe('Safeguard contract: applyOperations immutability', () => {
@@ -43,7 +43,6 @@ describe('Safeguard contract: applyOperations immutability', () => {
     { type: 'modify_weight', value: { weight: 100 } },
     { type: 'modify_reps', value: { reps: 12 } },
     { type: 'modify_sets', value: { sets: 4 } },
-    { type: 'modify_rest', value: { restTime: 240 } },
     { type: 'swap_variant', value: { variant: 'Incline' } },
     { type: 'remove_exercise' },
     { type: 'add_exercise', value: { exerciseName: 'Calf Press', weight: 60, reps: 15, sets: 3 } },
@@ -140,6 +139,14 @@ describe('Safeguard contract: operation contract validation', () => {
     const result = validateOperationResponse(JSON.stringify({
       version: 1,
       operations: [{ id: 'op_1', type: 'modify_weight', target: { exerciseName: 'Bench Press' } }],
+    }));
+    expect(result.isValid).toBe(false);
+  });
+
+  it('rejects modify_rest operations', () => {
+    const result = validateOperationResponse(JSON.stringify({
+      version: 1,
+      operations: [{ id: 'op_1', type: 'modify_rest', target: { exerciseName: 'Bench Press' }, value: { restTime: 120 } }],
     }));
     expect(result.isValid).toBe(false);
   });

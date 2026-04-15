@@ -41,7 +41,7 @@ export interface QueueOperation {
   /** Unique operation identifier */
   id: string;
   /** Operation type */
-  type: 'modify_weight' | 'modify_reps' | 'modify_sets' | 'modify_rest' | 'add_exercise' | 'remove_exercise' | 'swap_variant';
+  type: 'modify_weight' | 'modify_reps' | 'modify_sets' | 'add_exercise' | 'remove_exercise' | 'swap_variant';
   /** Target: queue item ID or day number */
   target: OperationTarget;
   /** Operation value */
@@ -90,7 +90,6 @@ const VALID_OPERATION_TYPES = [
   'modify_weight',
   'modify_reps', 
   'modify_sets',
-  'modify_rest',
   'add_exercise',
   'remove_exercise',
   'swap_variant',
@@ -136,7 +135,7 @@ const validateOperation = (op: unknown, index: number): string[] => {
   const opType = operation.type as string;
   const value = operation.value as Record<string, unknown> | undefined;
   
-  if (['modify_weight', 'modify_reps', 'modify_sets', 'modify_rest'].includes(opType)) {
+  if (['modify_weight', 'modify_reps', 'modify_sets'].includes(opType)) {
     if (!value || typeof value !== 'object') {
       errors.push(`Operation ${index}: ${opType} requires a value object`);
     }

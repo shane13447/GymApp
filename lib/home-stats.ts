@@ -69,7 +69,7 @@ export const calculateStreak = (workouts: Workout[], now?: Date): number => {
 // =============================================================================
 
 /**
- * Count completed workouts that fall within the current calendar week.
+ * Count completed workouts that fall within the current local calendar week.
  *
  * Week starts on Sunday (as per Date.getDay() convention).
  *
@@ -79,11 +79,17 @@ export const calculateStreak = (workouts: Workout[], now?: Date): number => {
 export const getThisWeekWorkoutCount = (workouts: Workout[], now?: Date): number => {
   const referenceDate = now ?? new Date();
   const weekStart = new Date(referenceDate);
-  weekStart.setUTCDate(referenceDate.getUTCDate() - referenceDate.getUTCDay());
-  weekStart.setUTCHours(0, 0, 0, 0);
+  weekStart.setDate(referenceDate.getDate() - referenceDate.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+
+  const nextWeekStart = new Date(weekStart);
+  nextWeekStart.setDate(weekStart.getDate() + 7);
 
   return workouts.filter(
-    (workout) => new Date(workout.date) >= weekStart && workout.completed
+    (workout) => {
+      const workoutDate = new Date(workout.date);
+      return workout.completed && workoutDate >= weekStart && workoutDate < nextWeekStart;
+    }
   ).length;
 };
 
@@ -106,8 +112,8 @@ export const formatRelativeDate = (dateString: string): string => {
   const date = new Date(dateString);
   const now = new Date();
 
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const todayMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dateMidnight = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const days = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / (1000 * 60 * 60 * 24));
 
   if (days === 0) return 'Today';

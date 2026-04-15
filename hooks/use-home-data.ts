@@ -75,6 +75,7 @@ export const useHomeData = (): HomeDataResult => {
       setIsRefreshing(true);
       setLoadState('refreshing');
     } else {
+      setIsRefreshing(false);
       setLoadState((current) => current === 'loaded' ? current : 'initial_loading');
     }
 

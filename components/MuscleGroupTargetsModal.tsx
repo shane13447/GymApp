@@ -3,7 +3,7 @@
  * Allows users to customize target sets per muscle group
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -85,51 +85,37 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
   }, []);
 
   const handleInputBlur = useCallback((muscleGroup: string) => {
-    const input = inputs[muscleGroup];
-    if (!input) return;
+    setInputs((prev) => {
+      const input = prev[muscleGroup];
+      if (!input) return prev;
 
-    // Empty is valid (use global default)
-    if (!input.value.trim()) {
-      setInputs((prev) => ({
+      if (!input.value.trim()) {
+        return { ...prev, [muscleGroup]: { value: '', error: null } };
+      }
+
+      const validation = validatePositiveInteger(input.value);
+
+      if (!validation.isValid) {
+        return { ...prev, [muscleGroup]: { ...input, error: validation.error } };
+      }
+
+      return {
         ...prev,
-        [muscleGroup]: {
-          value: '',
-          error: null,
-        },
-      }));
-      return;
-    }
+        [muscleGroup]: { value: validation.value?.toString() || '', error: null },
+      };
+    });
+  }, []);
 
-    const validation = validatePositiveInteger(input.value);
-    
-    if (!validation.isValid) {
-      setInputs((prev) => ({
-        ...prev,
-        [muscleGroup]: {
-          ...prev[muscleGroup],
-          error: validation.error,
-        },
-      }));
-      return;
-    }
-
-    // Normalize the value
-    setInputs((prev) => ({
-      ...prev,
-      [muscleGroup]: {
-        value: validation.value?.toString() || '',
-        error: null,
-      },
-    }));
-  }, [inputs]);
+  const inputsRef = useRef(inputs);
+  inputsRef.current = inputs;
 
   const handleSave = useCallback(() => {
-    // Validate all inputs
+    const currentInputs = inputsRef.current;
     let hasErrors = false;
-    const newInputs = { ...inputs };
+    const newInputs = { ...currentInputs };
 
     muscleGroups.forEach((group) => {
-      const input = inputs[group];
+      const input = currentInputs[group];
       if (input?.value.trim()) {
         const validation = validatePositiveInteger(input.value);
         if (!validation.isValid) {
@@ -147,11 +133,10 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
       return;
     }
 
-    // Build targets array (only include groups with custom values)
     const targets: MuscleGroupTarget[] = [];
-    
+
     muscleGroups.forEach((group) => {
-      const input = inputs[group];
+      const input = currentInputs[group];
       if (input?.value.trim()) {
         const num = parseInt(input.value, 10);
         if (!isNaN(num) && num > 0) {
@@ -164,7 +149,7 @@ export const MuscleGroupTargetsModal: React.FC<MuscleGroupTargetsModalProps> = (
     });
 
     onSave(targets);
-  }, [inputs, muscleGroups, onSave]);
+  }, [muscleGroups, onSave]);
 
   const handleClearAll = useCallback(() => {
     const clearedInputs: Record<string, MuscleGroupInputState> = {};

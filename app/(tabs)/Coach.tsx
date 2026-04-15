@@ -5,7 +5,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { CoachGeneratedProgramPreview } from '@/components/coach/CoachGeneratedProgramPreview';
 import { CoachQueueList } from '@/components/coach/CoachQueueList';
@@ -16,6 +16,11 @@ import { ThemedView } from '@/components/themed-view';
 import WorkoutModificationModal from '@/components/WorkoutModificationModal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type CoachProxyMessage } from '@/lib/coach-utils';
+import {
+  DEFAULT_QUEUE_HORIZON,
+  resolveQueueHorizonBlur,
+  sanitizeQueueHorizonInput,
+} from '@/lib/queue-horizon-input';
 import { getSupabaseAccessToken } from '@/lib/supabase';
 import * as db from '@/services/database';
 import { callCoachProxy, getCoachProxyUrl } from '@/services/coach/proxy-client';
@@ -59,7 +64,8 @@ export default function CoachScreen() {
   const [showModal, setShowModal] = useState(false);
   const [workoutQueue, setWorkoutQueue] = useState<WorkoutQueueItem[]>([]);
   const workoutQueueRef = useRef<WorkoutQueueItem[]>([]);
-  const [queueHorizon, setQueueHorizon] = useState(3);
+  const [queueHorizon, setQueueHorizon] = useState(DEFAULT_QUEUE_HORIZON);
+  const [queueHorizonInput, setQueueHorizonInput] = useState(String(DEFAULT_QUEUE_HORIZON));
   const [generatedQueue, setGeneratedQueue] = useState<WorkoutQueueItem[] | null>(null);
   const [generatedProgramDraft, setGeneratedProgramDraft] = useState<DraftProgram | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -68,6 +74,7 @@ export default function CoachScreen() {
   const [isProfileComplete, setIsProfileComplete] = useState(false);
   const targetedExercisesRef = useRef<TargetedExerciseRef[]>([]);
   const scopedQueueRef = useRef<WorkoutQueueItem[]>([]);
+  const sentInputTextRef = useRef<string>('');
   const lastProcessedResponseRef = useRef<string>('');
   const coachProxyUrl = useRef(getCoachProxyUrl());
   const requestCounterRef = useRef(0);
@@ -83,6 +90,21 @@ export default function CoachScreen() {
 
   const colorScheme = useColorScheme();
   const textColor = colorScheme === 'dark' ? '#ffffff' : '#000000';
+
+  const handleQueueHorizonChange = useCallback((text: string) => {
+    const inputValue = sanitizeQueueHorizonInput(text);
+    setQueueHorizonInput(inputValue);
+
+    if (inputValue) {
+      setQueueHorizon(Number.parseInt(inputValue, 10));
+    }
+  }, []);
+
+  const handleQueueHorizonBlur = useCallback(() => {
+    const resolved = resolveQueueHorizonBlur(queueHorizonInput, queueHorizon);
+    setQueueHorizonInput(resolved.inputValue);
+    setQueueHorizon(resolved.horizon);
+  }, [queueHorizon, queueHorizonInput]);
 
   const loadData = useCallback(async () => {
     try {
@@ -164,7 +186,7 @@ export default function CoachScreen() {
         proxyResponse,
         scopedQueue: scopedQueueRef.current,
         fullQueue: workoutQueueRef.current,
-        inputText,
+        inputText: sentInputTextRef.current,
         targetedExercises: targetedExercisesRef.current,
         isTestMode,
         testIndex,
@@ -290,7 +312,7 @@ export default function CoachScreen() {
         }
       }
     }
-  }, [proxyResponse, isGenerating, workoutQueue, isTestMode, testIndex, inputText, testResults]);
+  }, [proxyResponse, isGenerating, workoutQueue, isTestMode, testIndex, testResults]);
 
   const sendToCoach = async () => {
     if (sendLockRef.current || loading || isGenerating) {
@@ -309,6 +331,7 @@ export default function CoachScreen() {
     }
 
     sendLockRef.current = true;
+    sentInputTextRef.current = trimmedInput;
 
     const requestId = requestCounterRef.current + 1;
     requestCounterRef.current = requestId;
@@ -442,6 +465,7 @@ export default function CoachScreen() {
 
       setTestIndex(index);
       setInputText(test.prompt);
+      sentInputTextRef.current = test.prompt;
       setError('');
       setProxyError('');
       setResponse('');
@@ -500,8 +524,10 @@ export default function CoachScreen() {
           exercisesToStore.map((exercise) => exercise.displayName)
         );
         targetedExercisesRef.current = exercisesToStore;
-        
-        const userPrompt = buildCompressedPrompt(processedRequest, workoutQueue);
+
+        const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
+        scopedQueueRef.current = scopedWorkoutQueue;
+        const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
         console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
         console.log(
           `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
@@ -534,19 +560,20 @@ export default function CoachScreen() {
         setIsGenerating(false);
       }
     },
-    [isGenerating, workoutQueue]
+    [isGenerating, queueHorizon, workoutQueue]
   );
 
   // Watch for pending test and run when proxy call is idle
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (pendingNextTestRef.current !== null && !isGenerating && isTestMode) {
       const nextIndex = pendingNextTestRef.current;
       pendingNextTestRef.current = null;
-      // Small delay to ensure state is settled
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         runNextTest(nextIndex);
       }, 500);
     }
+    return () => { if (timeoutId) clearTimeout(timeoutId); };
   }, [isGenerating, isTestMode, runNextTest]);
 
   // Start the test suite
@@ -771,18 +798,11 @@ export default function CoachScreen() {
               </ThemedText>
               <TextInput
                 className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 w-16 text-center text-lg font-bold"
-                value={String(queueHorizon)}
-                onChangeText={(text) => {
-                  const digit = text.replace(/[^1-9]/g, '').slice(0, 1);
-                  setQueueHorizon(digit ? parseInt(digit, 10) : 3);
-                }}
-                onBlur={() => {
-                  if (queueHorizon < 1 || queueHorizon > 9) {
-                    setQueueHorizon(3);
-                  }
-                }}
-                keyboardType="numeric"
-                maxLength={1}
+                value={queueHorizonInput}
+                onChangeText={handleQueueHorizonChange}
+                onBlur={handleQueueHorizonBlur}
+                keyboardType="number-pad"
+                selectTextOnFocus
                 style={{ color: textColor }}
                 accessibilityLabel="Modify workout days (1-9)"
               />
@@ -962,9 +982,9 @@ export default function CoachScreen() {
         {response && !generatedProgramDraft ? (
           <ThemedView className="gap-2 mt-4">
             <ThemedText type="subtitle">Response:</ThemedText>
-            <ThemedView className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg max-h-[300px]">
+            <ScrollView className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg max-h-[300px]" nestedScrollEnabled>
               <ThemedText className="text-sm leading-5">{response}</ThemedText>
-            </ThemedView>
+            </ScrollView>
           </ThemedView>
         ) : null}
       </ThemedView>

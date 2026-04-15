@@ -417,11 +417,11 @@ describe('validateExercise', () => {
       expect(result.errors[0]).toContain('100 characters or less');
     });
 
-    it('should accept negative weight after stripping non-numeric chars', () => {
-      // Note: The regex strips the negative sign, so '-10' becomes '10' which is valid
+    it('should reject exercise with negative weight', () => {
       const exercise = createValidExercise({ weight: '-10' });
       const result = validateExercise(exercise);
-      expect(result.isValid).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Weight cannot be negative');
     });
 
     it('should reject exercise with invalid sets (0)', () => {

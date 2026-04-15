@@ -59,6 +59,9 @@ export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): v
       }
 
       if (exercise.hasCustomisedSets) {
+        if (!/^\d+$/.test(exercise.sets)) {
+          throw new Error(`Invalid queue item "${item.id}": customised set semantics are invalid.`);
+        }
         const sets = Number.parseInt(exercise.sets, 10);
         if (!Number.isInteger(sets) || sets < 1) {
           throw new Error(`Invalid queue item "${item.id}": customised set semantics are invalid.`);
@@ -165,25 +168,27 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
 };
 
 export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> => {
-  const queue = await getWorkoutQueue();
-  if (queue.length === 0) return null;
-
-  const first = queue[0];
   const database = await getDatabase();
 
-  await runInTransaction(database, async () => {
-    await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
+  return runInTransaction(database, async () => {
+    const queue = await getWorkoutQueue();
+    if (queue.length === 0) return null;
+
+    const first = queue[0];
+
     await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [first.id]);
+    await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
     await database.runAsync(
       'UPDATE workout_queue SET position = position - 1 WHERE position > 0'
     );
-  });
 
-  return first;
+    return first;
+  });
 };
 
 export const clearWorkoutQueue = async (): Promise<void> => {
   const database = await getDatabase();
+  await database.runAsync('DELETE FROM queue_exercises');
   await database.runAsync('DELETE FROM workout_queue');
 };
 

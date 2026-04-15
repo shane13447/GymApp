@@ -3,9 +3,9 @@
  * Dashboard with quick actions and workout summary
  */
 
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
