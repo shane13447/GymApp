@@ -8,17 +8,6 @@
 import type { ExerciseVariant, ExerciseVariantOption, ProgramExercise } from '@/types';
 
 // =============================================================================
-// PARSE FAILURE TRACKING
-// =============================================================================
-
-/**
- * Reason the last TOON parse attempt failed.
- * 'none' indicates no failure; 'variant_source_conflict' means the LLM
- * produced inline variant notation that conflicts with column-5 rules.
- */
-export type QueueParseFailureReason = 'none' | 'variant_source_conflict';
-
-// =============================================================================
 // EXERCISE IDENTITY AND TARGETING
 // =============================================================================
 

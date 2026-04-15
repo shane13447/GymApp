@@ -80,7 +80,7 @@ describe('prompt-test-runner', () => {
     expect(result.reasons).toEqual(['No changes detected: model operations produced an unchanged queue']);
   });
 
-  it('returns FAILED_PARSE when the proxy returns legacy TOON output', async () => {
+  it('returns FAILED_PARSE when the proxy returns a legacy queue string', async () => {
     const queue = materializeCanonicalFixtureQueue(createFixture());
 
     const result = await executePromptThroughCoachPipeline(
@@ -92,7 +92,7 @@ describe('prompt-test-runner', () => {
     );
 
     expect(result.status).toBe('FAILED_PARSE');
-    expect(result.reasons?.[0]).toContain('TOON format rejected');
+    expect(result.reasons?.[0]).toContain('Response is not valid JSON');
   });
 
   it('returns proposed changes when the pipeline detects a valid modification', async () => {

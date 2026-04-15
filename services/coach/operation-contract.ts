@@ -1,8 +1,7 @@
 /**
  * Operation Contract - JSON Schema Validation
- * 
- * Replaces TOON format with strict JSON operation contracts.
- * Operations are validated before being applied to the queue.
+ *
+ * Validates strict JSON operation contracts before applying them to the queue.
  */
 
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
@@ -340,29 +339,7 @@ export const validateOperationResponse = (responseText: string): OperationValida
   return validateParsedOperationResponse(parsed);
 };
 
-/**
- * Checks if a response is in the old TOON format (to reject it)
- */
-export const isToonFormat = (responseText: string): boolean => {
-  const trimmed = responseText.trim();
-  // TOON format starts with Q followed by queue items
-  return /Q\d+:D\d+:[^;]/.test(trimmed);
-};
-
-/**
- * Validates and rejects TOON format responses (spec compliance)
- */
 export const parseAndValidateOperations = (responseText: string): OperationValidationResult => {
-  // Reject TOON format - spec requires JSON operations only
-  if (isToonFormat(responseText)) {
-    return {
-      isValid: false,
-      errors: ['TOON format rejected - must use JSON operation contract'],
-      warnings: [],
-      validatedOperations: [],
-    };
-  }
-
   const parsed = parseJsonOrEmbeddedObject(responseText);
 
   if (parsed === INVALID_JSON) {

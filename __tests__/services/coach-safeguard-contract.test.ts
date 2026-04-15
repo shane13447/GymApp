@@ -10,7 +10,7 @@
  */
 
 import { applyOperations, compareQueues, validateOperationApplicability } from '@/services/coach/operation-applier';
-import { validateOperationResponse, parseAndValidateOperations, isToonFormat, generateOperationId } from '@/services/coach/operation-contract';
+import { validateOperationResponse, parseAndValidateOperations, generateOperationId } from '@/services/coach/operation-contract';
 import type { QueueOperation } from '@/services/coach/operation-contract';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
@@ -95,7 +95,7 @@ describe('Safeguard contract: deterministic ordering', () => {
 // =============================================================================
 
 describe('Safeguard contract: operation contract validation', () => {
-  it('rejects non-JSON and TOON payloads', () => {
+  it('rejects non-JSON payloads', () => {
     expect(validateOperationResponse('Q0:D1:Bench|80|8|3').isValid).toBe(false);
     expect(validateOperationResponse('not-json').isValid).toBe(false);
   });
@@ -106,11 +106,6 @@ describe('Safeguard contract: operation contract validation', () => {
       operations: [{ id: 'op_1', type: 'modify_weight', target: { exerciseName: 'Bench' }, value: { weight: 90 } }],
     }));
     expect(result.isValid).toBe(false);
-  });
-
-  it('detects TOON format strings', () => {
-    expect(isToonFormat('Q0:D1:Bench Press|80|8|3')).toBe(true);
-    expect(isToonFormat('{"version":1,"operations":[]}')).toBe(false);
   });
 
   it('accepts valid version 1 payloads', () => {

@@ -17,12 +17,10 @@ import {
   evaluateInjurySemanticOutcome,
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
+  mergeScopedQueueChanges,
   validateChanges,
   validateQueueStructure,
 } from '@/services/queue/diff';
-import {
-  mergeScopedQueueChanges,
-} from '@/services/workout-queue-modifier';
 import {
   findExerciseByName,
 } from '@/services/queue/repair';

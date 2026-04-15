@@ -3,58 +3,15 @@ import {
   evaluateAuthMode,
   extractModelText,
   extractOperationContractCandidate,
-  extractStrictToonCandidate,
-  formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
   isOperationContractMode,
-  isValidToonResponse,
   parseAuthModeFromValue,
   parseProviderFromValue,
   resolveProviderConfig,
 } from '@/supabase/functions/coach-proxy/logic';
 
 describe('coach proxy logic', () => {
-  describe('TOON validation', () => {
-    it('accepts 4-field TOON rows', () => {
-      const response = 'Q0:D1:Bench Press|80|8|3;Q1:D2:Back Squat|100|5|5';
-      expect(isValidToonResponse(response)).toBe(true);
-    });
-
-    it('accepts 5-field TOON rows with variant', () => {
-      const response = 'Q0:D1:Bench Press|80|8|3|Incline';
-      expect(isValidToonResponse(response)).toBe(true);
-    });
-
-    it('extracts valid strict TOON candidate from wrapped output', () => {
-      const wrapped = [
-        'Here is your updated queue:',
-        '```',
-        'Q0:D1:Bench Press|70|8|3;Q1:D2:Back Squat|100|5|5',
-        '```',
-      ].join('\n');
-
-      expect(extractStrictToonCandidate(wrapped)).toBe('Q0:D1:Bench Press|70|8|3;Q1:D2:Back Squat|100|5|5');
-    });
-
-    it('returns null when wrapped output does not contain valid strict TOON candidate', () => {
-      const wrappedInvalid = [
-        'Queue update:',
-        '```',
-        'Q0:D1:Bench Press|70|8-10|3',
-        '```',
-      ].join('\n');
-
-      expect(extractStrictToonCandidate(wrappedInvalid)).toBeNull();
-      expect(isValidToonResponse(wrappedInvalid)).toBe(false);
-    });
-
-    it('rejects non-integer reps and sets', () => {
-      expect(isValidToonResponse('Q0:D1:Bench Press|80|8-10|3')).toBe(false);
-      expect(isValidToonResponse('Q0:D1:Bench Press|80|8|3.5')).toBe(false);
-    });
-  });
-
   describe('auth mode parsing', () => {
     it('defaults to off for unknown values', () => {
       expect(parseAuthModeFromValue(undefined)).toBe('off');
@@ -215,36 +172,20 @@ describe('coach proxy logic', () => {
     it('formats a sanitized log line with metadata only (no PII)', () => {
       const logLine = formatProxyDebugLog(
         [
-          { role: 'system', content: 'Output TOON only' },
+          { role: 'system', content: 'Use JSON operation contract' },
           { role: 'user', content: 'Queue: Q0:D1:Bench|80|8|3 Request: lower weight' },
         ],
-        'Q0:D1:Bench|70|8|3'
+        '{"version":1,"operations":[]}'
       );
 
       expect(logLine).toContain('[coach-proxy] messages=[');
       expect(logLine).toContain('output_len=');
-      expect(logLine).toContain('system:16chars');
+      expect(logLine).toContain('system:27chars');
       expect(logLine).toContain('user:47chars');
       // Must NOT contain raw queue data or prompts
       expect(logLine).not.toContain('Bench|80');
       expect(logLine).not.toContain('Bench|70');
       expect(logLine).not.toContain('Request: lower weight');
-    });
-  });
-
-  describe('invalid TOON diagnostics', () => {
-    it('formats a sanitized log line with lengths only (no PII)', () => {
-      const line = formatInvalidToonDiagnostics(
-        'Q0:D1:Bench Press|80|8-10|3',
-        'Q0:D1:Bench Press|80|8-10|3\nI changed the queue as requested.'
-      );
-
-      expect(line).toContain('[coach-proxy] invalid_toon');
-      expect(line).toContain('first_output_len=');
-      expect(line).toContain('retry_output_len=');
-      // Must NOT contain raw queue data
-      expect(line).not.toContain('Bench Press');
-      expect(line).not.toContain('8-10');
     });
   });
 });

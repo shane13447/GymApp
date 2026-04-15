@@ -1,7 +1,7 @@
 /**
  * Operation Applier - Deterministic Queue Mutation Engine
  * 
- * Applies validated JSON operations to workout queues without relying on TOON.
+ * Applies validated JSON operations to workout queues.
  * This is the sole mutation authority - operations are applied deterministically.
  */
 
@@ -22,9 +22,7 @@ export type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEnt
 // HELPER FUNCTIONS
 // =============================================================================
 
-// Note: This duplicates parseVariantLabel from workout-queue-modifier.ts to avoid
-// pulling in the full transitive dependency chain (database -> expo-sqlite),
-// which breaks the test environment.
+// Keep variant parsing local to avoid pulling UI/database dependencies into tests.
 const parseVariantString = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)

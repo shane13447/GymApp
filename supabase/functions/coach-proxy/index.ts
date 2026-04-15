@@ -6,12 +6,9 @@ import {
   evaluateAuthMode,
   extractModelText,
   extractOperationContractCandidate,
-  extractStrictToonCandidate,
-  formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
   isOperationContractMode,
-  isValidToonResponse,
   parseAuthModeFromValue,
   parseProviderFromValue,
   resolveProviderConfig,
@@ -27,9 +24,6 @@ type CoachProxyMessage = {
 const OPENROUTER_DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const REQUEST_TIMEOUT_MS = 60000;
-
-const TOON_RETRY_INSTRUCTION =
-  'FORMAT REQUIREMENT: Output TOON queue only. No prose, no markdown, no explanations. Use exact format Qn:Dm:exercise|kg|reps|sets or Qn:Dm:exercise|kg|reps|sets|variant with queue items separated by semicolons and exercises separated by commas.';
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -99,31 +93,6 @@ const parseRequestMessages = (body: unknown): CoachProxyMessage[] | null => {
   }
 
   return validated;
-};
-
-const isModifyWorkoutMode = (messages: CoachProxyMessage[]): boolean => {
-  const systemText = messages
-    .filter((message) => message.role === 'system')
-    .map((message) => message.content)
-    .join('\n')
-    .toLowerCase();
-
-  if (
-    systemText.includes('ironlogic') ||
-    systemText.includes('toon') ||
-    systemText.includes('output toon only') ||
-    systemText.includes('gym queue modifier')
-  ) {
-    return true;
-  }
-
-  const userText = messages
-    .filter((message) => message.role === 'user')
-    .map((message) => message.content)
-    .join('\n')
-    .toLowerCase();
-
-  return userText.includes('queue:') && userText.includes('request:');
 };
 
 const callUpstreamModel = async (
@@ -210,9 +179,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     const isOperationMode = isOperationContractMode(messages);
-    const isToonMode = !isOperationMode && isModifyWorkoutMode(messages);
-
-    let modelOutput = await callUpstreamModel(providerConfig, messages);
+    const modelOutput = await callUpstreamModel(providerConfig, messages);
 
     if (isOperationMode) {
       const operationPayload = extractOperationContractCandidate(modelOutput);
@@ -226,31 +193,6 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
       console.log(formatProxyDebugLog(messages, JSON.stringify(operationPayload)));
       return jsonResponse(operationPayload, 200, request);
-    }
-
-    if (isToonMode && !isValidToonResponse(modelOutput)) {
-      const firstOutput = modelOutput;
-      const retriedMessages: CoachProxyMessage[] = [
-        ...messages,
-        { role: 'system', content: TOON_RETRY_INSTRUCTION },
-      ];
-
-      modelOutput = await callUpstreamModel(providerConfig, retriedMessages);
-      const retryOutput = modelOutput;
-
-      if (!isValidToonResponse(modelOutput)) {
-        const candidate = extractStrictToonCandidate(modelOutput);
-        if (!candidate || !isValidToonResponse(candidate)) {
-          console.log(formatInvalidToonDiagnostics(firstOutput, retryOutput));
-          return jsonResponse(
-            { error: 'Model returned invalid TOON output after retry.' },
-            422,
-            request,
-          );
-        }
-
-        modelOutput = candidate;
-      }
     }
 
     console.log(formatProxyDebugLog(messages, modelOutput));
