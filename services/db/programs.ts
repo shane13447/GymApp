@@ -285,17 +285,21 @@ export const deleteProgram = async (
 ): Promise<void> => {
   const database = await getDatabase();
 
-  await runInTransaction(database, async () => {
-    const prefs = await deps.getUserPreferences();
-    if (prefs.currentProgramId === programId) {
-      await deps.setCurrentProgramId(null);
-    }
+  const prefs = await deps.getUserPreferences();
+  const wasCurrent = prefs.currentProgramId === programId;
 
+  const deletedRows = await runInTransaction(database, async () => {
     const deleteResult = await database.runAsync('DELETE FROM programs WHERE id = ?', [programId]);
-    const deletedRows = typeof deleteResult?.changes === 'number' ? deleteResult.changes : 0;
+    const rows = typeof deleteResult?.changes === 'number' ? deleteResult.changes : 0;
 
-    if (deletedRows > 0 && deps.getSeedStateColumn(programId)) {
+    if (rows > 0 && deps.getSeedStateColumn(programId)) {
       await deps.setSeedLifecycleStateWithDatabase(database, programId, 'deleted_by_user');
     }
+
+    return rows;
   });
+
+  if (wasCurrent && deletedRows > 0) {
+    await deps.setCurrentProgramId(null);
+  }
 };

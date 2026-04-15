@@ -34,49 +34,41 @@ export const useWorkoutHistory = (): WorkoutHistoryResult => {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const loadRequestIdRef = useRef(0);
 
-  /**
-   * Load workout history from persistence and update local screen state.
-   * Sets the initial loading flag false once the request completes.
-   */
-  const loadWorkouts = async () => {
+  const loadWorkouts = useCallback(async (mode: 'initial' | 'refresh') => {
+    const requestId = ++loadRequestIdRef.current;
+
+    if (mode === 'refresh') {
+      setIsRefreshing(true);
+    }
+
     try {
       const loadedWorkouts = await db.getAllWorkouts();
-      setWorkouts(loadedWorkouts);
+      if (requestId === loadRequestIdRef.current) {
+        setWorkouts(loadedWorkouts);
+      }
     } catch (error) {
       console.error('Error loading workouts:', error);
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setIsLoading(false);
+        if (mode === 'refresh') {
+          setIsRefreshing(false);
+        }
+      }
     }
-  };
-
-  const loadRequestIdRef = useRef(0);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      const requestId = ++loadRequestIdRef.current;
-      (async () => {
-        try {
-          const loadedWorkouts = await db.getAllWorkouts();
-          if (requestId === loadRequestIdRef.current) {
-            setWorkouts(loadedWorkouts);
-          }
-        } catch (error) {
-          console.error('Error loading workouts:', error);
-        } finally {
-          if (requestId === loadRequestIdRef.current) {
-            setIsLoading(false);
-          }
-        }
-      })();
-    }, [])
+      loadWorkouts('initial');
+    }, [loadWorkouts])
   );
 
   const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadWorkouts();
-    setIsRefreshing(false);
-  }, []);
+    await loadWorkouts('refresh');
+  }, [loadWorkouts]);
 
   const workoutsByDate = useMemo(() => groupWorkoutsByDate(workouts), [workouts]);
 

@@ -150,13 +150,21 @@ export const runDeferredDatabaseMaintenance = async (): Promise<void> => {
   const maintenanceWork = (async () => {
     const database = await getDatabase();
 
-    logStartupStage('seed_start');
-    await seedTestProgramsIfMissing(database);
-    logStartupStage('seed_end');
+    try {
+      logStartupStage('seed_start');
+      await seedTestProgramsIfMissing(database);
+      logStartupStage('seed_end');
+    } catch (seedError) {
+      console.error('Seed maintenance step failed (non-blocking):', seedError);
+    }
 
-    logStartupStage('timer_cleanup_start');
-    await cleanupOrphanedTimersWithDatabase(database);
-    logStartupStage('timer_cleanup_end');
+    try {
+      logStartupStage('timer_cleanup_start');
+      await cleanupOrphanedTimersWithDatabase(database);
+      logStartupStage('timer_cleanup_end');
+    } catch (timerError) {
+      console.error('Timer cleanup maintenance step failed (non-blocking):', timerError);
+    }
 
     setMaintenanceCompleted(true);
   })();

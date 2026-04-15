@@ -12,6 +12,12 @@ let _baseline: CanonicalFixtureDay[] | null = null;
 export const getOfficialHeadlessGateBaseline = (): CanonicalFixtureDay[] => {
   if (_baseline) return _baseline;
 
+  if (typeof jest === 'undefined') {
+    throw new Error(
+      'getOfficialHeadlessGateBaseline() requires Node.js (node:fs) and must only be called from test contexts.'
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require('node:fs') as typeof import('node:fs');
   const pathMod = require('node:path') as typeof import('node:path');

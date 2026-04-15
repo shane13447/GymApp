@@ -170,12 +170,6 @@ const applyOperationToExercise = (
       }
       break;
       
-    case 'modify_rest':
-      if (operation.value?.restTime !== undefined) {
-        updated.restTime = String(operation.value.restTime);
-      }
-      break;
-      
     case 'swap_variant':
       if (operation.value?.variant !== undefined) {
         updated.variant = parseVariantString(operation.value.variant);
@@ -237,7 +231,6 @@ export const applyOperations = (
       case 'modify_weight':
       case 'modify_reps':
       case 'modify_sets':
-      case 'modify_rest':
       case 'swap_variant': {
         const found = findExerciseInQueue(currentQueue, operation.target);
         if (found) {
@@ -312,7 +305,7 @@ export const validateOperationApplicability = (
       if (!found) {
         missingTargets.push(`Cannot remove: ${operation.target.exerciseName || 'unknown'}`);
       }
-    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'modify_rest', 'swap_variant'].includes(operation.type)) {
+    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'swap_variant'].includes(operation.type)) {
       const found = findExerciseInQueue(queue, operation.target);
       if (!found) {
         missingTargets.push(`Cannot modify: ${operation.target.exerciseName || 'unknown'}`);

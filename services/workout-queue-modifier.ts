@@ -52,6 +52,12 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
 
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
+/**
+ * Module-level diagnostic: stores the failure reason from the most recent
+ * parseQueueFormatResponse call. Only safe to read synchronously after
+ * parseQueueFormatResponse returns — concurrent callers would overwrite it.
+ * The Coach screen's sendLockRef prevents concurrent sends in practice.
+ */
 let lastQueueParseFailureReason: QueueParseFailureReason = 'none';
 
 export const getLastQueueParseFailureReason = (): QueueParseFailureReason => lastQueueParseFailureReason;

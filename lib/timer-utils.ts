@@ -78,7 +78,7 @@ export function clampRemainingTime(remaining: number, maxTime: number): number {
  * @returns Progress percentage (0-100), 0 if invalid inputs
  */
 export function calculateTimerProgress(remaining: number, total: number): number {
-  if (remaining <= 0 || total <= 0) return 0;
+  if (!Number.isFinite(remaining) || !Number.isFinite(total) || remaining <= 0 || total <= 0) return 0;
   return Math.min(100, (remaining / total) * 100);
 }
 

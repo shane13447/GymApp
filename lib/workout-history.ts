@@ -35,7 +35,7 @@ export interface WorkoutsByDate {
  * @returns Array of WorkoutsByDate groups, sorted newest first
  */
 export const groupWorkoutsByDate = (workouts: Workout[]): WorkoutsByDate[] => {
-  const grouped: Record<string, Workout[]> = {};
+  const grouped: Map<string, { sortKey: number; workouts: Workout[] }> = new Map();
 
   workouts.forEach((workout) => {
     const workoutDate = new Date(workout.date);
@@ -45,22 +45,22 @@ export const groupWorkoutsByDate = (workouts: Workout[]): WorkoutsByDate[] => {
       day: 'numeric',
     });
 
-    if (!grouped[dateKey]) {
-      grouped[dateKey] = [];
+    const existing = grouped.get(dateKey);
+    if (existing) {
+      existing.workouts.push(workout);
+    } else {
+      grouped.set(dateKey, { sortKey: workoutDate.getTime(), workouts: [workout] });
     }
-    grouped[dateKey].push(workout);
   });
 
-  const sortedDates = Object.keys(grouped).sort((a, b) => {
-    return new Date(b).getTime() - new Date(a).getTime();
-  });
-
-  return sortedDates.map((date) => ({
-    date,
-    workouts: grouped[date].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    ),
-  }));
+  return Array.from(grouped.entries())
+    .sort(([, a], [, b]) => b.sortKey - a.sortKey)
+    .map(([date, { workouts: group }]) => ({
+      date,
+      workouts: group.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      ),
+    }));
 };
 
 /**

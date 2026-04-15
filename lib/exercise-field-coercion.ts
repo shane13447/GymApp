@@ -38,7 +38,12 @@ export const coerceExerciseFieldValue = (
   value: string | boolean | number | ExerciseVariant | null
 ): ProgramExercise[keyof ProgramExercise] => {
   if (field === 'hasCustomisedSets') return Boolean(value);
-  if (field === 'variant') return value as ExerciseVariant | null;
+  if (field === 'variant') {
+    if (value === null || (typeof value === 'object' && !Array.isArray(value))) {
+      return value as ExerciseVariant | null;
+    }
+    return null;
+  }
   if ((NUMERIC_STRING_FIELDS as readonly string[]).includes(field)) return String(value);
   if ((NUMERIC_FIELDS as readonly string[]).includes(field)) {
     const num = Number(value);

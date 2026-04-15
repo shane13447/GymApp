@@ -62,7 +62,8 @@ export function validateExercise(exercise: ProgramExercise): ValidationResult {
   }
 
   if (exercise.weight && exercise.weight.trim()) {
-    const weightNum = parseFloat(exercise.weight.replace(/[^0-9.]/g, ''));
+    const stripped = exercise.weight.replace(/[^0-9.\-]/g, '');
+    const weightNum = parseFloat(stripped);
     if (isNaN(weightNum) && exercise.weight.trim() !== '') {
       errors.push('Weight must be a valid number');
     } else if (weightNum < 0) {

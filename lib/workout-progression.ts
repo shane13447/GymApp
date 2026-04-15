@@ -29,12 +29,11 @@ export const calculateAutoWeight = (
 ): number => {
   if (lastWeight === null) return 0;
 
-  // RUNTIME TYPE SAFETY: Ensure numeric types even if DB returns strings
   const numLastWeight = Number(lastWeight);
+  if (!Number.isFinite(numLastWeight)) return 0;
+
   const numProgression = Number(progression);
+  if (!Number.isFinite(numProgression) || numProgression === 0) return numLastWeight;
 
-  if (!numProgression || numProgression === 0) return numLastWeight;
-
-  const newWeight = numLastWeight + numProgression;
-  return isNaN(newWeight) ? numLastWeight : newWeight;
+  return numLastWeight + numProgression;
 };

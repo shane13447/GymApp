@@ -106,7 +106,12 @@ const useNumericInput = (
 
     setError(null);
     setLocalValue(result.value?.toString() || '');
-    await onSaveRef.current(result.value);
+    try {
+      await onSaveRef.current(result.value);
+    } catch (err) {
+      console.error('Error saving value:', err);
+      setError('Failed to save');
+    }
   }, [localValue, validate]);
 
   return { localValue, error, handleFocus, handleChange, handleBlur };
@@ -128,6 +133,7 @@ export const useProfileScreen = (): ProfileScreenResult => {
   });
   const [name, setName] = useState('');
   const nameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingNameRef = useRef<string | null>(null);
 
   /**
    * Loads profile details, target overrides, and summary counts for the screen.
@@ -168,12 +174,14 @@ export const useProfileScreen = (): ProfileScreenResult => {
    */
   const handleNameChange = useCallback((text: string) => {
     setName(text);
+    pendingNameRef.current = text;
 
     if (nameTimeoutRef.current) {
       clearTimeout(nameTimeoutRef.current);
     }
 
     nameTimeoutRef.current = setTimeout(async () => {
+      pendingNameRef.current = null;
       try {
         await db.updateUserProfile({ name: text || null });
       } catch (error) {
@@ -186,6 +194,13 @@ export const useProfileScreen = (): ProfileScreenResult => {
     return () => {
       if (nameTimeoutRef.current) {
         clearTimeout(nameTimeoutRef.current);
+      }
+      if (pendingNameRef.current !== null) {
+        const nameToSave = pendingNameRef.current;
+        pendingNameRef.current = null;
+        db.updateUserProfile({ name: nameToSave || null }).catch((err) =>
+          console.error('Error flushing pending name save:', err)
+        );
       }
     };
   }, []);
