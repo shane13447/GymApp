@@ -760,6 +760,38 @@ function includesAnyKeyword(requestLower: string, keywords: readonly string[]): 
   return keywords.some((keyword) => requestLower.includes(keyword));
 }
 
+const BROAD_ALIAS_KEYS = new Set(['row', 'rows', 'curl', 'curls', 'bench']);
+
+const aliasAppearsInRequest = (alias: string, requestLower: string): boolean => {
+  const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  return aliasRegex.test(requestLower);
+};
+
+/**
+ * Finds matching exercise aliases while suppressing broad aliases when a more specific alias is present.
+ *
+ * @param requestLower - Lowercase user request
+ * @returns Alias dictionary entries ordered from most specific to broadest
+ */
+const findMatchingExerciseAliases = (requestLower: string): Array<[string, string[]]> => {
+  const matchingAliases = Object.entries(EXERCISE_ALIASES)
+    .filter(([alias]) => aliasAppearsInRequest(alias, requestLower))
+    .sort(([leftAlias], [rightAlias]) => rightAlias.length - leftAlias.length);
+
+  return matchingAliases.filter(([alias]) => {
+    if (!BROAD_ALIAS_KEYS.has(alias)) {
+      return true;
+    }
+
+    return !matchingAliases.some(
+      ([specificAlias]) =>
+        specificAlias !== alias &&
+        specificAlias.length > alias.length &&
+        specificAlias.includes(alias)
+    );
+  });
+};
+
 const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null } => {
   const hasInjuryContext = includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS);
 
@@ -954,6 +986,39 @@ const detectPercentageChange = (
   return null;
 };
 
+/**
+ * Detects absolute numeric field changes in muscle-group requests.
+ *
+ * @param request - User request text
+ * @returns Numeric attribute and destination value, or null when no absolute field change is present
+ */
+const detectAbsoluteNumericChange = (
+  request: string
+): { attribute: 'weight' | 'reps' | 'sets'; value: number } | null => {
+  const lowerRequest = request.toLowerCase();
+
+  const weightMatch = lowerRequest.match(/\b(\d+(?:\.\d+)?)\s*(?:kg|kgs|kilo|kilos|kilograms)\b/);
+  if (weightMatch) {
+    return { attribute: 'weight', value: Number(weightMatch[1]) };
+  }
+
+  const repsMatch =
+    lowerRequest.match(/\b(\d+)\s*reps?\b/) ??
+    lowerRequest.match(/\breps?\s*(?:to|at)?\s*(\d+)\b/);
+  if (repsMatch) {
+    return { attribute: 'reps', value: Number(repsMatch[1]) };
+  }
+
+  const setsMatch =
+    lowerRequest.match(/\b(\d+)\s*sets?\b/) ??
+    lowerRequest.match(/\bsets?\s*(?:to|at|of)?\s*(\d+)\b/);
+  if (setsMatch) {
+    return { attribute: 'sets', value: Number(setsMatch[1]) };
+  }
+
+  return null;
+};
+
 const detectMuscleGroupInRequest = (
   request: string
 ): { keyword: string; muscles: string[] } | null => {
@@ -1051,6 +1116,24 @@ export const preprocessMuscleGroupRequest = (
     return { 
       processedRequest, 
       wasProcessed: true, 
+      matchedExercises: exerciseNames,
+      matchedExerciseRefs,
+      muscleGroupDetected: detected.keyword,
+      noMatchesFound: false,
+    };
+  }
+
+  const absoluteChange = detectAbsoluteNumericChange(request);
+  if (absoluteChange) {
+    const numericChanges = matchingExercises.map((exercise) => {
+      const suffix = absoluteChange.attribute === 'weight' ? 'kg' : '';
+      return `${exercise.displayName} ${absoluteChange.attribute} to ${absoluteChange.value}${suffix}`;
+    });
+
+    const processedRequest = `change ${numericChanges.join(', ')}`;
+    return {
+      processedRequest,
+      wasProcessed: true,
       matchedExercises: exerciseNames,
       matchedExerciseRefs,
       muscleGroupDetected: detected.keyword,
@@ -1893,7 +1976,10 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
   if ((includesAnyKeyword(lowerRequest, REMOVE_REQUEST_KEYWORDS) || hasSplitPhrasalRemove) && !isRelativeNumericDropPhrase) {
     types.push('remove');
   }
-  if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase) {
+  const hasNumericFieldIntent =
+    types.includes('weight') || types.includes('reps') || types.includes('sets');
+
+  if (includesAnyKeyword(lowerRequest, ADD_REQUEST_KEYWORDS) && !isRelativeNumericAddPhrase && !hasNumericFieldIntent) {
     types.push('add');
   }
 
@@ -1952,11 +2038,26 @@ export const extractTargetExerciseRefs = (
 
   // --- PASS 1: Check alias dictionary first ---
   // This catches common slang like "crunches" -> "Decline Crunches"
-  for (const [alias, possibleMatches] of Object.entries(EXERCISE_ALIASES)) {
-    // Check if alias appears in the request (as whole word or phrase)
-    const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    if (aliasRegex.test(lowerRequest)) {
-      // Find which of the possible matches exist in the queue
+  let addedFromSpecificAlias = false;
+  for (const [, possibleMatches] of findMatchingExerciseAliases(lowerRequest)) {
+    // Find which of the possible matches exist in the queue
+    for (const possibleMatch of possibleMatches) {
+      const matchingExercises = allExercises.filter(
+        (exercise) => exercise.name.toLowerCase() === possibleMatch.toLowerCase()
+      );
+      for (const exercise of matchingExercises) {
+        addExercise(exercise);
+        addedFromSpecificAlias = true;
+      }
+    }
+  }
+
+  if (!addedFromSpecificAlias) {
+    const broadAliasEntries = Object.entries(EXERCISE_ALIASES).filter(
+      ([alias]) => BROAD_ALIAS_KEYS.has(alias) && aliasAppearsInRequest(alias, lowerRequest)
+    );
+
+    for (const [, possibleMatches] of broadAliasEntries) {
       for (const possibleMatch of possibleMatches) {
         const matchingExercises = allExercises.filter(
           (exercise) => exercise.name.toLowerCase() === possibleMatch.toLowerCase()
@@ -3110,6 +3211,10 @@ export const evaluatePromptIntentOutcome = (
   }
 
   if (targetedExerciseRefs.length === 0) {
+    if (changeTypes.includes('add') && differences.some((difference) => difference.type === 'added')) {
+      return { passed: true };
+    }
+
     return {
       passed: false,
       reason: 'Intent semantic failed: no targeted exercises found for request.',
@@ -3221,6 +3326,18 @@ export const evaluatePromptIntentOutcome = (
     uniqueTargetNames.map((targetName) => canonicaliseExerciseNameForSemantics(targetName))
   );
 
+  const targetRefIsPromptMentioned = (targetRef: TargetedExerciseRef): boolean => {
+    const targetWords = normaliseText(targetRef.name)
+      .split(/\s+/)
+      .filter((word) => word.length > 2 && !['the', 'and', 'for', 'with', 'all'].includes(word));
+    const promptMentionsTarget = targetWords.filter((word) => requestLower.includes(word));
+
+    return !(
+      promptMentionsTarget.length === 0 ||
+      (promptMentionsTarget.length === 1 && !requestLower.includes(normaliseText(targetRef.name)))
+    );
+  };
+
   const requestIncludesReplacementCue = /\b(?:replace|swap|switch)\b/.test(requestLower);
   const replacementPairs = differences.filter(
     (difference) => difference.type === 'removed' || difference.type === 'added'
@@ -3260,6 +3377,14 @@ export const evaluatePromptIntentOutcome = (
     }
 
     for (const targetName of canonicalTargetNames) {
+      const matchingTargetRef = targetedExerciseRefs.find(
+        (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
+      );
+
+      if (matchingTargetRef && !targetRefIsPromptMentioned(matchingTargetRef)) {
+        continue;
+      }
+
       const originalCount = allOriginalExercises.filter(
         (exercise) => canonicaliseExerciseNameForSemantics(exercise.name) === targetName
       ).length;
@@ -3268,12 +3393,9 @@ export const evaluatePromptIntentOutcome = (
       ).length;
 
       if (parsedCount <= originalCount) {
-        const failedTarget = targetedExerciseRefs.find(
-          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
-        );
         return {
           passed: false,
-          reason: `Intent semantic failed: add request did not increase count for ${failedTarget?.displayName ?? targetName}.`,
+          reason: `Intent semantic failed: add request did not increase count for ${matchingTargetRef?.displayName ?? targetName}.`,
         };
       }
 
@@ -3282,12 +3404,9 @@ export const evaluatePromptIntentOutcome = (
       const introducedNewTarget = Array.from(parsedKeys).some((key) => !originalKeys.has(key));
 
       if (!introducedNewTarget) {
-        const failedTarget = targetedExerciseRefs.find(
-          (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
-        );
         return {
           passed: false,
-          reason: `Intent semantic failed: add request did not create a new instance for ${failedTarget?.displayName ?? targetName}.`,
+          reason: `Intent semantic failed: add request did not create a new instance for ${matchingTargetRef?.displayName ?? targetName}.`,
         };
       }
     }
@@ -3295,6 +3414,10 @@ export const evaluatePromptIntentOutcome = (
 
   if (changeTypes.includes('remove') && !isLikelyReplacement) {
     for (const targetRef of targetedExerciseRefs) {
+      if (!targetRefIsPromptMentioned(targetRef)) {
+        continue;
+      }
+
       if (!targetRef.exerciseInstanceId) {
         continue;
       }
@@ -3319,13 +3442,7 @@ export const evaluatePromptIntentOutcome = (
         (targetRef) => canonicaliseExerciseNameForSemantics(targetRef.name) === targetName
       );
       if (matchingTargetRef) {
-        const targetWords = normaliseText(matchingTargetRef.name)
-          .split(/\s+/)
-          .filter((word) => word.length > 2 && !['the', 'and', 'for', 'with', 'all'].includes(word));
-        const promptMentionsTarget = targetWords.filter((word) => requestLower.includes(word));
-        // Require either: the full canonical name appears, or at least 2 words match
-        if (promptMentionsTarget.length === 0 || 
-            (promptMentionsTarget.length === 1 && !requestLower.includes(normaliseText(matchingTargetRef.name)))) {
+        if (!targetRefIsPromptMentioned(matchingTargetRef)) {
           // Full name doesn't appear and only 1 word matches - likely over-broad fuzzy match
           continue;
         }

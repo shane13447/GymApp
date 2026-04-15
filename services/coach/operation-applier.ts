@@ -16,14 +16,14 @@ type ExerciseCatalogEntry = {
   aliases?: string[];
 };
 
-type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEntry | null;
+export type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEntry | null;
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
 // Note: This duplicates parseVariantLabel from workout-queue-modifier.ts to avoid
-// pulling in the full transitive dependency chain (→ database → expo-sqlite)
+// pulling in the full transitive dependency chain (database -> expo-sqlite),
 // which breaks the test environment.
 const parseVariantString = (value: string): ExerciseVariant | null => {
   const segments = value
@@ -85,22 +85,26 @@ const findExerciseInQueue = (
       }
     }
   }
-  
-  // Try by day number and exercise name/index
-  if (target.dayNumber && target.exerciseName) {
-    const queueItem = queue.find((qi) => qi.dayNumber === target.dayNumber);
-    if (queueItem) {
-      if (target.exerciseIndex !== undefined) {
-        const exercise = queueItem.exercises[target.exerciseIndex];
-        if (exercise) {
-          return {
-            queueItem,
-            exercise,
-            exerciseIndex: target.exerciseIndex,
-          };
-        }
+
+  const candidateQueueItems = target.queueItemId
+    ? queue.filter((queueItem) => queueItem.id === target.queueItemId)
+    : target.dayNumber
+      ? queue.filter((queueItem) => queueItem.dayNumber === target.dayNumber)
+      : queue;
+
+  for (const queueItem of candidateQueueItems) {
+    if (target.exerciseIndex !== undefined) {
+      const exercise = queueItem.exercises[target.exerciseIndex];
+      if (exercise) {
+        return {
+          queueItem,
+          exercise,
+          exerciseIndex: target.exerciseIndex,
+        };
       }
-      // Find by name
+    }
+
+    if (target.exerciseName) {
       const exerciseIndex = queueItem.exercises.findIndex(
         (e) => e.name.toLowerCase() === target.exerciseName?.toLowerCase()
       );
@@ -113,7 +117,7 @@ const findExerciseInQueue = (
       }
     }
   }
-  
+
   return null;
 };
 
@@ -181,6 +185,26 @@ const applyOperationToExercise = (
   }
   
   return updated;
+};
+
+/**
+ * Finds the queue item targeted by an operation.
+ *
+ * @param queue - Queue snapshot to search
+ * @param target - Operation target containing queueItemId or dayNumber
+ * @returns Matching queue item, or undefined when the target day cannot be found
+ */
+const findTargetQueueItem = (
+  queue: WorkoutQueueItem[],
+  target: QueueOperation['target']
+): WorkoutQueueItem | undefined => {
+  if (target.queueItemId) {
+    return queue.find((queueItem) => queueItem.id === target.queueItemId);
+  }
+  if (target.dayNumber) {
+    return queue.find((queueItem) => queueItem.dayNumber === target.dayNumber);
+  }
+  return undefined;
 };
 
 /**
@@ -253,7 +277,7 @@ export const applyOperations = (
       }
       
       case 'add_exercise': {
-        const targetDay = currentQueue.find((qi) => qi.dayNumber === operation.target.dayNumber);
+        const targetDay = findTargetQueueItem(currentQueue, operation.target);
         if (targetDay && operation.value?.exerciseName) {
           const catalogEntry = catalogLookup?.(operation.value.exerciseName) ?? null;
           const newExercise: ProgramExercise = {
@@ -300,15 +324,18 @@ export const validateOperationApplicability = (
   const missingTargets: string[] = [];
   
   for (const operation of operations) {
-    if (operation.type === 'remove_exercise') {
-      const found = findExerciseInQueue(queue, operation.target);
-      if (!found) {
-        missingTargets.push(`Cannot remove: ${operation.target.exerciseName || 'unknown'}`);
+    if (operation.type === 'add_exercise') {
+      const foundQueueItem = findTargetQueueItem(queue, operation.target);
+      if (!foundQueueItem) {
+        missingTargets.push(`Cannot add: ${operation.target.dayNumber ?? operation.target.queueItemId ?? 'unknown'}`);
       }
-    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'swap_variant'].includes(operation.type)) {
+    } else if (['modify_weight', 'modify_reps', 'modify_sets', 'swap_variant', 'remove_exercise'].includes(operation.type)) {
       const found = findExerciseInQueue(queue, operation.target);
       if (!found) {
-        missingTargets.push(`Cannot modify: ${operation.target.exerciseName || 'unknown'}`);
+        const action = operation.type === 'remove_exercise' ? 'remove' : 'modify';
+        missingTargets.push(
+          `Cannot ${action}: ${operation.target.exerciseName || operation.target.exerciseInstanceId || 'unknown'}`
+        );
       }
     }
   }

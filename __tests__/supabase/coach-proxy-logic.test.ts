@@ -1,11 +1,17 @@
 import {
+  classifyUpstreamHttpStatus,
   evaluateAuthMode,
+  extractModelText,
+  extractOperationContractCandidate,
   extractStrictToonCandidate,
   formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
+  isOperationContractMode,
   isValidToonResponse,
   parseAuthModeFromValue,
+  parseProviderFromValue,
+  resolveProviderConfig,
 } from '@/supabase/functions/coach-proxy/logic';
 
 describe('coach proxy logic', () => {
@@ -59,6 +65,99 @@ describe('coach proxy logic', () => {
       expect(parseAuthModeFromValue('off')).toBe('off');
       expect(parseAuthModeFromValue('optional')).toBe('optional');
       expect(parseAuthModeFromValue('required')).toBe('required');
+    });
+  });
+
+  describe('provider routing config', () => {
+    it('defaults to openrouter for missing or invalid provider values', () => {
+      expect(parseProviderFromValue(undefined)).toBe('openrouter');
+      expect(parseProviderFromValue('wat')).toBe('openrouter');
+      expect(parseProviderFromValue('deepseek')).toBe('deepseek');
+    });
+
+    it('requires openrouter key and model for the default provider', () => {
+      expect(resolveProviderConfig('openrouter', {})).toEqual({
+        ok: false,
+        missing: ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL'],
+      });
+    });
+
+    it('resolves openrouter config with the default url', () => {
+      const result = resolveProviderConfig('openrouter', {
+        OPENROUTER_API_KEY: 'key',
+        OPENROUTER_MODEL: 'openai/gpt-4o-mini',
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        provider: 'openrouter',
+        apiKey: 'key',
+        model: 'openai/gpt-4o-mini',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+      });
+    });
+
+    it('resolves deepseek only when explicitly requested', () => {
+      const result = resolveProviderConfig('deepseek', { DEEPSEEK_API_KEY: 'deepseek-key' });
+
+      expect(result).toEqual({
+        ok: true,
+        provider: 'deepseek',
+        apiKey: 'deepseek-key',
+        model: 'deepseek-chat',
+        url: 'https://api.deepseek.com/chat/completions',
+      });
+    });
+
+    it('extracts model text from OpenAI-compatible choices', () => {
+      expect(extractModelText({ choices: [{ message: { content: 'hello' } }] })).toBe('hello');
+      expect(extractModelText({ choices: [{ text: 'plain' }] })).toBe('plain');
+      expect(extractModelText({ choices: [] })).toBeNull();
+    });
+
+    it('classifies 429 separately for rate-limit diagnostics', () => {
+      expect(classifyUpstreamHttpStatus(429)).toBe('bad_gateway_rate_limited');
+      expect(classifyUpstreamHttpStatus(503)).toBe('bad_gateway');
+    });
+  });
+
+  describe('operation contract detection', () => {
+    it('detects operation contract prompts', () => {
+      expect(isOperationContractMode([
+        { role: 'system', content: 'Use JSON operation contract. Allowed operation types only.' },
+        { role: 'user', content: '{"contract":"gymapp.queue.operations.v1"}' },
+      ])).toBe(true);
+    });
+
+    it('extracts valid operation contract JSON', () => {
+      const payload = extractOperationContractCandidate(JSON.stringify({
+        version: 1,
+        operations: [
+          {
+            id: 'op_1',
+            type: 'modify_weight',
+            target: { exerciseInstanceId: 'ex-1' },
+            value: { weight: 80 },
+          },
+        ],
+      }));
+
+      expect(payload?.version).toBe(1);
+      expect(payload?.operations).toHaveLength(1);
+    });
+
+    it('rejects modify_rest operation contract output', () => {
+      expect(extractOperationContractCandidate(JSON.stringify({
+        version: 1,
+        operations: [
+          {
+            id: 'op_1',
+            type: 'modify_rest',
+            target: { exerciseInstanceId: 'ex-1' },
+            value: { restTime: 120 },
+          },
+        ],
+      }))).toBeNull();
     });
   });
 

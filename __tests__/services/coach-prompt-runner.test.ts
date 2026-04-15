@@ -60,17 +60,27 @@ describe('prompt-test-runner', () => {
 
     const result = await executePromptThroughCoachPipeline(
       {
-        callCoachProxy: async () => 'Q0:D1:Barbell Bench Press|92.5|5|3|Flat',
+        callCoachProxy: async () => JSON.stringify({
+          version: 1,
+          operations: [
+            {
+              id: 'op_1',
+              type: 'modify_weight',
+              target: { dayNumber: 1, exerciseName: 'Barbell Bench Press' },
+              value: { weight: 92.5 },
+            },
+          ],
+        }),
       },
       { type: 'Single - Weight', prompt: 'change barbell bench press weight to 92.5' },
       queue
     );
 
     expect(result.status).toBe('NO_CHANGES_MODEL_NOOP');
-    expect(result.reasons).toEqual(['No changes detected: model returned effectively unchanged queue']);
+    expect(result.reasons).toEqual(['No changes detected: model operations produced an unchanged queue']);
   });
 
-  it('returns NO_CHANGES_REPAIR_REVERTED when repair removes model-only drift', async () => {
+  it('returns FAILED_PARSE when the proxy returns legacy TOON output', async () => {
     const queue = materializeCanonicalFixtureQueue(createFixture());
 
     const result = await executePromptThroughCoachPipeline(
@@ -81,10 +91,8 @@ describe('prompt-test-runner', () => {
       queue
     );
 
-    expect(result.status).toBe('NO_CHANGES_REPAIR_REVERTED');
-    expect(result.reasons).toEqual([
-      'No changes detected: model proposed edits but deterministic repair reverted them',
-    ]);
+    expect(result.status).toBe('FAILED_PARSE');
+    expect(result.reasons?.[0]).toContain('TOON format rejected');
   });
 
   it('returns proposed changes when the pipeline detects a valid modification', async () => {
@@ -92,7 +100,17 @@ describe('prompt-test-runner', () => {
 
     const result = await executePromptThroughCoachPipeline(
       {
-        callCoachProxy: async () => 'Q0:D1:Barbell Bench Press|95|5|3|Flat',
+        callCoachProxy: async () => JSON.stringify({
+          version: 1,
+          operations: [
+            {
+              id: 'op_1',
+              type: 'modify_weight',
+              target: { dayNumber: 1, exerciseName: 'Barbell Bench Press' },
+              value: { weight: 95 },
+            },
+          ],
+        }),
       },
       { type: 'Single - Weight', prompt: 'change barbell bench press weight to 95' },
       queue
