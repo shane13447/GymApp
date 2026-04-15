@@ -1,12 +1,11 @@
 import {
   parseAndValidateOperations,
   validateOperationResponse,
-  isToonFormat,
   generateOperationId,
 } from '@/services/coach/operation-contract';
 
 describe('operation contract', () => {
-  it('rejects non-json and toon-formatted payloads', () => {
+  it('rejects non-json payloads', () => {
     expect(validateOperationResponse('Q0:D1:Bench Press|80|8|3').isValid).toBe(false);
     expect(validateOperationResponse('not-json').isValid).toBe(false);
   });
@@ -60,11 +59,11 @@ describe('operation contract', () => {
     expect(result.errors.some((e) => e.includes('version'))).toBe(true);
   });
 
-  it('rejects TOON format via parseAndValidateOperations', () => {
+  it('rejects legacy queue strings via parseAndValidateOperations', () => {
     const result = parseAndValidateOperations('Q0:D1:Bench Press|80|8|3');
 
     expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('TOON'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('not valid JSON'))).toBe(true);
   });
 
   it('unwraps proxy response objects when parsing operation responses', () => {
@@ -316,23 +315,6 @@ describe('operation contract', () => {
       );
       expect(result.isValid).toBe(true);
       expect(result.validatedOperations).toHaveLength(2);
-    });
-  });
-
-  // =========================================================================
-  // isToonFormat
-  // =========================================================================
-  describe('isToonFormat', () => {
-    it('detects TOON format', () => {
-      expect(isToonFormat('Q0:D1:Bench Press|80|8|3')).toBe(true);
-    });
-
-    it('does not flag JSON as TOON', () => {
-      expect(isToonFormat('{"version":1,"operations":[]}')).toBe(false);
-    });
-
-    it('does not flag empty string as TOON', () => {
-      expect(isToonFormat('')).toBe(false);
     });
   });
 

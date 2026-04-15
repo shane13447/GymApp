@@ -1,7 +1,7 @@
 jest.mock('@/services/database', () => ({}));
 jest.mock('@/lib/utils', () => ({ getExerciseVariantLabel: () => '' }));
 
-import { mergeScopedQueueChanges } from '@/services/workout-queue-modifier';
+import { mergeScopedQueueChanges } from '@/services/queue/diff';
 import type { WorkoutQueueItem, ProgramExercise } from '@/types';
 
 const makeExercise = (name: string, weight: string = '80'): ProgramExercise => ({

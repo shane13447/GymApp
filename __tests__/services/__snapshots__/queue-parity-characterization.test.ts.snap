@@ -1,5 +1,0 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
-
-exports[`Characterization: encode stability includes variant after pipe when present: variant-encoded 1`] = `"Q0:D1:Barbell Bench Press|80|8|3|Incline"`;
-
-exports[`Characterization: encode stability snapshot-encodes canonical queue as parity baseline: canonical-queue-encoded 1`] = `"Q0:D1:Barbell Bench Press|92.5|5|3|Flat,Dumbbell Flyes|15|10|3;Q1:D2:Barbell Back Squat|117.5|4|5|High Bar,Leg Extensions|55|15|3;Q2:D3:Barbell Deadlift|135|3|5"`;

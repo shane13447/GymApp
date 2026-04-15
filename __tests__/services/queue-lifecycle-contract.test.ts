@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase 00 characterization tests: queue lifecycle contracts.
  *
  * These tests freeze observable database facade invariants for
@@ -103,14 +103,14 @@ describe('Lifecycle contract: validateWorkoutQueueForPersistence', () => {
 describe('Lifecycle contract: queue structural invariants', () => {
   /**
    * These invariants must hold for any queue produced by the system.
-   * They are not enforced by TypeScript alone — validateWorkoutQueueForPersistence
+   * They are not enforced by TypeScript alone â€” validateWorkoutQueueForPersistence
    * is the runtime guard.
    */
 
-  it('queue items preserve dayNumber ordering after encode→parse round-trip', () => {
+  it('queue items preserve dayNumber ordering in canonical queue snapshots', () => {
     /**
-     * The parser must reconstruct day numbers from the TOON string, and
-     * they must match the original day order.
+     * Operation-contract updates apply to queue snapshots, so day numbers
+     * must remain stable across valid multi-day queues.
      */
     const queue: WorkoutQueueItem[] = [
       createQueueItem({ id: 'q0', dayNumber: 1, exercises: [createExercise()] }),
@@ -118,9 +118,8 @@ describe('Lifecycle contract: queue structural invariants', () => {
       createQueueItem({ id: 'q2', dayNumber: 3, exercises: [createExercise({ name: 'Deadlift' })] }),
     ];
 
-    /* Since parseQueueFormatResponse is tested exhaustively elsewhere,
-       this contract verifies that the lifecycle preserves day ordering
-       for valid multi-day queues. */
+    /* This contract verifies that the lifecycle preserves day ordering
+       for valid multi-day queue snapshots. */
     expect(queue[0].dayNumber).toBeLessThan(queue[1].dayNumber);
     expect(queue[1].dayNumber).toBeLessThan(queue[2].dayNumber);
   });
