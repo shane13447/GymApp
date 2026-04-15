@@ -95,20 +95,105 @@ const VALID_OPERATION_TYPES = [
   'swap_variant',
 ] as const;
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null
+);
+
+const isNonEmptyString = (value: unknown): value is string => (
+  typeof value === 'string' && value.trim().length > 0
+);
+
+const isFiniteNumber = (value: unknown): value is number => (
+  typeof value === 'number' && Number.isFinite(value)
+);
+
+const isNonNegativeInteger = (value: unknown): value is number => (
+  Number.isInteger(value) && (value as number) >= 0
+);
+
+const isPositiveInteger = (value: unknown): value is number => (
+  Number.isInteger(value) && (value as number) > 0
+);
+
+const INVALID_JSON = Symbol('invalid_json');
+
+const parseJson = (text: string): unknown | typeof INVALID_JSON => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return INVALID_JSON;
+  }
+};
+
+const parseJsonOrEmbeddedObject = (text: string): unknown | typeof INVALID_JSON => {
+  const parsed = parseJson(text);
+  if (parsed !== INVALID_JSON) {
+    return parsed;
+  }
+
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    return parseJson(text.slice(start, end + 1));
+  }
+
+  return INVALID_JSON;
+};
+
+const unwrapProxyOperationPayload = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    const parsed = parseJson(value);
+    return parsed === INVALID_JSON ? value : unwrapProxyOperationPayload(parsed);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  if (value.version !== undefined || value.operations !== undefined) {
+    return value;
+  }
+
+  for (const key of ['response', 'content', 'output', 'text'] as const) {
+    if (value[key] !== undefined) {
+      return unwrapProxyOperationPayload(value[key]);
+    }
+  }
+
+  if (isRecord(value.message) && value.message.content !== undefined) {
+    return unwrapProxyOperationPayload(value.message.content);
+  }
+
+  if (Array.isArray(value.choices) && isRecord(value.choices[0])) {
+    const firstChoice = value.choices[0];
+    if (firstChoice.text !== undefined) {
+      return unwrapProxyOperationPayload(firstChoice.text);
+    }
+    if (isRecord(firstChoice.message) && firstChoice.message.content !== undefined) {
+      return unwrapProxyOperationPayload(firstChoice.message.content);
+    }
+  }
+
+  return value;
+};
+
 /**
  * Validates a single operation
  */
 const validateOperation = (op: unknown, index: number): string[] => {
   const errors: string[] = [];
-  const operation = op as Record<string, unknown>;
   
-  if (!operation || typeof operation !== 'object') {
+  if (!isRecord(op)) {
     errors.push(`Operation ${index}: must be an object`);
     return errors;
   }
+
+  const operation = op;
+  const opType = operation.type as string;
+  const value = operation.value;
   
   // Validate ID
-  if (!operation.id || typeof operation.id !== 'string') {
+  if (!isNonEmptyString(operation.id)) {
     errors.push(`Operation ${index}: missing or invalid id`);
   }
   
@@ -118,26 +203,49 @@ const validateOperation = (op: unknown, index: number): string[] => {
   }
   
   // Validate target
-  if (!operation.target || typeof operation.target !== 'object') {
+  if (!isRecord(operation.target)) {
     errors.push(`Operation ${index}: missing target`);
   } else {
-    const target = operation.target as Record<string, unknown>;
-    // BUG FIX: Previously rejected targets with only exerciseInstanceId, even though
-    // operation-applier.ts explicitly supports exerciseInstanceId lookup first
-    // (findExerciseInQueue checks it before dayNumber/exerciseName). Added it here.
-    const hasValidTarget = target.queueItemId || target.dayNumber || target.exerciseName || target.exerciseInstanceId;
-    if (!hasValidTarget) {
-      errors.push(`Operation ${index}: target must specify queueItemId, dayNumber, exerciseName, or exerciseInstanceId`);
+    const target = operation.target;
+    const hasQueueItem = isNonEmptyString(target.queueItemId);
+    const hasDay = isPositiveInteger(target.dayNumber);
+    const hasExerciseName = isNonEmptyString(target.exerciseName);
+    const hasExerciseIndex = isNonNegativeInteger(target.exerciseIndex);
+    const hasExerciseInstance = isNonEmptyString(target.exerciseInstanceId);
+
+    if (opType === 'add_exercise') {
+      if (!hasQueueItem && !hasDay) {
+        errors.push(`Operation ${index}: add_exercise target must specify queueItemId or dayNumber`);
+      }
+    } else if (!hasExerciseInstance && !hasExerciseName && !hasExerciseIndex) {
+      errors.push(`Operation ${index}: target must identify an exercise by exerciseInstanceId, exerciseName, or exerciseIndex`);
+    } else if (hasExerciseIndex && !hasQueueItem && !hasDay) {
+      errors.push(`Operation ${index}: exerciseIndex target also requires queueItemId or dayNumber`);
     }
   }
   
   // Validate value based on type
-  const opType = operation.type as string;
-  const value = operation.value as Record<string, unknown> | undefined;
-  
-  if (['modify_weight', 'modify_reps', 'modify_sets'].includes(opType)) {
-    if (!value || typeof value !== 'object') {
+  if (['modify_weight', 'modify_reps', 'modify_sets', 'swap_variant', 'add_exercise'].includes(opType)) {
+    if (!isRecord(value)) {
       errors.push(`Operation ${index}: ${opType} requires a value object`);
+    }
+  }
+
+  if (isRecord(value)) {
+    if (opType === 'modify_weight' && !isFiniteNumber(value.weight)) {
+      errors.push(`Operation ${index}: modify_weight requires numeric value.weight`);
+    }
+    if (opType === 'modify_reps' && !isPositiveInteger(value.reps)) {
+      errors.push(`Operation ${index}: modify_reps requires positive integer value.reps`);
+    }
+    if (opType === 'modify_sets' && !isPositiveInteger(value.sets)) {
+      errors.push(`Operation ${index}: modify_sets requires positive integer value.sets`);
+    }
+    if (opType === 'swap_variant' && !isNonEmptyString(value.variant)) {
+      errors.push(`Operation ${index}: swap_variant requires string value.variant`);
+    }
+    if (opType === 'add_exercise' && !isNonEmptyString(value.exerciseName)) {
+      errors.push(`Operation ${index}: add_exercise requires string value.exerciseName`);
     }
   }
   
@@ -145,27 +253,17 @@ const validateOperation = (op: unknown, index: number): string[] => {
 };
 
 /**
- * Validates an operation response against the expected schema
+ * Validates an already parsed operation response payload.
+ *
+ * @param parsed - Unknown parsed payload to validate
+ * @returns Validation result with the validated operations that can be applied
  */
-export const validateOperationResponse = (responseText: string): OperationValidationResult => {
+const validateParsedOperationResponse = (parsed: unknown): OperationValidationResult => {
   const errors: string[] = [];
   const warnings: string[] = [];
-  
-  // Try to parse JSON
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(responseText);
-  } catch {
-    return {
-      isValid: false,
-      errors: ['Response is not valid JSON'],
-      warnings: [],
-      validatedOperations: [],
-    };
-  }
-  
+
   // Validate root structure
-  if (!parsed || typeof parsed !== 'object') {
+  if (!isRecord(parsed)) {
     return {
       isValid: false,
       errors: ['Response must be a JSON object'],
@@ -174,7 +272,7 @@ export const validateOperationResponse = (responseText: string): OperationValida
     };
   }
   
-  const response = parsed as Record<string, unknown>;
+  const response = parsed;
   
   // BUG FIX: Previously only warned on version mismatch, making future contract
   // drift easy to accept partially and misapply. Now fails hard so incompatible
@@ -222,6 +320,27 @@ export const validateOperationResponse = (responseText: string): OperationValida
 };
 
 /**
+ * Validates an operation response against the expected schema.
+ *
+ * @param responseText - Raw JSON text expected to contain the operation payload directly
+ * @returns Validation result for the strict operation payload
+ */
+export const validateOperationResponse = (responseText: string): OperationValidationResult => {
+  const parsed = parseJson(responseText);
+
+  if (parsed === INVALID_JSON) {
+    return {
+      isValid: false,
+      errors: ['Response is not valid JSON'],
+      warnings: [],
+      validatedOperations: [],
+    };
+  }
+
+  return validateParsedOperationResponse(parsed);
+};
+
+/**
  * Checks if a response is in the old TOON format (to reject it)
  */
 export const isToonFormat = (responseText: string): boolean => {
@@ -243,8 +362,19 @@ export const parseAndValidateOperations = (responseText: string): OperationValid
       validatedOperations: [],
     };
   }
-  
-  return validateOperationResponse(responseText);
+
+  const parsed = parseJsonOrEmbeddedObject(responseText);
+
+  if (parsed === INVALID_JSON) {
+    return {
+      isValid: false,
+      errors: ['Response is not valid JSON'],
+      warnings: [],
+      validatedOperations: [],
+    };
+  }
+
+  return validateParsedOperationResponse(unwrapProxyOperationPayload(parsed));
 };
 
 /**

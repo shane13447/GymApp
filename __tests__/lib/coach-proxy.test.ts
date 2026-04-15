@@ -25,6 +25,13 @@ describe('extractProxyResponseText', () => {
     expect(extractProxyResponseText(input)).toBe('from response key');
   });
 
+  it('stringifies object responses for operation-contract payloads', () => {
+    const payload = { version: 1, operations: [{ id: 'op_1', type: 'modify_weight' }] };
+    const input = JSON.stringify({ response: payload });
+
+    expect(extractProxyResponseText(input)).toBe(JSON.stringify(payload));
+  });
+
   it('extracts from content field', () => {
     const input = JSON.stringify({ content: 'from content key' });
     expect(extractProxyResponseText(input)).toBe('from content key');

@@ -1,8 +1,4 @@
 import {
-  buildCompressedPrompt,
-  COMPRESSED_SYSTEM_PROMPT,
-} from '@/services/queue/codec';
-import {
   compareWorkoutQueues,
   differencesToProposedChanges,
   evaluateInjurySemanticOutcome,
@@ -14,9 +10,14 @@ import {
 import {
   extractTargetExerciseRefs,
   findExerciseByName,
-  parseQueueFormatResponse,
   preprocessMuscleGroupRequest,
 } from '@/services/queue/repair';
+import { applyOperationContractResponse } from '@/services/coach/operation-response';
+import { applyOperationIntentSafeguards } from '@/services/coach/operation-safeguards';
+import {
+  buildOperationContractPrompt,
+  OPERATION_SYSTEM_PROMPT,
+} from '@/services/coach/operation-prompt';
 import { classifyCoachTestSuccess } from '@/lib/coach-test-classification';
 import { inferInjurySeverity, inferRequestedVariant, type CoachProxyMessage } from '@/lib/coach-utils';
 import type { ProposedChanges } from '@/services/queue/types';
@@ -107,17 +108,21 @@ export const applyCanonicalSetCount = (
   return exercise;
 };
 
-const toProgramExercise = (exercise: CanonicalFixtureExercise): ProgramExercise => {
+const toProgramExercise = (
+  exercise: CanonicalFixtureExercise,
+  exerciseInstanceId: string
+): ProgramExercise => {
   const exerciseData = findExerciseByName(exercise.name);
 
   return {
+    exerciseInstanceId,
     name: exerciseData?.name ?? exercise.name,
     equipment: exerciseData?.equipment ?? '',
     muscle_groups_worked: exerciseData?.muscle_groups_worked ?? [],
     isCompound: exerciseData?.isCompound ?? false,
     variantOptions: exerciseData?.variantOptions,
     aliases: exerciseData?.aliases,
-variant: exercise.variant ?? null,
+    variant: exercise.variant ?? null,
     weight: JSON.stringify(exercise.weight),
     reps: JSON.stringify(exercise.reps),
     sets: String(exercise.reps.length),
@@ -136,7 +141,9 @@ export const materializeCanonicalFixtureQueue = (
     programName: 'Headless Fixture Program',
     dayNumber: day.dayNumber,
     position: index,
-    exercises: day.exercises.map(toProgramExercise),
+    exercises: day.exercises.map((exercise, exerciseIndex) =>
+      toProgramExercise(exercise, `${day.id}:e${exerciseIndex}`)
+    ),
   }));
 };
 
@@ -271,25 +278,37 @@ export const executePromptThroughCoachPipeline = async (
       : extractTargetExerciseRefs(promptCase.prompt, transportQueue);
 
   const messages: CoachProxyMessage[] = [
-    { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
-    { role: 'user', content: buildCompressedPrompt(processedRequest, transportQueue) },
+    { role: 'system', content: OPERATION_SYSTEM_PROMPT },
+    { role: 'user', content: buildOperationContractPrompt(processedRequest, transportQueue, targetedExercises) },
   ];
 
   const generatedText = await deps.callCoachProxy(messages);
-  const parsedQueueWithoutRepair = parseQueueFormatResponse(
+  const operationResult = applyOperationContractResponse(
     generatedText,
     transportQueue,
-    '',
-    []
-  );
-  const parsedQueue = parseQueueFormatResponse(
-    generatedText,
-    transportQueue,
-    promptCase.prompt,
-    targetedExercises
+    findExerciseByName
   );
 
-  if (!parsedQueue) return { status: 'FAILED_PARSE', reasons: ['Parse failed'] };
+  if (operationResult.kind === 'invalid_contract') {
+    return {
+      status: 'FAILED_PARSE',
+      reasons: [`Operation contract validation failed: ${operationResult.errors.join(' ')}`],
+    };
+  }
+
+  if (operationResult.kind === 'not_applicable') {
+    return {
+      status: 'STRUCTURE_VALIDATION_FAILED',
+      reasons: [`Unable to apply operation target(s): ${operationResult.errors.join(' ')}`],
+    };
+  }
+
+  const evaluationRequest = wasProcessed ? processedRequest : promptCase.prompt;
+  const parsedQueue = applyOperationIntentSafeguards({
+    request: evaluationRequest,
+    parsedQueue: operationResult.updatedQueue,
+    targetedExercises,
+  });
 
   const structureValidation = validateQueueStructure(transportQueue, parsedQueue);
   if (!structureValidation.valid) {
@@ -298,32 +317,21 @@ export const executePromptThroughCoachPipeline = async (
 
   const differences = compareWorkoutQueues(transportQueue, parsedQueue);
   if (differences.length === 0) {
-    const unrepairedDifferences = parsedQueueWithoutRepair
-      ? compareWorkoutQueues(transportQueue, parsedQueueWithoutRepair)
-      : [];
-
-    if (unrepairedDifferences.length > 0) {
-      return {
-        status: 'NO_CHANGES_REPAIR_REVERTED',
-        reasons: ['No changes detected: model proposed edits but deterministic repair reverted them'],
-      };
-    }
-
     return {
       status: 'NO_CHANGES_MODEL_NOOP',
-      reasons: ['No changes detected: model returned effectively unchanged queue'],
+      reasons: ['No changes detected: model operations produced an unchanged queue'],
     };
   }
 
   const proposedChanges = differencesToProposedChanges(differences);
-  const validation = validateChanges(promptCase.prompt, differences);
+  const validation = validateChanges(evaluationRequest, differences);
   const isVariantTest = promptCase.type.startsWith('Variant -');
   const isInjuryTest = promptCase.type.startsWith('Injury -');
 
   let semanticResult: { passed: boolean; reason?: string } = { passed: true };
   if (isVariantTest) {
     semanticResult = evaluateVariantSemanticOutcome(
-      promptCase.prompt,
+      evaluationRequest,
       transportQueue,
       parsedQueue,
       targetedExercises,
@@ -332,7 +340,7 @@ export const executePromptThroughCoachPipeline = async (
   } else if (isInjuryTest) {
     const severity = inferInjurySeverity(promptCase.type);
     semanticResult = evaluateInjurySemanticOutcome(
-      severity ? `${severity} injury: ${promptCase.prompt}` : promptCase.prompt,
+      severity ? `${severity} injury: ${evaluationRequest}` : evaluationRequest,
       transportQueue,
       parsedQueue,
       targetedExercises.map((exercise) => exercise.displayName)
@@ -341,7 +349,7 @@ export const executePromptThroughCoachPipeline = async (
 
   const deterministicIntentResult =
     !isVariantTest && !isInjuryTest
-      ? evaluatePromptIntentOutcome(promptCase.prompt, transportQueue, parsedQueue, targetedExercises)
+      ? evaluatePromptIntentOutcome(evaluationRequest, transportQueue, parsedQueue, targetedExercises)
       : { passed: true };
 
   const success = classifyCoachTestSuccess({

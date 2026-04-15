@@ -35,9 +35,9 @@ import {
 } from '@/services/coach/prompt-test-runner';
 import { processCoachResponse } from '@/services/coach/response-processor';
 import {
-  buildCompressedPrompt,
-  COMPRESSED_SYSTEM_PROMPT,
-} from '@/services/queue/codec';
+  buildOperationContractPrompt,
+  OPERATION_SYSTEM_PROMPT,
+} from '@/services/coach/operation-prompt';
 import {
   extractTargetExerciseRefs,
   preprocessMuscleGroupRequest,
@@ -199,10 +199,10 @@ export default function CoachScreen() {
           if (isTestMode) {
             const currentTest = TEST_PROMPTS[testIndex];
             console.log(`[TEST ${testIndex + 1}/${TEST_PROMPTS.length}] ${currentTest.type}: FAILED_PARSE`);
-            console.log(`[TEST][FAILED_PARSE]`, 'Parse failed');
+            console.log(`[TEST][FAILED_PARSE]`, result.error);
             setTestResults((prev) => [
               ...prev,
-              { type: currentTest.type, success: false, error: 'Parse failed' },
+              { type: currentTest.type, success: false, error: result.error },
             ]);
             if (testIndex < TEST_PROMPTS.length - 1) {
               pendingNextTestRef.current = testIndex + 1;
@@ -212,7 +212,7 @@ export default function CoachScreen() {
               Alert.alert('Test Complete', `Ran ${TEST_PROMPTS.length} tests. Check console for results.`);
             }
           } else {
-            setError('Could not parse queue from response. Expected format like "Q0:D1:BBP/80/5/5,BBS/100/5/5". Please try again.');
+            setError(result.error);
           }
           setLoading(false);
           break;
@@ -368,6 +368,7 @@ export default function CoachScreen() {
         muscleGroupDetected,
         noMatchesFound,
       } = preprocessMuscleGroupRequest(trimmedInput, workoutQueue);
+      sentInputTextRef.current = wasProcessed ? processedRequest : trimmedInput;
 
       const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
       scopedQueueRef.current = scopedWorkoutQueue;
@@ -399,14 +400,14 @@ export default function CoachScreen() {
         );
       }
 
-      const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
-      console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
+      const userPrompt = buildOperationContractPrompt(processedRequest, scopedWorkoutQueue, exercisesToStore);
+      console.log(`[OPERATIONS] User prompt: ${userPrompt}`);
       console.log(
-        `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
+        `[PROMPT LENGTH] System: ${OPERATION_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${OPERATION_SYSTEM_PROMPT.length + userPrompt.length}`
       );
 
       const messages: CoachProxyMessage[] = [
-        { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
+        { role: 'system', content: OPERATION_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ];
 
@@ -486,6 +487,7 @@ export default function CoachScreen() {
           muscleGroupDetected,
           noMatchesFound,
         } = preprocessMuscleGroupRequest(test.prompt, workoutQueue);
+        sentInputTextRef.current = wasProcessed ? processedRequest : test.prompt;
 
         // Check if user mentioned a muscle group but no matching exercises exist in queue
         if (noMatchesFound && muscleGroupDetected) {
@@ -527,14 +529,14 @@ export default function CoachScreen() {
 
         const scopedWorkoutQueue = workoutQueue.slice(0, queueHorizon);
         scopedQueueRef.current = scopedWorkoutQueue;
-        const userPrompt = buildCompressedPrompt(processedRequest, scopedWorkoutQueue);
-        console.log(`[COMPRESSED] User prompt: ${userPrompt}`);
+        const userPrompt = buildOperationContractPrompt(processedRequest, scopedWorkoutQueue, exercisesToStore);
+        console.log(`[OPERATIONS] User prompt: ${userPrompt}`);
         console.log(
-          `[PROMPT LENGTH] System: ${COMPRESSED_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${COMPRESSED_SYSTEM_PROMPT.length + userPrompt.length}`
+          `[PROMPT LENGTH] System: ${OPERATION_SYSTEM_PROMPT.length}, User: ${userPrompt.length}, Total: ${OPERATION_SYSTEM_PROMPT.length + userPrompt.length}`
         );
 
         const messages: CoachProxyMessage[] = [
-          { role: 'system', content: COMPRESSED_SYSTEM_PROMPT },
+          { role: 'system', content: OPERATION_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
         ];
 

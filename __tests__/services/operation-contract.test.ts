@@ -67,6 +67,49 @@ describe('operation contract', () => {
     expect(result.errors.some((e) => e.includes('TOON'))).toBe(true);
   });
 
+  it('unwraps proxy response objects when parsing operation responses', () => {
+    const result = parseAndValidateOperations(
+      JSON.stringify({
+        response: {
+          version: 1,
+          operations: [
+            {
+              id: 'op_1',
+              type: 'modify_weight',
+              target: { exerciseInstanceId: 'ex-1' },
+              value: { weight: 90 },
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result.isValid).toBe(true);
+    expect(result.validatedOperations).toHaveLength(1);
+  });
+
+  it('extracts embedded operation JSON from noisy model output', () => {
+    const result = parseAndValidateOperations(
+      [
+        'Here is the operation payload:',
+        JSON.stringify({
+          version: 1,
+          operations: [
+            {
+              id: 'op_1',
+              type: 'modify_reps',
+              target: { exerciseInstanceId: 'ex-1' },
+              value: { reps: 12 },
+            },
+          ],
+        }),
+      ].join('\n')
+    );
+
+    expect(result.isValid).toBe(true);
+    expect(result.validatedOperations).toHaveLength(1);
+  });
+
   // =========================================================================
   // Null/Empty inputs
   // =========================================================================
@@ -140,7 +183,7 @@ describe('operation contract', () => {
         })
       );
       expect(result.isValid).toBe(false);
-      expect(result.errors.some((e) => e.includes('queueItemId'))).toBe(true);
+      expect(result.errors.some((e) => e.includes('target'))).toBe(true);
     });
 
     it('rejects modify_weight without value', () => {
@@ -249,7 +292,12 @@ describe('operation contract', () => {
         JSON.stringify({
           version: 1,
           operations: [
-            { id: 'op_1', type: 'modify_weight', target: { queueItemId: 'q-1' }, value: { weight: 80 } },
+            {
+              id: 'op_1',
+              type: 'modify_weight',
+              target: { queueItemId: 'q-1', exerciseName: 'Bench Press' },
+              value: { weight: 80 },
+            },
           ],
         })
       );

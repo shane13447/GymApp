@@ -2,13 +2,20 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { corsHeadersForRequest, jsonResponse } from '../_shared/cors.ts';
 import {
+  classifyUpstreamHttpStatus,
   evaluateAuthMode,
+  extractModelText,
+  extractOperationContractCandidate,
   extractStrictToonCandidate,
   formatInvalidToonDiagnostics,
   formatProxyDebugLog,
   getBearerToken,
+  isOperationContractMode,
   isValidToonResponse,
   parseAuthModeFromValue,
+  parseProviderFromValue,
+  resolveProviderConfig,
+  type ResolvedProviderConfig,
   type AuthMode,
 } from './logic.ts';
 
@@ -17,17 +24,8 @@ type CoachProxyMessage = {
   content: string;
 };
 
-type DeepSeekResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-    text?: string;
-  }>;
-};
-
-export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
-const DEEPSEEK_MODEL = 'deepseek-chat';
+const OPENROUTER_DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const REQUEST_TIMEOUT_MS = 60000;
 
 const TOON_RETRY_INSTRUCTION =
@@ -103,25 +101,6 @@ const parseRequestMessages = (body: unknown): CoachProxyMessage[] | null => {
   return validated;
 };
 
-const extractModelText = (payload: unknown): string | null => {
-  if (!isObject(payload)) {
-    return null;
-  }
-
-  const response = payload as DeepSeekResponse;
-  const firstChoice = response.choices?.[0];
-
-  if (typeof firstChoice?.message?.content === 'string') {
-    return firstChoice.message.content.trim();
-  }
-
-  if (typeof firstChoice?.text === 'string') {
-    return firstChoice.text.trim();
-  }
-
-  return null;
-};
-
 const isModifyWorkoutMode = (messages: CoachProxyMessage[]): boolean => {
   const systemText = messages
     .filter((message) => message.role === 'system')
@@ -147,30 +126,29 @@ const isModifyWorkoutMode = (messages: CoachProxyMessage[]): boolean => {
   return userText.includes('queue:') && userText.includes('request:');
 };
 
-const callDeepSeek = async (
-  apiKey: string,
+const callUpstreamModel = async (
+  config: ResolvedProviderConfig,
   messages: CoachProxyMessage[],
 ): Promise<string> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(DEEPSEEK_URL, {
+    const response = await fetch(config.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
+        model: config.model,
         messages,
       }),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const suffix = response.status === 401 ? ' (unauthorized key)' : '';
-      throw new Error(`Upstream model request failed with status ${response.status}${suffix}.`);
+      throw new Error(`Upstream model request failed with status ${response.status}.`);
     }
 
     const payload = (await response.json()) as unknown;
@@ -204,9 +182,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
       return authFailure;
     }
 
-    const apiKey = Deno.env.get('DEEPSEEK_API_KEY');
-    if (!apiKey) {
-      console.error('[coach-proxy] Missing DEEPSEEK_API_KEY');
+    const provider = parseProviderFromValue(Deno.env.get('COACH_MODEL_PROVIDER'));
+    const providerConfig = resolveProviderConfig(provider, {
+      OPENROUTER_API_KEY: Deno.env.get('OPENROUTER_API_KEY'),
+      OPENROUTER_MODEL: Deno.env.get('OPENROUTER_MODEL'),
+      OPENROUTER_URL: Deno.env.get('OPENROUTER_URL'),
+      DEEPSEEK_API_KEY: Deno.env.get('DEEPSEEK_API_KEY'),
+      DEEPSEEK_MODEL: Deno.env.get('DEEPSEEK_MODEL'),
+      DEEPSEEK_URL,
+      OPENROUTER_DEFAULT_URL,
+    });
+
+    if (!providerConfig.ok) {
+      console.error(`[coach-proxy] Missing provider config: ${providerConfig.missing.join(', ')}`);
       return jsonResponse({ error: 'Coach proxy is not configured.' }, 500, request);
     }
 
@@ -221,9 +209,24 @@ Deno.serve(async (request: Request): Promise<Response> => {
       );
     }
 
-    const isToonMode = isModifyWorkoutMode(messages);
+    const isOperationMode = isOperationContractMode(messages);
+    const isToonMode = !isOperationMode && isModifyWorkoutMode(messages);
 
-    let modelOutput = await callDeepSeek(apiKey, messages);
+    let modelOutput = await callUpstreamModel(providerConfig, messages);
+
+    if (isOperationMode) {
+      const operationPayload = extractOperationContractCandidate(modelOutput);
+      if (!operationPayload) {
+        return jsonResponse(
+          { error: 'Model returned invalid operation contract output.' },
+          422,
+          request,
+        );
+      }
+
+      console.log(formatProxyDebugLog(messages, JSON.stringify(operationPayload)));
+      return jsonResponse(operationPayload, 200, request);
+    }
 
     if (isToonMode && !isValidToonResponse(modelOutput)) {
       const firstOutput = modelOutput;
@@ -232,7 +235,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         { role: 'system', content: TOON_RETRY_INSTRUCTION },
       ];
 
-      modelOutput = await callDeepSeek(apiKey, retriedMessages);
+      modelOutput = await callUpstreamModel(providerConfig, retriedMessages);
       const retryOutput = modelOutput;
 
       if (!isValidToonResponse(modelOutput)) {
@@ -265,6 +268,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
     console.error('[coach-proxy] Request failed:', message);
 
     if (message.includes('Upstream model request failed')) {
+      const statusMatch = message.match(/status\s+(\d+)/i);
+      const status = statusMatch ? Number.parseInt(statusMatch[1], 10) : 0;
+      const className = status ? classifyUpstreamHttpStatus(status) : 'bad_gateway';
+      const rateTag = className === 'bad_gateway_rate_limited' ? ' rate_limited=true' : '';
+      console.error(`[coach-proxy] upstream provider failure status=${status || 'unknown'}${rateTag}`);
       return jsonResponse({ error: message }, 502, request);
     }
 

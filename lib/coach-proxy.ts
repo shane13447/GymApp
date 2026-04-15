@@ -33,6 +33,20 @@ export const resolveProxyUrlFromCandidates = (candidates: unknown[]): string => 
 };
 
 /**
+ * Converts supported proxy payload fields into response text.
+ *
+ * @param value - Candidate field from a proxy response wrapper
+ * @returns String payload, serialized object payload, or null for unsupported scalar fields
+ */
+const stringifyProxyPayloadField = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return typeof value === 'object' && value !== null ? JSON.stringify(value) : null;
+};
+
+/**
  * Extracts the response text from a raw coach proxy response body.
  *
  * The proxy may return plain text, a JSON-wrapped string, or a structured
@@ -72,15 +86,23 @@ export const extractProxyResponseText = (rawBody: string): string => {
       choices?: { text?: unknown; message?: { content?: unknown } }[];
     };
 
-    if (typeof payload.response === 'string') return payload.response;
-    if (typeof payload.content === 'string') return payload.content;
-    if (typeof payload.output === 'string') return payload.output;
-    if (typeof payload.text === 'string') return payload.text;
-    if (typeof payload.message?.content === 'string') return payload.message.content;
-
     const firstChoice = payload.choices?.[0];
-    if (typeof firstChoice?.text === 'string') return firstChoice.text;
-    if (typeof firstChoice?.message?.content === 'string') return firstChoice.message.content;
+    const candidateFields = [
+      payload.response,
+      payload.content,
+      payload.output,
+      payload.text,
+      payload.message?.content,
+      firstChoice?.text,
+      firstChoice?.message?.content,
+    ];
+
+    for (const candidateField of candidateFields) {
+      const candidateText = stringifyProxyPayloadField(candidateField);
+      if (candidateText !== null) {
+        return candidateText;
+      }
+    }
 
     return trimmedBody;
   } catch {

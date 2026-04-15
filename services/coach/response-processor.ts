@@ -24,8 +24,10 @@ import {
   mergeScopedQueueChanges,
 } from '@/services/workout-queue-modifier';
 import {
-  parseQueueFormatResponse,
+  findExerciseByName,
 } from '@/services/queue/repair';
+import { applyOperationContractResponse } from '@/services/coach/operation-response';
+import { applyOperationIntentSafeguards } from '@/services/coach/operation-safeguards';
 import type {
   ProposedChanges,
   TargetedExerciseRef,
@@ -38,7 +40,7 @@ import type { CoachPromptCase } from '@/services/coach/prompt-test-runner';
 // ---------------------------------------------------------------------------
 
 export type CoachResponseResult =
-  | { kind: 'parse_failed' }
+  | { kind: 'parse_failed'; error: string }
   | { kind: 'structure_invalid'; error: string }
   | { kind: 'no_changes' }
   | { kind: 'changes_blocked'; error: string }
@@ -86,20 +88,33 @@ export function processCoachResponse(input: ProcessCoachResponseInput): CoachRes
     currentTest,
   } = input;
 
-  const parsedQueue = parseQueueFormatResponse(
+  const operationResult = applyOperationContractResponse(
     proxyResponse,
     scopedQueue,
-    inputText,
-    targetedExercises,
+    findExerciseByName,
   );
 
-  if (!parsedQueue || parsedQueue.length === 0) {
+  if (operationResult.kind === 'invalid_contract') {
+    const error = `Operation contract validation failed: ${operationResult.errors.join(' ')}`;
     if (isTestMode && currentTest) {
-      return buildTestFailureResult(currentTest, testIndex, totalTests, 'Parse failed');
+      return buildTestFailureResult(currentTest, testIndex, totalTests, error);
     }
-    return { kind: 'parse_failed' };
+    return { kind: 'parse_failed', error };
   }
 
+  if (operationResult.kind === 'not_applicable') {
+    const error = `Unable to apply operation target(s): ${operationResult.errors.join(' ')}`;
+    if (isTestMode && currentTest) {
+      return buildTestFailureResult(currentTest, testIndex, totalTests, error);
+    }
+    return { kind: 'changes_blocked', error };
+  }
+
+  const parsedQueue = applyOperationIntentSafeguards({
+    request: inputText,
+    parsedQueue: operationResult.updatedQueue,
+    targetedExercises,
+  });
   const structureValidation = validateQueueStructure(scopedQueue, parsedQueue);
   if (!structureValidation.valid) {
     const error = `Unable to safely apply AI changes: ${structureValidation.errors.join(' ')}`;
