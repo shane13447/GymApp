@@ -237,4 +237,52 @@ describe('program-draft-validator', () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it('removes unknown catalog exercises while keeping valid exercises in the same day', () => {
+    const result = validateAndRepairProgramDraft({
+      id: 'test',
+      name: 'Test',
+      workoutDays: [
+        {
+          dayNumber: 1,
+          exercises: [
+            makeExercise({ name: 'Made Up Exercise That Does Not Exist' }),
+            makeExercise({ name: 'Barbell Bench Press' }),
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.workoutDays[0].exercises).toHaveLength(1);
+      expect(result.value.workoutDays[0].exercises[0].name).toBe('Barbell Bench Press');
+    }
+  });
+
+  it('repairs missing or invalid variants to the catalog default variant', () => {
+    const result = validateAndRepairProgramDraft({
+      id: 'test',
+      name: 'Test',
+      workoutDays: [
+        {
+          dayNumber: 1,
+          exercises: [
+            makeExercise({
+              name: 'Dumbbell Press',
+              variant: { angle: 'made-up-angle', grip: 'made-up-grip' },
+            }),
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.workoutDays[0].exercises[0].variant).toEqual({
+        angle: 'flat',
+        grip: 'neutral',
+      });
+    }
+  });
 });

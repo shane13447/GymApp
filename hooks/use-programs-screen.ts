@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import exercisesData from '@/data/exerciseSelection.json';
 import { coerceExerciseFieldValue } from '@/lib/exercise-field-coercion';
-import { validateExercise, validateNumberOfDays, validateProgramName } from '@/lib/validation';
+import { validateExercise, validateNumberOfDays, validateProgramName, validateWorkoutDay } from '@/lib/validation';
 import * as db from '@/services/database';
 import { getDefaultVariantForExercise, parseExerciseCatalog } from '@/services/catalog/parse-catalog';
 import {
@@ -337,6 +337,12 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
     }
 
     for (const day of workoutDays) {
+      const dayValidation = validateWorkoutDay(day);
+      if (!dayValidation.isValid) {
+        Alert.alert('Validation Error', dayValidation.errors[0]);
+        return;
+      }
+
       for (const exercise of day.exercises) {
         const exerciseValidation = validateExercise(exercise);
         if (!exerciseValidation.isValid) {
@@ -403,6 +409,12 @@ export const useProgramsScreen = (): ProgramsScreenResult => {
     }
 
     for (const day of workoutDays) {
+      const dayValidation = validateWorkoutDay(day);
+      if (!dayValidation.isValid) {
+        Alert.alert('Validation Error', dayValidation.errors[0]);
+        return;
+      }
+
       for (const exercise of day.exercises) {
         const exerciseValidation = validateExercise(exercise);
         if (!exerciseValidation.isValid) {

@@ -37,6 +37,34 @@ interface ExerciseLogCardProps {
   onUpdateLoggedSetReps: (setIndex: number, value: string) => void;
 }
 
+const LOGGED_WEIGHT_INPUT_KEY = 'loggedWeight';
+
+const getSetWeightInputKey = (setIndex: number): string => `setWeight:${setIndex}`;
+
+/**
+ * Formats a numeric decimal field for display.
+ *
+ * @param value - Numeric value from the workout exercise state.
+ * @returns Empty string for zero, otherwise a stringified number.
+ */
+const formatDecimalInputValue = (value: number): string => (value === 0 ? '' : value.toString());
+
+/**
+ * Normalizes decimal input after the user leaves the digit pad.
+ *
+ * @param value - Raw TextInput value, including possible trailing decimal point.
+ * @returns Clean numeric string, or empty string when the input is invalid/blank.
+ */
+const normalizeDecimalInputValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '.') {
+    return '';
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed.toString() : '';
+};
+
 export const ExerciseLogCard = memo(function ExerciseLogCard({
   exercise,
   index,
@@ -86,6 +114,8 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   const [timerCompleted, setTimerCompleted] = useState(false);
   // LOADING STATE FIX: Track when async timer operations are in progress
   const [isOperationPending, setIsOperationPending] = useState(false);
+  const [focusedDecimalInput, setFocusedDecimalInput] = useState<string | null>(null);
+  const [decimalInputValues, setDecimalInputValues] = useState<Record<string, string>>({});
   const isOperationPendingRef = useRef(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasVibratedRef = useRef(false);
@@ -150,6 +180,82 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
   // Get target sets for display
   const targetSets = Number(exercise.sets) || 0;
   const totalCustomisedSetInputs = targetSets > 0 ? targetSets : 1;
+
+  useEffect(() => {
+    if (focusedDecimalInput === LOGGED_WEIGHT_INPUT_KEY) {
+      return;
+    }
+
+    setDecimalInputValues((previous) => ({
+      ...previous,
+      [LOGGED_WEIGHT_INPUT_KEY]: formatDecimalInputValue(exercise.loggedWeight),
+    }));
+  }, [exercise.loggedWeight, focusedDecimalInput]);
+
+  useEffect(() => {
+    setDecimalInputValues((previous) => {
+      const nextValues = { ...previous };
+
+      for (let setIndex = 0; setIndex < totalCustomisedSetInputs; setIndex++) {
+        const inputKey = getSetWeightInputKey(setIndex);
+        if (focusedDecimalInput !== inputKey) {
+          nextValues[inputKey] = formatDecimalInputValue(exercise.loggedSetWeights[setIndex] ?? 0);
+        }
+      }
+
+      return nextValues;
+    });
+  }, [exercise.loggedSetWeights, focusedDecimalInput, totalCustomisedSetInputs]);
+
+  /**
+   * Preserves decimal text while focused and updates numeric state when safe.
+   *
+   * @param inputKey - Stable key for the active decimal field.
+   * @param value - Raw TextInput value.
+   * @param onUpdate - Parent update callback for the numeric field.
+   * @returns Void.
+   */
+  const handleDecimalInputChange = useCallback((
+    inputKey: string,
+    value: string,
+    onUpdate: (nextValue: string) => void
+  ) => {
+    if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
+      return;
+    }
+
+    setDecimalInputValues((previous) => ({
+      ...previous,
+      [inputKey]: value,
+    }));
+
+    if (value.endsWith('.') || value === '.') {
+      return;
+    }
+
+    onUpdate(value);
+  }, []);
+
+  /**
+   * Normalizes a decimal field when focus leaves the digit pad.
+   *
+   * @param inputKey - Stable key for the decimal field.
+   * @param onUpdate - Parent update callback for the numeric field.
+   * @returns Void.
+   */
+  const handleDecimalInputBlur = useCallback((
+    inputKey: string,
+    onUpdate: (nextValue: string) => void
+  ) => {
+    const normalizedValue = normalizeDecimalInputValue(decimalInputValues[inputKey] ?? '');
+
+    setFocusedDecimalInput((currentKey) => (currentKey === inputKey ? null : currentKey));
+    setDecimalInputValues((previous) => ({
+      ...previous,
+      [inputKey]: normalizedValue,
+    }));
+    onUpdate(normalizedValue);
+  }, [decimalInputValues]);
   
   // =============================================================================
   // RACE CONDITION FIX: Safe DB clear operation
@@ -586,6 +692,9 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
               const setNumber = setIndex + 1;
               const currentSetWeight = exercise.loggedSetWeights[setIndex] ?? 0;
               const currentSetReps = exercise.loggedSetReps[setIndex] ?? 0;
+              const setWeightInputKey = getSetWeightInputKey(setIndex);
+              const setWeightInputValue =
+                decimalInputValues[setWeightInputKey] ?? formatDecimalInputValue(currentSetWeight);
 
               return (
                 <ThemedView
@@ -600,8 +709,17 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                         className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
                         placeholder="Weight"
                         placeholderTextColor="#999"
-                        value={currentSetWeight === 0 ? '' : currentSetWeight.toString()}
-                        onChangeText={(value) => onUpdateLoggedSetWeight(setIndex, value)}
+                        value={setWeightInputValue}
+                        onFocus={() => setFocusedDecimalInput(setWeightInputKey)}
+                        onBlur={() => handleDecimalInputBlur(
+                          setWeightInputKey,
+                          (nextValue) => onUpdateLoggedSetWeight(setIndex, nextValue)
+                        )}
+                        onChangeText={(value) => handleDecimalInputChange(
+                          setWeightInputKey,
+                          value,
+                          (nextValue) => onUpdateLoggedSetWeight(setIndex, nextValue)
+                        )}
                         keyboardType="decimal-pad"
                         style={{ color: textColor }}
                         accessibilityLabel={`Log weight for ${displayExerciseName} set ${setNumber}`}
@@ -633,8 +751,14 @@ export const ExerciseLogCard = memo(function ExerciseLogCard({
                 className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-base"
                 placeholder="Enter weight used..."
                 placeholderTextColor="#999"
-                value={exercise.loggedWeight === 0 ? '' : exercise.loggedWeight.toString()}
-                onChangeText={onUpdateLoggedWeight}
+                value={decimalInputValues[LOGGED_WEIGHT_INPUT_KEY] ?? formatDecimalInputValue(exercise.loggedWeight)}
+                onFocus={() => setFocusedDecimalInput(LOGGED_WEIGHT_INPUT_KEY)}
+                onBlur={() => handleDecimalInputBlur(LOGGED_WEIGHT_INPUT_KEY, onUpdateLoggedWeight)}
+                onChangeText={(value) => handleDecimalInputChange(
+                  LOGGED_WEIGHT_INPUT_KEY,
+                  value,
+                  onUpdateLoggedWeight
+                )}
                 keyboardType="decimal-pad"
                 style={{ color: textColor }}
                 accessibilityLabel={`Log weight for ${displayExerciseName}`}

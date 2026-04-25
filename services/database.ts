@@ -303,6 +303,10 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       progression REAL DEFAULT 0,
       has_customised_sets INTEGER DEFAULT 0,
       variant_json TEXT DEFAULT '',
+      rep_range_min INTEGER,
+      rep_range_max INTEGER,
+      progression_threshold INTEGER,
+      times_reps_hit_in_a_row INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
     );
@@ -335,6 +339,10 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       progression REAL DEFAULT 0,
       has_customised_sets INTEGER DEFAULT 0,
       variant_json TEXT DEFAULT '',
+      rep_range_min INTEGER,
+      rep_range_max INTEGER,
+      progression_threshold INTEGER,
+      times_reps_hit_in_a_row INTEGER DEFAULT 0,
       logged_weight REAL DEFAULT 0,
       logged_reps INTEGER DEFAULT 0,
       logged_set_weights TEXT DEFAULT '[]',
@@ -369,6 +377,10 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
       progression REAL DEFAULT 0,
       has_customised_sets INTEGER DEFAULT 0,
       variant_json TEXT DEFAULT '',
+      rep_range_min INTEGER,
+      rep_range_max INTEGER,
+      progression_threshold INTEGER,
+      times_reps_hit_in_a_row INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
       FOREIGN KEY (queue_item_id) REFERENCES workout_queue(id) ON DELETE CASCADE
     );
@@ -436,8 +448,20 @@ const initializeDatabase = async (database: SQLite.SQLiteDatabase): Promise<void
   await ensureColumnExists('queue_exercises', 'is_compound', 'INTEGER DEFAULT 0');
   await ensureColumnExists('queue_exercises', 'has_customised_sets', 'INTEGER DEFAULT 0');
   await ensureColumnExists('program_exercises', 'variant_json', "TEXT DEFAULT ''");
+  await ensureColumnExists('program_exercises', 'rep_range_min', 'INTEGER');
+  await ensureColumnExists('program_exercises', 'rep_range_max', 'INTEGER');
+  await ensureColumnExists('program_exercises', 'progression_threshold', 'INTEGER');
+  await ensureColumnExists('program_exercises', 'times_reps_hit_in_a_row', 'INTEGER DEFAULT 0');
   await ensureColumnExists('workout_exercises', 'variant_json', "TEXT DEFAULT ''");
+  await ensureColumnExists('workout_exercises', 'rep_range_min', 'INTEGER');
+  await ensureColumnExists('workout_exercises', 'rep_range_max', 'INTEGER');
+  await ensureColumnExists('workout_exercises', 'progression_threshold', 'INTEGER');
+  await ensureColumnExists('workout_exercises', 'times_reps_hit_in_a_row', 'INTEGER DEFAULT 0');
   await ensureColumnExists('queue_exercises', 'variant_json', "TEXT DEFAULT ''");
+  await ensureColumnExists('queue_exercises', 'rep_range_min', 'INTEGER');
+  await ensureColumnExists('queue_exercises', 'rep_range_max', 'INTEGER');
+  await ensureColumnExists('queue_exercises', 'progression_threshold', 'INTEGER');
+  await ensureColumnExists('queue_exercises', 'times_reps_hit_in_a_row', 'INTEGER DEFAULT 0');
   await ensureColumnExists('user_preferences', 'seed_test_program_state', "TEXT DEFAULT 'pending'");
   await ensureColumnExists('user_preferences', 'seed_3day_full_body_state', "TEXT DEFAULT 'pending'");
   await ensureColumnExists('user_profile', 'experience_level', 'TEXT');
@@ -542,6 +566,8 @@ export const clearAllWorkouts = workoutsDb.clearAllWorkouts;
 
 export const getLastLoggedWeight = workoutsDb.getLastLoggedWeight;
 
+export const getProgressionRecommendationForExercise = workoutsDb.getProgressionRecommendationForExercise;
+
 // =============================================================================
 // WORKOUT QUEUE (delegated to services/db/queue.ts)
 // =============================================================================
@@ -582,7 +608,7 @@ export const updateQueueItem = queueUpdateQueueItem;
 
 /**
  * Skip queue items until the target day is first in the queue.
- * Delegates to queue module which accepts getProgramById and getLastLoggedWeight
+ * Delegates to queue module which accepts getProgramById and progression history
  * as injected dependencies.
  */
 export const skipQueueToDay = async (
@@ -590,7 +616,7 @@ export const skipQueueToDay = async (
   targetDayNumber: number,
   originalQueue?: WorkoutQueueItem[]
 ): Promise<WorkoutQueueItem[] | null> => {
-  return queueSkipQueueToDay(programId, targetDayNumber, originalQueue, getProgramById, getLastLoggedWeight);
+  return queueSkipQueueToDay(programId, targetDayNumber, originalQueue, getProgramById, getProgressionRecommendationForExercise);
 };
 
 /**
@@ -604,10 +630,10 @@ export const getQueueItemForDay = queueGetQueueItemForDay;
 
 /**
  * Generate a workout queue from a program.
- * Delegates to queue module, injecting getProgramById and getLastLoggedWeight.
+ * Delegates to queue module, injecting getProgramById and progression history.
  */
 export const generateWorkoutQueue = async (programId: string): Promise<void> => {
-  return queueGenerateWorkoutQueue(programId, getProgramById, getLastLoggedWeight);
+  return queueGenerateWorkoutQueue(programId, getProgramById, getProgressionRecommendationForExercise);
 };
 
 // =============================================================================

@@ -1,5 +1,6 @@
-import type { DraftProgram, Program, ProgramExercise, WorkoutDay } from '@/types';
+import type { DraftProgram, Exercise, ExerciseVariant, ProgramExercise, WorkoutDay } from '@/types';
 import exerciseSelectionCatalog from '@/data/exerciseSelection.json';
+import { getDefaultVariantForExercise, parseExerciseCatalog } from '@/services/catalog/parse-catalog';
 
 type DraftValidationSuccess = {
   ok: true;
@@ -28,6 +29,17 @@ const toNumericString = (value: unknown, fallback: string): string => {
   return fallback;
 };
 
+const toProgressionString = (value: unknown, fallback: string): string => {
+  const numericString = toNumericString(value, fallback);
+  const parsed = Number(numericString);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return parsed > 0 ? numericString : '';
+};
+
 const toBoolean = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') {
     return value;
@@ -54,10 +66,59 @@ const toPositiveInteger = (value: unknown, fallback: number): number => {
 /**
  * Build a lookup map from the exercise catalog for O(1) lookups by name (case-insensitive).
  */
-const catalogByName = new Map<string, typeof exerciseSelectionCatalog[number]>();
-for (const entry of exerciseSelectionCatalog) {
+const parsedCatalog = parseExerciseCatalog(exerciseSelectionCatalog as unknown[]);
+const catalogByName = new Map<string, Exercise>();
+for (const entry of parsedCatalog) {
   catalogByName.set(entry.name.toLowerCase(), entry);
+  for (const alias of entry.aliases ?? []) {
+    catalogByName.set(alias.toLowerCase(), entry);
+  }
 }
+
+const normalizeVariant = (rawVariant: unknown, catalogEntry: Exercise): ExerciseVariant | null => {
+  const defaultVariant = getDefaultVariantForExercise(catalogEntry.variantOptions);
+  if (!catalogEntry.variantOptions || catalogEntry.variantOptions.length === 0 || !defaultVariant) {
+    return null;
+  }
+
+  const normalizedVariant: ExerciseVariant = { ...defaultVariant };
+  if (!isRecord(rawVariant)) {
+    return normalizedVariant;
+  }
+
+  for (const option of catalogEntry.variantOptions) {
+    if (!option.field || !option.value) {
+      continue;
+    }
+
+    const rawValue = rawVariant[option.field];
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+
+    const normalizedRawValue = rawValue.trim().toLowerCase();
+    const acceptedValues = [
+      option.value,
+      option.label,
+      ...(option.aliases ?? []),
+    ].map((value) => value.toLowerCase());
+
+    if (acceptedValues.includes(normalizedRawValue)) {
+      normalizedVariant[option.field] = option.value;
+    }
+  }
+
+  return normalizedVariant;
+};
+
+const getExerciseVariantKey = (exercise: ProgramExercise): string => {
+  const variant = exercise.variant;
+  if (!variant) {
+    return `${exercise.name.toLowerCase()}:default`;
+  }
+
+  return `${exercise.name.toLowerCase()}:${JSON.stringify(Object.entries(variant).sort())}`;
+};
 
 const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
   if (!isRecord(rawExercise)) {
@@ -71,17 +132,14 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
 
   // Look up the exercise from the catalog by name (case-insensitive)
   const catalogEntry = catalogByName.get(name.toLowerCase());
+  if (!catalogEntry) {
+    return null;
+  }
 
-  // Use catalog data for missing fields
-  const equipment = typeof rawExercise.equipment === 'string'
-    ? rawExercise.equipment
-    : catalogEntry?.equipment ?? null;
-  const muscleGroupsWorked = Array.isArray(rawExercise.muscle_groups_worked)
-    ? rawExercise.muscle_groups_worked.filter((group): group is string => typeof group === 'string')
-    : catalogEntry?.muscle_groups_worked ?? null;
-  const isCompound = typeof rawExercise.isCompound === 'boolean'
-    ? rawExercise.isCompound
-    : catalogEntry?.isCompound ?? null;
+  // Use catalog data as the authority for identity metadata.
+  const equipment = catalogEntry.equipment;
+  const muscleGroupsWorked = catalogEntry.muscle_groups_worked;
+  const isCompound = catalogEntry.isCompound;
 
   if (!equipment || !muscleGroupsWorked || muscleGroupsWorked.length === 0 || isCompound === null) {
     return null;
@@ -105,7 +163,7 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
       : undefined;
 
   return {
-    name,
+    name: catalogEntry.name,
     equipment,
     muscle_groups_worked: muscleGroupsWorked,
     isCompound,
@@ -113,8 +171,11 @@ const normalizeExercise = (rawExercise: unknown): ProgramExercise | null => {
     reps: toNumericString(rawExercise.reps, '10'),
     sets: toNumericString(rawExercise.sets, '3'),
     restTime: toNumericString(rawExercise.restTime ?? rawExercise.rest, '120'),
-    progression: toNumericString(rawExercise.progression, '2.5'),
+    progression: toProgressionString(rawExercise.progression, '2.5'),
     hasCustomisedSets: toBoolean(rawExercise.hasCustomisedSets, false),
+    variant: normalizeVariant(rawExercise.variant, catalogEntry),
+    variantOptions: catalogEntry.variantOptions,
+    aliases: catalogEntry.aliases,
     repRangeMin,
     repRangeMax,
     progressionThreshold,
@@ -127,9 +188,22 @@ const normalizeWorkoutDay = (rawDay: unknown, index: number): WorkoutDay | null 
     return null;
   }
 
+  const seenExerciseVariants = new Set<string>();
   const exercises = rawDay.exercises
     .map((exercise) => normalizeExercise(exercise))
-    .filter((exercise): exercise is ProgramExercise => exercise !== null);
+    .filter((exercise): exercise is ProgramExercise => {
+      if (exercise === null) {
+        return false;
+      }
+
+      const variantKey = getExerciseVariantKey(exercise);
+      if (seenExerciseVariants.has(variantKey)) {
+        return false;
+      }
+
+      seenExerciseVariants.add(variantKey);
+      return true;
+    });
 
   if (exercises.length === 0) {
     return null;

@@ -3,7 +3,13 @@
  * Covers auto-weight calculation, numeric coercion, and edge-case guards.
  */
 
-import { calculateAutoWeight } from '@/lib/workout-progression';
+import {
+  calculateAutoWeight,
+  calculateProgressionRecommendation,
+  didHitRepRangeMax,
+  getHighestLoggedWeight,
+} from '@/lib/workout-progression';
+import type { ProgramExercise, WorkoutExercise } from '@/types';
 
 describe('calculateAutoWeight', () => {
   it('returns 0 when lastWeight is null', () => {
@@ -23,8 +29,8 @@ describe('calculateAutoWeight', () => {
     expect(calculateAutoWeight(80, 2.5)).toBe(82.5);
   });
 
-  it('handles negative progression (deload)', () => {
-    expect(calculateAutoWeight(80, -5)).toBe(75);
+  it('ignores negative progression because progression must be positive or empty', () => {
+    expect(calculateAutoWeight(80, -5)).toBe(80);
   });
 
   it('handles string-like numeric inputs via coercion', () => {
@@ -60,5 +66,107 @@ describe('calculateAutoWeight', () => {
 
   it('returns 0 for lastWeight=0 with progression=0', () => {
     expect(calculateAutoWeight(0, 0)).toBe(0);
+  });
+});
+
+const makeProgramExercise = (overrides: Partial<ProgramExercise> = {}): ProgramExercise => ({
+  name: 'Barbell Bench Press',
+  equipment: 'Barbell',
+  muscle_groups_worked: ['chest', 'triceps'],
+  isCompound: true,
+  weight: '80',
+  reps: '8',
+  sets: '3',
+  restTime: '180',
+  progression: '2.5',
+  hasCustomisedSets: false,
+  variant: null,
+  ...overrides,
+});
+
+const makeWorkoutExercise = (overrides: Partial<WorkoutExercise> = {}): WorkoutExercise => ({
+  ...makeProgramExercise(overrides),
+  loggedWeight: 80,
+  loggedReps: 8,
+  loggedSetWeights: [],
+  loggedSetReps: [],
+  ...overrides,
+});
+
+describe('customised-set progression helpers', () => {
+  it('uses the highest per-set logged weight when customised set weights exist', () => {
+    const exercise = makeWorkoutExercise({
+      loggedWeight: 80,
+      loggedSetWeights: [80, 82.5, 77.5],
+    });
+
+    expect(getHighestLoggedWeight(exercise)).toBe(82.5);
+  });
+
+  it('requires every customised set to hit repRangeMax', () => {
+    const template = makeProgramExercise({
+      hasCustomisedSets: true,
+      sets: '3',
+      repRangeMax: 10,
+    });
+
+    expect(didHitRepRangeMax(makeWorkoutExercise({ loggedSetReps: [10, 10, 10] }), template)).toBe(true);
+    expect(didHitRepRangeMax(makeWorkoutExercise({ loggedSetReps: [10, 9, 10] }), template)).toBe(false);
+  });
+
+  it('uses simple logged reps for non-customised exercises', () => {
+    const template = makeProgramExercise({ repRangeMax: 10 });
+
+    expect(didHitRepRangeMax(makeWorkoutExercise({ loggedReps: 10 }), template)).toBe(true);
+    expect(didHitRepRangeMax(makeWorkoutExercise({ loggedReps: 9 }), template)).toBe(false);
+  });
+
+  it('falls back to simple linear progression when double-progression fields are absent', () => {
+    const template = makeProgramExercise({ progression: '2.5' });
+    const recommendation = calculateProgressionRecommendation(template, [
+      makeWorkoutExercise({ loggedWeight: 80 }),
+    ]);
+
+    expect(recommendation.weight).toBe(82.5);
+    expect(recommendation.timesRepsHitInARow).toBeUndefined();
+  });
+
+  it('increments only after the threshold of consecutive all-set max hits', () => {
+    const template = makeProgramExercise({
+      progression: '2.5',
+      repRangeMin: 8,
+      repRangeMax: 10,
+      progressionThreshold: 2,
+    });
+
+    const oneHit = calculateProgressionRecommendation(template, [
+      makeWorkoutExercise({ loggedWeight: 80, loggedReps: 10 }),
+    ]);
+    expect(oneHit.weight).toBe(80);
+    expect(oneHit.timesRepsHitInARow).toBe(1);
+
+    const thresholdHit = calculateProgressionRecommendation(template, [
+      makeWorkoutExercise({ loggedWeight: 80, loggedReps: 10 }),
+      makeWorkoutExercise({ loggedWeight: 77.5, loggedReps: 10 }),
+    ]);
+    expect(thresholdHit.weight).toBe(82.5);
+    expect(thresholdHit.timesRepsHitInARow).toBe(0);
+  });
+
+  it('resets the consecutive counter when the latest workout misses repRangeMax', () => {
+    const template = makeProgramExercise({
+      progression: '2.5',
+      repRangeMin: 8,
+      repRangeMax: 10,
+      progressionThreshold: 2,
+    });
+
+    const recommendation = calculateProgressionRecommendation(template, [
+      makeWorkoutExercise({ loggedWeight: 80, loggedReps: 9 }),
+      makeWorkoutExercise({ loggedWeight: 77.5, loggedReps: 10 }),
+    ]);
+
+    expect(recommendation.weight).toBe(80);
+    expect(recommendation.timesRepsHitInARow).toBe(0);
   });
 });

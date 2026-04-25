@@ -13,11 +13,10 @@ import type { Program, ProgramExercise, WorkoutDay } from '@/types';
 
 import { getDatabase, runInTransaction } from '@/services/db/connection';
 import {
-  serializeVariant,
   deserializeProgramExerciseRow,
+  serializeExerciseToSqlParams,
 } from '@/services/db/serialization';
 import type { SqlExerciseRow } from '@/services/db/serialization';
-import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -161,28 +160,8 @@ export const createProgram = async (program: Omit<Program, 'createdAt' | 'update
       const dayId = dayResult.lastInsertRowId;
 
       for (let i = 0; i < day.exercises.length; i++) {
-        const exercise = day.exercises[i];
-        const muscleGroups = exercise.muscle_groups_worked ?? [];
-        await database.runAsync(
-          `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            dayId,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(muscleGroups),
-            exercise.isCompound ? 1 : 0,
-            safeParseFloat(exercise.weight, 0),
-            safeParseInt(exercise.reps, 8),
-            safeParseInt(exercise.sets, 3),
-            safeParseInt(exercise.restTime, 180),
-            safeParseFloat(exercise.progression, 0),
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            i,
-          ]
-        );
+        const { sql, params } = serializeExerciseToSqlParams(day.exercises[i], i, dayId);
+        await database.runAsync(sql, params);
       }
     }
   });
@@ -215,28 +194,8 @@ export const updateProgram = async (program: Program): Promise<void> => {
       const dayId = dayResult.lastInsertRowId;
 
       for (let i = 0; i < day.exercises.length; i++) {
-        const exercise = day.exercises[i];
-        const muscleGroups = exercise.muscle_groups_worked ?? [];
-        await database.runAsync(
-          `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            dayId,
-            exercise.name ?? '',
-            exercise.equipment ?? '',
-            JSON.stringify(muscleGroups),
-            exercise.isCompound ? 1 : 0,
-            safeParseFloat(exercise.weight, 0),
-            safeParseInt(exercise.reps, 8),
-            safeParseInt(exercise.sets, 3),
-            safeParseInt(exercise.restTime, 180),
-            safeParseFloat(exercise.progression, 0),
-            exercise.hasCustomisedSets ? 1 : 0,
-            serializeVariant(exercise.variant),
-            i,
-          ]
-        );
+        const { sql, params } = serializeExerciseToSqlParams(day.exercises[i], i, dayId);
+        await database.runAsync(sql, params);
       }
     }
   });

@@ -320,6 +320,18 @@ describe('validateWorkoutDay', () => {
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
+
+    it('should accept the same exercise name with different variants', () => {
+      const day = createValidWorkoutDay({
+        exercises: [
+          createValidExercise({ name: 'Lat Pulldowns', variant: { grip: 'wide' } }),
+          createValidExercise({ name: 'Lat Pulldowns', variant: { grip: 'close' } }),
+        ],
+      });
+
+      const result = validateWorkoutDay(day);
+      expect(result.isValid).toBe(true);
+    });
   });
 
   describe('invalid data', () => {
@@ -338,6 +350,19 @@ describe('validateWorkoutDay', () => {
       const result = validateWorkoutDay(day);
       expect(result.isValid).toBe(false);
       expect(result.errors[0]).toContain('cannot have more than 20 exercises');
+    });
+
+    it('should reject duplicate same-name and same-variant exercises', () => {
+      const day = createValidWorkoutDay({
+        exercises: [
+          createValidExercise({ name: 'Lat Pulldowns', variant: { grip: 'wide' } }),
+          createValidExercise({ name: 'Lat Pulldowns', variant: { grip: 'wide' } }),
+        ],
+      });
+
+      const result = validateWorkoutDay(day);
+      expect(result.isValid).toBe(false);
+      expect(result.errors[0]).toContain('Duplicate exercise');
     });
   });
 
@@ -400,6 +425,12 @@ describe('validateExercise', () => {
       const result = validateExercise(exercise);
       expect(result.isValid).toBe(true);
     });
+
+    it('should accept exercise with empty progression', () => {
+      const exercise = createValidExercise({ progression: '' });
+      const result = validateExercise(exercise);
+      expect(result.isValid).toBe(true);
+    });
   });
 
   describe('invalid data', () => {
@@ -436,6 +467,34 @@ describe('validateExercise', () => {
       const result = validateExercise(exercise);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Cannot have more than 20 sets');
+    });
+
+    it('should reject exercise with zero reps', () => {
+      const exercise = createValidExercise({ reps: '0' });
+      const result = validateExercise(exercise);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Reps must be greater than 0');
+    });
+
+    it('should reject exercise with negative reps', () => {
+      const exercise = createValidExercise({ reps: '-1' });
+      const result = validateExercise(exercise);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Reps must be greater than 0');
+    });
+
+    it('should reject exercise with zero progression', () => {
+      const exercise = createValidExercise({ progression: '0' });
+      const result = validateExercise(exercise);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Progression must be greater than 0 or left empty');
+    });
+
+    it('should reject exercise with negative progression', () => {
+      const exercise = createValidExercise({ progression: '-2.5' });
+      const result = validateExercise(exercise);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Progression must be greater than 0 or left empty');
     });
 
     it('should reject exercise with negative rest time', () => {

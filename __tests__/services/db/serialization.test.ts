@@ -150,7 +150,26 @@ describe('db/serialization', () => {
       expect(result.params[9]).toBeCloseTo(2.5);
       expect(result.params[10]).toBe(0);
       expect(result.params[11]).toBe('');
-      expect(result.params[12]).toBe(0);
+      expect(result.params[12]).toBeNull();
+      expect(result.params[13]).toBeNull();
+      expect(result.params[14]).toBeNull();
+      expect(result.params[15]).toBe(0);
+      expect(result.params[16]).toBe(0);
+    });
+
+    it('serializes double-progression fields', () => {
+      const result = serializeExerciseToSqlParams({
+        ...baseExercise,
+        repRangeMin: 8,
+        repRangeMax: 12,
+        progressionThreshold: 3,
+        timesRepsHitInARow: 2,
+      } as any, 0, 'day-1');
+
+      expect(result.params[12]).toBe(8);
+      expect(result.params[13]).toBe(12);
+      expect(result.params[14]).toBe(3);
+      expect(result.params[15]).toBe(2);
     });
 
     it('preserves zero numeric values instead of falling back to defaults', () => {
@@ -190,6 +209,21 @@ describe('db/serialization', () => {
       expect(result.sql).toContain('INSERT INTO queue_exercises');
       expect(result.params[0]).toBe('queue-1');
       expect(result.params[1]).toBe('Squat');
+    });
+
+    it('serializes double-progression fields for queue exercises', () => {
+      const result = serializeQueueExerciseToSqlParams({
+        ...baseExercise,
+        repRangeMin: 6,
+        repRangeMax: 10,
+        progressionThreshold: 2,
+        timesRepsHitInARow: 1,
+      } as any, 0, 'queue-1');
+
+      expect(result.params[12]).toBe(6);
+      expect(result.params[13]).toBe(10);
+      expect(result.params[14]).toBe(2);
+      expect(result.params[15]).toBe(1);
     });
 
     it('preserves zero numeric values instead of falling back to defaults', () => {
@@ -284,6 +318,10 @@ describe('db/serialization', () => {
         progression: 2.5,
         has_customised_sets: 0,
         variant_json: '{"angle":"Flat"}',
+        rep_range_min: 8,
+        rep_range_max: 12,
+        progression_threshold: 3,
+        times_reps_hit_in_a_row: 2,
         position: 0,
       };
 
@@ -299,6 +337,10 @@ describe('db/serialization', () => {
       expect(result.progression).toBe('2.5');
       expect(result.hasCustomisedSets).toBe(false);
       expect(result.variant).toEqual({ angle: 'Flat' });
+      expect(result.repRangeMin).toBe(8);
+      expect(result.repRangeMax).toBe(12);
+      expect(result.progressionThreshold).toBe(3);
+      expect(result.timesRepsHitInARow).toBe(2);
     });
 
     it('handles null muscle_groups gracefully', () => {
@@ -315,6 +357,10 @@ describe('db/serialization', () => {
         progression: 0,
         has_customised_sets: 0,
         variant_json: null,
+        rep_range_min: null,
+        rep_range_max: null,
+        progression_threshold: null,
+        times_reps_hit_in_a_row: 0,
         position: 0,
       };
 
@@ -337,6 +383,10 @@ describe('db/serialization', () => {
         progression: 0,
         has_customised_sets: 0,
         variant_json: null,
+        rep_range_min: null,
+        rep_range_max: null,
+        progression_threshold: null,
+        times_reps_hit_in_a_row: 0,
         position: 0,
       };
 
@@ -345,6 +395,7 @@ describe('db/serialization', () => {
       expect(result.reps).toBe('0');
       expect(result.sets).toBe('0');
       expect(result.restTime).toBe('0');
+      expect(result.progression).toBe('');
     });
 
     it('preserves exerciseInstanceId when present', () => {
@@ -361,6 +412,10 @@ describe('db/serialization', () => {
         progression: 2.5,
         has_customised_sets: 0,
         variant_json: null,
+        rep_range_min: null,
+        rep_range_max: null,
+        progression_threshold: null,
+        times_reps_hit_in_a_row: 0,
         position: 0,
         exercise_instance_id: 'q0:e0',
       };

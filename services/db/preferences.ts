@@ -126,13 +126,13 @@ export const getCurrentProgramId = async (): Promise<string | null> => {
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
   _incrementQueueGenerationId();
 
-  await updateUserPreferences({ currentProgramId: programId });
-
   if (programId) {
     await _generateWorkoutQueue(programId);
   } else {
     await _clearWorkoutQueue();
   }
+
+  await updateUserPreferences({ currentProgramId: programId });
 };
 
 // ---------------------------------------------------------------------------

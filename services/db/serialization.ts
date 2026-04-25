@@ -124,14 +124,70 @@ export type SqlExerciseRow = {
   progression: number;
   has_customised_sets: number;
   variant_json: string | null;
+  rep_range_min: number | null;
+  rep_range_max: number | null;
+  progression_threshold: number | null;
+  times_reps_hit_in_a_row: number | null;
   position: number;
   exercise_instance_id?: string;
 };
 
+/**
+ * Converts optional double-progression integers to SQL values.
+ *
+ * @param value - Optional integer-ish input from a ProgramExercise.
+ * @returns A positive integer for configured fields, otherwise null.
+ */
+export function optionalPositiveIntParam(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Converts the double-progression hit counter to a persisted SQL value.
+ *
+ * @param value - Optional integer-ish counter value.
+ * @returns A non-negative integer, defaulting to 0.
+ */
+export function nonNegativeIntParam(value: unknown): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Converts stored optional integers back to ProgramExercise fields.
+ *
+ * @param value - SQLite numeric value or null.
+ * @returns The positive integer when present, otherwise undefined.
+ */
+function optionalPositiveIntField(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 export function serializeExerciseToSqlParams(
   exercise: ProgramExercise,
   position: number,
-  foreignKey: string
+  foreignKey: SQLiteBindValue
 ): {
   sql: string;
   params: SQLiteBindValue[];
@@ -139,8 +195,8 @@ export function serializeExerciseToSqlParams(
   const muscleGroups = exercise.muscle_groups_worked ?? [];
   return {
     sql: `INSERT INTO program_exercises
-           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (workout_day_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, rep_range_min, rep_range_max, progression_threshold, times_reps_hit_in_a_row, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
       foreignKey,
       exercise.name ?? '',
@@ -154,6 +210,10 @@ export function serializeExerciseToSqlParams(
       safeParseFloat(exercise.progression, 0),
       exercise.hasCustomisedSets ? 1 : 0,
       serializeVariant(exercise.variant),
+      optionalPositiveIntParam(exercise.repRangeMin),
+      optionalPositiveIntParam(exercise.repRangeMax),
+      optionalPositiveIntParam(exercise.progressionThreshold),
+      nonNegativeIntParam(exercise.timesRepsHitInARow),
       position,
     ],
   };
@@ -170,8 +230,8 @@ export function serializeQueueExerciseToSqlParams(
   const muscleGroups = exercise.muscle_groups_worked ?? [];
   return {
     sql: `INSERT INTO queue_exercises
-           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, position)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (queue_item_id, name, equipment, muscle_groups, is_compound, weight, reps, sets, rest_time, progression, has_customised_sets, variant_json, rep_range_min, rep_range_max, progression_threshold, times_reps_hit_in_a_row, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     params: [
       queueItemId,
       exercise.name ?? '',
@@ -185,6 +245,10 @@ export function serializeQueueExerciseToSqlParams(
       safeParseFloat(exercise.progression, 0),
       exercise.hasCustomisedSets ? 1 : 0,
       serializeVariant(exercise.variant),
+      optionalPositiveIntParam(exercise.repRangeMin),
+      optionalPositiveIntParam(exercise.repRangeMax),
+      optionalPositiveIntParam(exercise.progressionThreshold),
+      nonNegativeIntParam(exercise.timesRepsHitInARow),
       position,
     ],
   };
@@ -203,8 +267,12 @@ export function deserializeProgramExerciseRow(ex: SqlExerciseRow): ProgramExerci
     reps: (ex.reps ?? 8).toString(),
     sets: (ex.sets ?? 3).toString(),
     restTime: (ex.rest_time ?? 180).toString(),
-    progression: (ex.progression ?? 0).toString(),
+    progression: (ex.progression ?? 0) > 0 ? ex.progression.toString() : '',
     hasCustomisedSets: ex.has_customised_sets === 1,
     variant: parseVariant(ex.variant_json),
+    repRangeMin: optionalPositiveIntField(ex.rep_range_min),
+    repRangeMax: optionalPositiveIntField(ex.rep_range_max),
+    progressionThreshold: optionalPositiveIntField(ex.progression_threshold),
+    timesRepsHitInARow: nonNegativeIntParam(ex.times_reps_hit_in_a_row),
   };
 }

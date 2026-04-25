@@ -12,7 +12,6 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { DEFAULT_QUEUE_SIZE } from '@/constants';
-import { calculateAutoWeight } from '@/lib/workout-progression';
 import * as db from '@/services/database';
 import type {
   Program,
@@ -82,6 +81,31 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
   // DOUBLE-TAP GUARD: Ref-based because setState is async and can't prevent concurrent calls
   const isSavingRef = useRef(false);
 
+  /**
+   * Builds the initial logged exercise state for active workout inputs.
+   *
+   * @param exercise - Program exercise with target metadata.
+   * @param finalWeight - Recommended working weight for this workout.
+   * @returns WorkoutExercise with reps blank and customised set weights prefilled.
+   */
+  const buildInitialLoggedExercise = useCallback((
+    exercise: ProgramExercise,
+    finalWeight: number
+  ): WorkoutExercise => {
+    const targetSets = Number.parseInt(exercise.sets, 10) || 0;
+    const loggedSetWeights = exercise.hasCustomisedSets && targetSets > 0 && finalWeight > 0
+      ? Array.from({ length: targetSets }, () => finalWeight)
+      : [];
+
+    return {
+      ...exercise,
+      loggedWeight: finalWeight,
+      loggedReps: 0,
+      loggedSetWeights,
+      loggedSetReps: [],
+    };
+  }, []);
+
   /** Reload the workout queue from the database, normalizing to max size. */
   const reloadQueue = async () => {
     try {
@@ -146,13 +170,14 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
     try {
       const progressedExercises: ProgramExercise[] = await Promise.all(
         exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, programId, ex.variant);
-          const progressedWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          const recommendation = await db.getProgressionRecommendationForExercise(ex, programId);
           const numExWeight = Number(ex.weight) || 0;
+          const recommendedWeight = recommendation.weight || numExWeight;
 
           return {
             ...ex,
-            weight: String(progressedWeight || numExWeight),
+            weight: String(recommendedWeight),
+            timesRepsHitInARow: recommendation.timesRepsHitInARow ?? ex.timesRepsHitInARow,
           };
         })
       );
@@ -180,16 +205,13 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id, ex.variant);
-          const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          const recommendation = await db.getProgressionRecommendationForExercise(ex, currentProgram.id);
+          const finalWeight = recommendation.weight || Number(ex.weight) || 0;
 
-          return {
-            ...ex,
-            loggedWeight: autoWeight,
-            loggedReps: 0,
-            loggedSetWeights: [],
-            loggedSetReps: [],
-          };
+          return buildInitialLoggedExercise(
+            { ...ex, timesRepsHitInARow: recommendation.timesRepsHitInARow ?? ex.timesRepsHitInARow },
+            finalWeight
+          );
         })
       );
 
@@ -199,16 +221,12 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       if (dayLoadRequestRef.current !== thisRequestId) return;
 
       console.error('Error initializing workout exercises:', error);
-      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
-        ...ex,
-        loggedWeight: 0,
-        loggedReps: 0,
-        loggedSetWeights: [],
-        loggedSetReps: [],
-      }));
+      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) =>
+        buildInitialLoggedExercise(ex, 0)
+      );
       setWorkoutExercises(initialExercises);
     }
-  }, [currentProgram, selectedDayIndex]);
+  }, [buildInitialLoggedExercise, currentProgram, selectedDayIndex]);
 
   /**
    * Initialize exercise data from a queue item, using queue pre-calculated weights.
@@ -224,17 +242,11 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
           let finalWeight = Number(ex.weight) || 0;
 
           if (!finalWeight) {
-            const lastWeight = await db.getLastLoggedWeight(ex.name, queueItem.programId, ex.variant);
-            finalWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0) || 0;
+            const recommendation = await db.getProgressionRecommendationForExercise(ex, queueItem.programId);
+            finalWeight = recommendation.weight || 0;
           }
 
-          return {
-            ...ex,
-            loggedWeight: finalWeight,
-            loggedReps: 0,
-            loggedSetWeights: [],
-            loggedSetReps: [],
-          };
+          return buildInitialLoggedExercise(ex, finalWeight);
         })
       );
 
@@ -244,16 +256,12 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       if (dayLoadRequestRef.current !== thisRequestId) return;
 
       console.error('Error initializing workout exercises from queue:', error);
-      const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
-        ...ex,
-        loggedWeight: Number(ex.weight) || 0,
-        loggedReps: 0,
-        loggedSetWeights: [],
-        loggedSetReps: [],
-      }));
+      const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) =>
+        buildInitialLoggedExercise(ex, Number(ex.weight) || 0)
+      );
       setWorkoutExercises(initialExercises);
     }
-  }, []);
+  }, [buildInitialLoggedExercise]);
 
   /** Load workout data from the first item in the queue. */
   const loadWorkoutFromQueue = useCallback(async () => {
@@ -446,7 +454,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
 
           const nonZeroSetWeights = nextSetWeights.filter((weight) => weight > 0);
           const derivedLoggedWeight =
-            nonZeroSetWeights.length > 0 ? nonZeroSetWeights[nonZeroSetWeights.length - 1] : 0;
+            nonZeroSetWeights.length > 0 ? Math.max(...nonZeroSetWeights) : 0;
 
           return {
             ...ex,
@@ -526,13 +534,9 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
         setWorkoutQueue(updatedQueue);
 
         const queueItem = updatedQueue[0];
-        const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) => ({
-          ...ex,
-          loggedWeight: Number(ex.weight) || 0,
-          loggedReps: 0,
-          loggedSetWeights: [],
-          loggedSetReps: [],
-        }));
+        const initialExercises: WorkoutExercise[] = queueItem.exercises.map((ex) =>
+          buildInitialLoggedExercise(ex, Number(ex.weight) || 0)
+        );
         setWorkoutExercises(initialExercises);
         return;
       }
@@ -548,16 +552,13 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
     try {
       const initialExercises: WorkoutExercise[] = await Promise.all(
         selectedDay.exercises.map(async (ex) => {
-          const lastWeight = await db.getLastLoggedWeight(ex.name, currentProgram.id, ex.variant);
-          const autoWeight = calculateAutoWeight(lastWeight, Number(ex.progression) || 0);
+          const recommendation = await db.getProgressionRecommendationForExercise(ex, currentProgram.id);
+          const finalWeight = recommendation.weight || Number(ex.weight) || 0;
 
-          return {
-            ...ex,
-            loggedWeight: autoWeight,
-            loggedReps: 0,
-            loggedSetWeights: [],
-            loggedSetReps: [],
-          };
+          return buildInitialLoggedExercise(
+            { ...ex, timesRepsHitInARow: recommendation.timesRepsHitInARow ?? ex.timesRepsHitInARow },
+            finalWeight
+          );
         })
       );
 
@@ -567,16 +568,12 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       if (dayLoadRequestRef.current !== thisRequestId) return;
 
       console.error('Error loading exercises for new day:', error);
-      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) => ({
-        ...ex,
-        loggedWeight: 0,
-        loggedReps: 0,
-        loggedSetWeights: [],
-        loggedSetReps: [],
-      }));
+      const initialExercises: WorkoutExercise[] = selectedDay.exercises.map((ex) =>
+        buildInitialLoggedExercise(ex, 0)
+      );
       setWorkoutExercises(initialExercises);
     }
-  }, [currentProgram, getDayNumberAtIndex, selectedDayIndex]);
+  }, [buildInitialLoggedExercise, currentProgram, getDayNumberAtIndex, selectedDayIndex]);
 
   /** Advance the workout queue after a completed workout is saved. */
   const updateWorkoutQueue = useCallback(async () => {
@@ -593,6 +590,14 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       if (queue.length > 0) {
         queue = queue.slice(1);
       }
+
+      queue = await Promise.all(
+        queue.map(async (item, index) => ({
+          ...item,
+          exercises: await applyProgressionToExercises(item.exercises, currentProgram.id),
+          position: index,
+        }))
+      );
 
       while (queue.length < DEFAULT_QUEUE_SIZE) {
         const totalDays = currentProgram.workoutDays.length;
@@ -628,7 +633,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
     } catch (error) {
       console.error('Error updating workout queue:', error);
     }
-  }, [currentProgram, selectedDayIndex, getDayNumberAtIndex]);
+  }, [applyProgressionToExercises, currentProgram, initializeWorkoutQueue, selectedDayIndex, getDayNumberAtIndex]);
 
   /** Save the completed workout, verify program still exists, and clear timers. */
   const saveWorkout = useCallback(async () => {

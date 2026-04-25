@@ -4,7 +4,7 @@
  * Extracted from database.ts to isolate the strict-parity queue lifecycle.
  * All queue CRUD, generation, skip, and validation functions live here.
  *
- * Cross-cutting dependencies (getProgramById, getLastLoggedWeight) are
+ * Cross-cutting dependencies (getProgramById, progression history) are
  * injected at the facade layer to avoid circular imports.
  */
 
@@ -215,38 +215,27 @@ function roundWeightToNearestQuarter(weight: number): number {
   return Math.round(weight * 4) / 4;
 }
 
-function calculateProgressedWeight(exercise: ProgramExercise, lastWeight: number | null): number {
-  const numLastWeight = lastWeight !== null ? Number(lastWeight) : null;
-  const numProgression = Number(exercise.progression) || 0;
-  const numExerciseWeight = Number(exercise.weight) || 0;
-
-  let newWeight = numExerciseWeight;
-  if (numLastWeight !== null && numProgression > 0) {
-    newWeight = numLastWeight + numProgression;
-  } else if (numLastWeight !== null) {
-    newWeight = numLastWeight;
-  }
-
-  return roundWeightToNearestQuarter(newWeight);
-}
-
 type GetProgramByIdFn = (id: string) => Promise<import('@/types').Program | null>;
-type GetLastLoggedWeightFn = (name: string, programId: string, variant?: import('@/types').ExerciseVariant | null) => Promise<number | null>;
+type GetProgressionRecommendationFn = (
+  exercise: ProgramExercise,
+  programId: string
+) => Promise<{ weight: number; timesRepsHitInARow?: number }>;
 
 async function applyProgressionToExercises(
   exercises: ProgramExercise[],
   programId: string,
-  getLastLoggedWeight: GetLastLoggedWeightFn
+  getProgressionRecommendation: GetProgressionRecommendationFn
 ): Promise<ProgramExercise[]> {
   const exercisesWithProgression: ProgramExercise[] = [];
 
   for (const exercise of exercises) {
-    const lastWeight = await getLastLoggedWeight(exercise.name, programId, exercise.variant);
-    const newWeight = calculateProgressedWeight(exercise, lastWeight);
+    const recommendation = await getProgressionRecommendation(exercise, programId);
+    const newWeight = roundWeightToNearestQuarter(recommendation.weight);
 
     exercisesWithProgression.push({
       ...exercise,
       weight: newWeight.toString(),
+      timesRepsHitInARow: recommendation.timesRepsHitInARow ?? exercise.timesRepsHitInARow,
     });
   }
 
@@ -256,7 +245,7 @@ async function applyProgressionToExercises(
 export const generateWorkoutQueue = async (
   programId: string,
   getProgramById: GetProgramByIdFn,
-  getLastLoggedWeight: GetLastLoggedWeightFn
+  getProgressionRecommendation: GetProgressionRecommendationFn
 ): Promise<void> => {
   const thisRequestId = incrementQueueGenerationId();
 
@@ -282,7 +271,7 @@ export const generateWorkoutQueue = async (
     const dayIndex = i % numDays;
     const workoutDay = program.workoutDays[dayIndex];
 
-    const exercisesWithProgression = await applyProgressionToExercises(workoutDay.exercises, programId, getLastLoggedWeight);
+    const exercisesWithProgression = await applyProgressionToExercises(workoutDay.exercises, programId, getProgressionRecommendation);
 
     queueItems.push({
       id: `queue-${batchTs}-${batchRand}-${i}`,
@@ -308,7 +297,7 @@ export const skipQueueToDay = async (
   targetDayNumber: number,
   originalQueue: WorkoutQueueItem[] | undefined,
   getProgramById: GetProgramByIdFn,
-  getLastLoggedWeight: GetLastLoggedWeightFn
+  getProgressionRecommendation: GetProgressionRecommendationFn
 ): Promise<WorkoutQueueItem[] | null> => {
   const program = await getProgramById(programId);
   if (!program || program.workoutDays.length === 0) {
@@ -319,7 +308,7 @@ export const skipQueueToDay = async (
   const referenceQueue = originalQueue ?? await getWorkoutQueue();
 
   if (referenceQueue.length > 0 && referenceQueue[0].programId !== programId) {
-    await generateWorkoutQueue(programId, getProgramById, getLastLoggedWeight);
+    await generateWorkoutQueue(programId, getProgramById, getProgressionRecommendation);
     return getWorkoutQueue();
   }
 
@@ -364,7 +353,7 @@ export const skipQueueToDay = async (
 
     const nextDay = program.workoutDays[nextDayIndex];
 
-    const exercisesWithProgression = await applyProgressionToExercises(nextDay.exercises, programId, getLastLoggedWeight);
+    const exercisesWithProgression = await applyProgressionToExercises(nextDay.exercises, programId, getProgressionRecommendation);
 
     newQueue.push({
       id: `queue-${skipTs}-${skipRand}-${newQueue.length}`,

@@ -14,6 +14,19 @@ function toValidationResult(errors: string[]): ValidationResult {
   };
 }
 
+function getStableVariantKey(exercise: ProgramExercise): string {
+  const variant = exercise.variant;
+  if (!variant || Object.keys(variant).length === 0) {
+    return 'default';
+  }
+
+  const variantEntries = Object.entries(variant)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return JSON.stringify(variantEntries);
+}
+
 export function validateProgramName(name: string): ValidationResult {
   const errors: string[] = [];
 
@@ -40,6 +53,12 @@ export function validateNumberOfDays(days: number): ValidationResult {
   return toValidationResult(errors);
 }
 
+/**
+ * Validates workout day structure and duplicate exercise/variant rules.
+ *
+ * @param day - Workout day containing day number and exercise list.
+ * @returns ValidationResult containing all day-level validation errors.
+ */
 export function validateWorkoutDay(day: WorkoutDay): ValidationResult {
   const errors: string[] = [];
 
@@ -49,9 +68,35 @@ export function validateWorkoutDay(day: WorkoutDay): ValidationResult {
     errors.push(`Day ${day.dayNumber} cannot have more than ${MAX_EXERCISES_PER_DAY} exercises`);
   }
 
+  if (Array.isArray(day.exercises)) {
+    const seenExerciseVariants = new Set<string>();
+
+    for (const exercise of day.exercises) {
+      const nameKey = (exercise.name ?? '').trim().toLowerCase();
+      const duplicateKey = `${nameKey}:${getStableVariantKey(exercise)}`;
+
+      if (!nameKey) {
+        continue;
+      }
+
+      if (seenExerciseVariants.has(duplicateKey)) {
+        errors.push(`Duplicate exercise "${exercise.name}" with the same variant on Day ${day.dayNumber}`);
+        continue;
+      }
+
+      seenExerciseVariants.add(duplicateKey);
+    }
+  }
+
   return toValidationResult(errors);
 }
 
+/**
+ * Validates an individual program exercise configuration.
+ *
+ * @param exercise - Program exercise containing target values and progression metadata.
+ * @returns ValidationResult containing all exercise-level validation errors.
+ */
 export function validateExercise(exercise: ProgramExercise): ValidationResult {
   const errors: string[] = [];
 
@@ -82,6 +127,17 @@ export function validateExercise(exercise: ProgramExercise): ValidationResult {
     }
   }
 
+  if (!exercise.reps || !exercise.reps.trim()) {
+    errors.push('Reps must be greater than 0');
+  } else {
+    const repsNum = parseInt(exercise.reps, 10);
+    if (isNaN(repsNum)) {
+      errors.push('Reps must be a valid number');
+    } else if (repsNum <= 0) {
+      errors.push('Reps must be greater than 0');
+    }
+  }
+
   if (exercise.restTime && exercise.restTime.trim()) {
     const restNum = parseInt(exercise.restTime, 10);
     if (isNaN(restNum)) {
@@ -90,6 +146,16 @@ export function validateExercise(exercise: ProgramExercise): ValidationResult {
       errors.push('Rest time cannot be negative');
     } else if (restNum > 600) {
       errors.push('Rest time cannot exceed 10 minutes (600 seconds)');
+    }
+  }
+
+  if (exercise.progression && exercise.progression.trim()) {
+    const stripped = exercise.progression.replace(/[^0-9.\-]/g, '');
+    const progressionNum = parseFloat(stripped);
+    if (isNaN(progressionNum)) {
+      errors.push('Progression must be a valid number');
+    } else if (progressionNum <= 0) {
+      errors.push('Progression must be greater than 0 or left empty');
     }
   }
 
