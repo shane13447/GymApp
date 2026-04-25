@@ -17,14 +17,16 @@ describe('database queue generation race handling', () => {
   });
 
   it('does not save a stale queue after the current program is cleared', async () => {
-    const progressionGate = createDeferred<{ logged_weight: number } | null>();
+    const progressionGate = createDeferred<unknown[]>();
     const progressionStarted = createDeferred<void>();
     const runSql: string[] = [];
+    const runCalls: Array<{ sql: string; params?: unknown[] }> = [];
 
     const database = {
       execAsync: jest.fn(async () => undefined),
-      runAsync: jest.fn(async (sql: string) => {
+      runAsync: jest.fn(async (sql: string, params?: unknown[]) => {
         runSql.push(sql);
+        runCalls.push({ sql, params });
         return { lastInsertRowId: 1 };
       }),
       getFirstAsync: jest.fn(async (sql: string) => {
@@ -39,11 +41,6 @@ describe('database queue generation race handling', () => {
             created_at: '2026-01-01T00:00:00.000Z',
             updated_at: '2026-01-01T00:00:00.000Z',
           };
-        }
-
-        if (sql.includes('FROM workout_exercises')) {
-          progressionStarted.resolve();
-          return progressionGate.promise;
         }
 
         return null;
@@ -81,6 +78,11 @@ describe('database queue generation race handling', () => {
           ];
         }
 
+        if (sql.includes('FROM workout_exercises')) {
+          progressionStarted.resolve();
+          return progressionGate.promise;
+        }
+
         return [];
       }),
       getAllSync: jest.fn(),
@@ -97,7 +99,7 @@ describe('database queue generation race handling', () => {
     await progressionStarted.promise;
 
     await setCurrentProgramId(null);
-    progressionGate.resolve(null);
+    progressionGate.resolve([]);
     await generatePromise;
 
     expect(
@@ -106,5 +108,11 @@ describe('database queue generation race handling', () => {
     expect(
       runSql.filter((sql) => sql.includes('DELETE FROM workout_queue')).length
     ).toBeGreaterThan(0);
+    expect(
+      runCalls.some((call) =>
+        call.sql.includes('UPDATE user_preferences SET current_program_id = ?') &&
+        call.params?.[0] === 'program-1'
+      )
+    ).toBe(false);
   });
 });

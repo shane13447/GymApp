@@ -16,11 +16,13 @@ import { getDatabase, runInTransaction } from '@/services/db/connection';
 // ---------------------------------------------------------------------------
 
 type IncrementQueueGenerationIdFn = () => number;
-type GenerateWorkoutQueueFn = (programId: string) => Promise<void>;
+type GetQueueGenerationIdFn = () => number;
+type GenerateWorkoutQueueFn = (programId: string) => Promise<number | null>;
 type ClearWorkoutQueueFn = () => Promise<void>;
 
 let _incrementQueueGenerationId: IncrementQueueGenerationIdFn = () => 0;
-let _generateWorkoutQueue: GenerateWorkoutQueueFn = async () => {};
+let _getQueueGenerationId: GetQueueGenerationIdFn = () => 0;
+let _generateWorkoutQueue: GenerateWorkoutQueueFn = async () => null;
 let _clearWorkoutQueue: ClearWorkoutQueueFn = async () => {};
 
 /**
@@ -29,10 +31,12 @@ let _clearWorkoutQueue: ClearWorkoutQueueFn = async () => {};
  */
 export const registerPreferencesDeps = (deps: {
   incrementQueueGenerationId: IncrementQueueGenerationIdFn;
+  getQueueGenerationId: GetQueueGenerationIdFn;
   generateWorkoutQueue: GenerateWorkoutQueueFn;
   clearWorkoutQueue: ClearWorkoutQueueFn;
 }): void => {
   _incrementQueueGenerationId = deps.incrementQueueGenerationId;
+  _getQueueGenerationId = deps.getQueueGenerationId;
   _generateWorkoutQueue = deps.generateWorkoutQueue;
   _clearWorkoutQueue = deps.clearWorkoutQueue;
 };
@@ -124,11 +128,13 @@ export const getCurrentProgramId = async (): Promise<string | null> => {
 };
 
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
-  _incrementQueueGenerationId();
-
   if (programId) {
-    await _generateWorkoutQueue(programId);
+    const completedGenerationId = await _generateWorkoutQueue(programId);
+    if (completedGenerationId === null || completedGenerationId !== _getQueueGenerationId()) {
+      return;
+    }
   } else {
+    _incrementQueueGenerationId();
     await _clearWorkoutQueue();
   }
 

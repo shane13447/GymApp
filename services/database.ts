@@ -41,6 +41,7 @@ import {
 } from '@/services/db/preferences';
 import * as programsDb from '@/services/db/programs';
 import {
+    getQueueGenerationId,
     incrementQueueGenerationId,
     addToWorkoutQueue as queueAddToWorkoutQueue,
     clearWorkoutQueue as queueClearWorkoutQueue,
@@ -632,7 +633,7 @@ export const getQueueItemForDay = queueGetQueueItemForDay;
  * Generate a workout queue from a program.
  * Delegates to queue module, injecting getProgramById and progression history.
  */
-export const generateWorkoutQueue = async (programId: string): Promise<void> => {
+export const generateWorkoutQueue = async (programId: string): Promise<number | null> => {
   return queueGenerateWorkoutQueue(programId, getProgramById, getProgressionRecommendationForExercise);
 };
 
@@ -659,6 +660,7 @@ const cleanupOrphanedTimersWithDatabase = timerCleanupOrphanedTimersWithDatabase
 // Register cross-module dependencies after all exports are defined
 registerPreferencesDeps({
   incrementQueueGenerationId,
+  getQueueGenerationId,
   generateWorkoutQueue,
   clearWorkoutQueue,
 });

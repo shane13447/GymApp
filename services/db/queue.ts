@@ -246,18 +246,18 @@ export const generateWorkoutQueue = async (
   programId: string,
   getProgramById: GetProgramByIdFn,
   getProgressionRecommendation: GetProgressionRecommendationFn
-): Promise<void> => {
+): Promise<number | null> => {
   const thisRequestId = incrementQueueGenerationId();
 
   const program = await getProgramById(programId);
   if (!program || program.workoutDays.length === 0) {
     console.warn('Cannot generate queue: Program not found or has no workout days');
-    return;
+    return null;
   }
 
   if (thisRequestId !== getQueueGenerationId()) {
     console.log(`Aborting stale queue generation for program: ${program.name}`);
-    return;
+    return null;
   }
 
   const queueItems: WorkoutQueueItem[] = [];
@@ -266,7 +266,7 @@ export const generateWorkoutQueue = async (
   const batchRand = Math.random().toString(36).slice(2, 8);
 
   for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
-    if (thisRequestId !== getQueueGenerationId()) return;
+    if (thisRequestId !== getQueueGenerationId()) return null;
 
     const dayIndex = i % numDays;
     const workoutDay = program.workoutDays[dayIndex];
@@ -285,11 +285,12 @@ export const generateWorkoutQueue = async (
 
   if (thisRequestId !== getQueueGenerationId()) {
     console.log(`Aborting stale queue save for program: ${program.name}`);
-    return;
+    return null;
   }
 
   await saveWorkoutQueue(queueItems);
   console.log(`Generated workout queue with ${queueItems.length} items for program: ${program.name}`);
+  return thisRequestId;
 };
 
 export const skipQueueToDay = async (
