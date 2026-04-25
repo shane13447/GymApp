@@ -4,6 +4,7 @@ import {
   evaluateInjurySemanticOutcome,
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
+  isInjuryRelatedRequest,
   validateChanges,
   validateQueueStructure,
 } from '@/services/queue/diff';
@@ -310,7 +311,9 @@ export const executePromptThroughCoachPipeline = async (
     targetedExercises,
   });
 
-  const structureValidation = validateQueueStructure(transportQueue, parsedQueue);
+  const structureValidation = validateQueueStructure(transportQueue, parsedQueue, {
+    allowEmptyExerciseItems: isInjuryRelatedRequest(evaluationRequest),
+  });
   if (!structureValidation.valid) {
     return { status: 'STRUCTURE_VALIDATION_FAILED', reasons: structureValidation.errors };
   }

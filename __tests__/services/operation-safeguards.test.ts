@@ -1,4 +1,10 @@
 import { applyOperationIntentSafeguards } from '@/services/coach/operation-safeguards';
+import {
+  compareWorkoutQueues,
+  evaluateInjurySemanticOutcome,
+  validateChanges,
+  validateQueueStructure,
+} from '@/services/queue/diff';
 import type { TargetedExerciseRef } from '@/services/queue/types';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 
@@ -80,6 +86,23 @@ describe('operation intent safeguards', () => {
     expect(result[0].exercises.map((exercise) => exercise.name)).toEqual(['Dumbbell Press']);
   });
 
+  it('detects tweaked pain wording as injury context for removal repair', () => {
+    const queue = createQueue();
+    queue[0].exercises[1] = {
+      ...queue[0].exercises[1],
+      name: 'Leg Extensions',
+      muscle_groups_worked: ['quads'],
+    };
+
+    const result = applyOperationIntentSafeguards({
+      request: 'I tweaked my knee badly, make leg work safe today',
+      parsedQueue: queue,
+      targetedExercises: [createTarget(1, 'Leg Extensions', 'q0:e1')],
+    });
+
+    expect(result[0].exercises.map((exercise) => exercise.name)).toEqual(['Dumbbell Press']);
+  });
+
   it('does not run injury removal fallback for explicit remove requests', () => {
     const result = applyOperationIntentSafeguards({
       request: 'I hurt my wrists, take out all the forearm stuff',
@@ -91,6 +114,58 @@ describe('operation intent safeguards', () => {
       'Dumbbell Press',
       'Overhead Barbell Press',
     ]);
+  });
+
+  it('allows injury requests to remove exercises without explicit remove wording', () => {
+    const originalQueue = createQueue();
+    const parsedQueue: WorkoutQueueItem[] = [
+      {
+        ...originalQueue[0],
+        exercises: [originalQueue[0].exercises[0]],
+      },
+    ];
+    const differences = compareWorkoutQueues(originalQueue, parsedQueue);
+
+    const validation = validateChanges(
+      'my shoulder has a slight ache today, make this safe',
+      differences
+    );
+
+    expect(validation.valid).toBe(true);
+  });
+
+  it('allows empty queue days only when structure validation has injury context', () => {
+    const originalQueue = createQueue();
+    const parsedQueue: WorkoutQueueItem[] = [
+      {
+        ...originalQueue[0],
+        exercises: [],
+      },
+    ];
+
+    expect(validateQueueStructure(originalQueue, parsedQueue).valid).toBe(false);
+    expect(
+      validateQueueStructure(originalQueue, parsedQueue, { allowEmptyExerciseItems: true }).valid
+    ).toBe(true);
+  });
+
+  it('treats mild injury removals as a valid safety outcome', () => {
+    const originalQueue = createQueue();
+    const parsedQueue: WorkoutQueueItem[] = [
+      {
+        ...originalQueue[0],
+        exercises: [originalQueue[0].exercises[0]],
+      },
+    ];
+
+    const result = evaluateInjurySemanticOutcome(
+      'mild injury: my shoulder is irritated',
+      originalQueue,
+      parsedQueue,
+      ['Overhead Barbell Press']
+    );
+
+    expect(result.passed).toBe(true);
   });
 
   it('repairs explicit numeric clauses the model applied to the wrong resolved target', () => {

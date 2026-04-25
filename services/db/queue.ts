@@ -26,6 +26,12 @@ export const incrementQueueGenerationId = (): number => {
   return currentQueueGenerationId;
 };
 
+/**
+ * Validates queue snapshots before SQLite persistence.
+ *
+ * @param queue - Workout queue items to persist
+ * @returns Nothing; throws when the queue violates persistence invariants
+ */
 export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): void => {
   const seenIds = new Set<string>();
 
@@ -49,8 +55,8 @@ export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): v
       throw new Error(`Invalid queue item "${item.id}": dayNumber must be a positive integer.`);
     }
 
-    if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
-      throw new Error(`Invalid queue item "${item.id}": exercises must be a non-empty array.`);
+    if (!Array.isArray(item.exercises)) {
+      throw new Error(`Invalid queue item "${item.id}": exercises must be an array.`);
     }
 
     for (const exercise of item.exercises) {

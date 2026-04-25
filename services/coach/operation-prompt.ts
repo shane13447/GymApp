@@ -45,7 +45,7 @@ export const OPERATION_SYSTEM_PROMPT = [
   'For remove_exercise, target only the exercise to remove. Do not remove unrelated exercises.',
   'For swap_variant, value.variant must be a plain string such as "Close Grip", "Neutral Grip", "Incline", or "Dumbbell". Do not use an object for value.variant.',
   'For muscle-group or injury requests, emit one operation per affected exercise in the supplied queue scope.',
-  'For mild injury requests, reduce load using weight-first changes for every affected exercise. For moderate or severe injury requests, remove or swap every affected painful exercise.',
+  'For mild injury requests, reduce load, remove, or swap affected exercises when that is safer. For moderate or severe injury requests, remove or swap every affected painful exercise.',
   'Use numbers for weight, reps, and sets. Use kilograms as provided by the queue. Do not mutate exercises outside the supplied queue.',
 ].join('\n');
 

@@ -70,10 +70,16 @@ describe('validateWorkoutQueueForPersistence', () => {
     expect(() => validateWorkoutQueueForPersistence(queue)).toThrow('dayNumber must be a positive integer');
   });
 
-  it('throws when exercises is empty', () => {
+  it('accepts a queue item with no exercises', () => {
     const queue = [createQueueItem({ exercises: [] })];
 
-    expect(() => validateWorkoutQueueForPersistence(queue)).toThrow('exercises must be a non-empty array');
+    expect(() => validateWorkoutQueueForPersistence(queue)).not.toThrow();
+  });
+
+  it('throws when exercises is not an array', () => {
+    const queue = [createQueueItem({ exercises: undefined as unknown as ProgramExercise[] })];
+
+    expect(() => validateWorkoutQueueForPersistence(queue)).toThrow('exercises must be an array');
   });
 
   it('throws when customised sets are enabled but set semantics are invalid', () => {

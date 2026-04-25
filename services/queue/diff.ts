@@ -6,6 +6,7 @@ export {
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
   evaluateInjurySemanticOutcome,
+  isInjuryRelatedRequest,
   analyzeTestPromptQueueCoverage,
   fuzzyMatchExerciseName,
   mergeScopedQueueChanges,

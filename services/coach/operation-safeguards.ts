@@ -86,9 +86,16 @@ const inferInjurySeverityFromRequest = (request: string): InjurySeverity | null 
     'pain',
     'painful',
     'sore',
+    'soreness',
+    'ache',
+    'aching',
+    'tender',
+    'tweaked',
     'strain',
+    'irritation',
     'irritated',
     'flare up',
+    'flare-up',
   ].some((cue) => requestLower.includes(cue));
 
   if (!hasInjuryContext) {

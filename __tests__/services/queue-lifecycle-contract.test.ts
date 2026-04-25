@@ -81,8 +81,12 @@ describe('Lifecycle contract: validateWorkoutQueueForPersistence', () => {
     expect(() => validateWorkoutQueueForPersistence([createQueueItem({ dayNumber: 0 })])).toThrow('positive integer');
   });
 
-  it('rejects empty exercises array', () => {
-    expect(() => validateWorkoutQueueForPersistence([createQueueItem({ exercises: [] as ProgramExercise[] })])).toThrow('non-empty array');
+  it('accepts empty exercises array', () => {
+    expect(() => validateWorkoutQueueForPersistence([createQueueItem({ exercises: [] as ProgramExercise[] })])).not.toThrow();
+  });
+
+  it('rejects non-array exercises value', () => {
+    expect(() => validateWorkoutQueueForPersistence([createQueueItem({ exercises: undefined as unknown as ProgramExercise[] })])).toThrow('array');
   });
 
   it('rejects customised sets with zero count', () => {

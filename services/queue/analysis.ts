@@ -714,6 +714,12 @@ const INJURY_CONTEXT_KEYWORDS = [
   'painful',
   'sore',
   'soreness',
+  'ache',
+  'aching',
+  'tender',
+  'tweaked',
+  'flare up',
+  'flare-up',
   'strain',
   'irritation',
   'irritated',
@@ -832,6 +838,15 @@ const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; s
     severity,
   };
 };
+
+/**
+ * Detects whether a user request contains injury or pain context.
+ *
+ * @param request - Raw user request text from the Coach prompt
+ * @returns True when queue shape safeguards should permit injury-driven changes
+ */
+export const isInjuryRelatedRequest = (request: string): boolean =>
+  inferInjuryIntent(normaliseText(request)).hasInjuryContext;
 
 const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
   press: ['bench', 'press', 'chest press', 'overhead press', 'shoulder press'],
@@ -1731,9 +1746,18 @@ export const differencesToProposedChanges = (differences: QueueDifference[]): Pr
 // VALIDATION â€” type definitions live in services/queue/types.ts
 // =============================================================================
 
+/**
+ * Validates that a parsed queue keeps the same item identity and ordering contract.
+ *
+ * @param originalQueue - Queue snapshot before Coach mutation
+ * @param parsedQueue - Queue snapshot after Coach mutation
+ * @param options - Validation switches for contextual queue-shape allowances
+ * @returns Validation result with structural errors, if any
+ */
 export const validateQueueStructure = (
   originalQueue: WorkoutQueueItem[],
-  parsedQueue: WorkoutQueueItem[]
+  parsedQueue: WorkoutQueueItem[],
+  options: { allowEmptyExerciseItems?: boolean } = {}
 ): QueueStructureValidationResult => {
   const errors: string[] = [];
 
@@ -1771,7 +1795,9 @@ export const validateQueueStructure = (
       seenPositions.add(item.position);
     }
 
-    if (!Array.isArray(item.exercises) || item.exercises.length === 0) {
+    if (!Array.isArray(item.exercises)) {
+      errors.push(`Queue item ${item.id} has invalid exercises.`);
+    } else if (item.exercises.length === 0 && !options.allowEmptyExerciseItems) {
       errors.push(`Queue item ${item.id} has no exercises.`);
     }
 
@@ -1806,10 +1832,7 @@ export const validateChanges = (
   const warnings: string[] = [];
   const requestLower = userRequest.toLowerCase();
   const injuryIntent = inferInjuryIntent(requestLower);
-  const injuryRemovalAllowed =
-    injuryIntent.hasInjuryContext &&
-    (injuryIntent.severity === 'moderate' || injuryIntent.severity === 'severe');
-
+  const injuryQueueShapeChangesAllowed = injuryIntent.hasInjuryContext;
 
   // Check for unexpected variant changes
   const mentionsVariant =
@@ -1882,7 +1905,7 @@ export const validateChanges = (
   const { remainingRemovals, remainingAdditions } = consumeVariantOnlyPairs();
 
   // Check for unexpected removals (if user did not request remove-like action)
-  if (!includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !injuryRemovalAllowed) {
+  if (!includesAnyKeyword(requestLower, REMOVE_REQUEST_KEYWORDS) && !injuryQueueShapeChangesAllowed) {
     if (remainingRemovals.length > 0) {
       const removedNames = remainingRemovals.map((removal) => removal.exerciseName).join(', ');
       warnings.push(`Unexpected removal(s): ${removedNames}. These exercises were removed but you didn't request removal.`);
@@ -1899,7 +1922,7 @@ export const validateChanges = (
 
   // Check for unexpected additions (if user did not request add-like action)
   // Injury moderate/severe scenarios may swap exercises to safer alternatives.
-  if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) && !injuryRemovalAllowed) {
+  if (!includesAnyKeyword(requestLower, ADD_REQUEST_KEYWORDS) && !injuryQueueShapeChangesAllowed) {
     if (remainingAdditions.length > 0) {
       const addedNames = remainingAdditions.map((addition) => addition.exerciseName).join(', ');
       warnings.push(`Unexpected addition(s): ${addedNames}. These exercises were added but you didn't request addition.`);
@@ -2532,6 +2555,15 @@ export const evaluateVariantSemanticOutcome = (
   return { passed: true };
 };
 
+/**
+ * Evaluates whether an injury request produced safe changes for affected exercises.
+ *
+ * @param request - User request text with optional synthetic severity prefix in tests
+ * @param originalQueue - Queue snapshot before Coach mutation
+ * @param parsedQueue - Queue snapshot after Coach mutation
+ * @param affectedExerciseNames - Targeted exercise display names resolved from the request
+ * @returns Semantic pass/fail result with an explanatory reason on failure
+ */
 export const evaluateInjurySemanticOutcome = (
   request: string,
   originalQueue: WorkoutQueueItem[],
@@ -2577,10 +2609,6 @@ export const evaluateInjurySemanticOutcome = (
   };
 
   const originalAffected = originalQueue
-    .flatMap((item) => item.exercises)
-    .filter((exercise) => affectedNameSet.has(normaliseText(exercise.name)));
-
-  const parsedAffected = parsedQueue
     .flatMap((item) => item.exercises)
     .filter((exercise) => affectedNameSet.has(normaliseText(exercise.name)));
 
@@ -2658,19 +2686,23 @@ export const evaluateInjurySemanticOutcome = (
   };
 
   if (severity === 'mild') {
-    if (originalAffected.length === 0 || parsedAffected.length === 0) {
+    if (originalAffected.length === 0) {
       return {
         passed: false,
-        reason: 'Injury semantic failed: mild injuries require all affected exercises in the entire current queue to be lightened.',
+        reason: 'Injury semantic failed: mild injuries require affected exercise targets in the current queue.',
       };
     }
 
     for (const originalExercise of originalAffected) {
       const parsedMatch = getParsedMatch(originalExercise);
-      if (!parsedMatch || !isLightenedWeightFirst(originalExercise, parsedMatch)) {
+      if (!parsedMatch) {
+        continue;
+      }
+
+      if (!isLightenedWeightFirst(originalExercise, parsedMatch)) {
         return {
           passed: false,
-          reason: 'Injury semantic failed: mild injuries require all affected exercises in the entire current queue to be lightened using a weight-first rule.',
+          reason: 'Injury semantic failed: mild injuries require affected exercises that remain in the current queue to be lightened using a weight-first rule.',
         };
       }
     }

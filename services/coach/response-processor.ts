@@ -17,6 +17,7 @@ import {
   evaluateInjurySemanticOutcome,
   evaluatePromptIntentOutcome,
   evaluateVariantSemanticOutcome,
+  isInjuryRelatedRequest,
   mergeScopedQueueChanges,
   validateChanges,
   validateQueueStructure,
@@ -113,7 +114,9 @@ export function processCoachResponse(input: ProcessCoachResponseInput): CoachRes
     parsedQueue: operationResult.updatedQueue,
     targetedExercises,
   });
-  const structureValidation = validateQueueStructure(scopedQueue, parsedQueue);
+  const structureValidation = validateQueueStructure(scopedQueue, parsedQueue, {
+    allowEmptyExerciseItems: isInjuryRelatedRequest(inputText),
+  });
   if (!structureValidation.valid) {
     const error = `Unable to safely apply AI changes: ${structureValidation.errors.join(' ')}`;
     if (isTestMode && currentTest) {
