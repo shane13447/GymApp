@@ -75,8 +75,8 @@ The codebase now follows a clearer split between routes, controller hooks, prese
   - Exercise catalog parsing and variant helpers.
 - `services/programs/`
   - Program cloning and day-commit helpers.
-- `services/workout-queue-modifier.ts`
-  - Legacy high-value queue transformation module that still owns core TOON parsing/repair behavior.
+- Legacy queue-string modifier
+  - The old TOON queue-string modifier has been removed as a live path. Queue modification now uses JSON operations plus deterministic queue helpers.
 
 ### Pure library helpers
 
@@ -109,14 +109,18 @@ The codebase now follows a clearer split between routes, controller hooks, prese
 
 - [app/(tabs)/ActiveWorkout.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/ActiveWorkout.tsx) uses [hooks/use-active-workout.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-active-workout.ts).
 - Queue loading, workout saving, timer cleanup, and progression all end up in the database/db modules.
+- Customised set weights prefill from the current recommendation for every set, while reps stay blank for the user to log.
+- Decimal weight inputs preserve in-progress values like `2.` while focused and normalize only on blur.
+- Progression recommendations are calculated from completed workout history. Exercises without double-progression fields use simple linear progression; exercises with rep-range fields use thresholded double progression.
 
 ### Coach flow
 
 - [app/(tabs)/Coach.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/Coach.tsx) remains the route entry point.
 - Proxy transport lives in [services/coach/proxy-client.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/coach/proxy-client.ts).
 - Prompt suite constants live in [services/coach/test-prompts.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/coach/test-prompts.ts).
-- Deterministic queue parsing/repair still relies on [services/workout-queue-modifier.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/workout-queue-modifier.ts) plus `services/queue/*`.
+- Deterministic queue parsing/repair relies on `services/coach/operation-contract.ts`, `services/coach/operation-applier.ts`, and `services/queue/*`.
 - Generated program preview and queue preview UI were split into `components/coach/*`.
+- Generated program drafts are repaired against the canonical exercise catalog: unknown exercises are removed, aliases are normalized to catalog names, and missing/invalid variants are repaired to catalog defaults.
 
 ## Commands
 
@@ -145,5 +149,7 @@ At the time of the refactor handoff this baseline was green with:
 
 - Workout and profile data are offline-first via SQLite.
 - Coach requests depend on a configured backend proxy URL in app config/env.
-- Queue safety is deterministic: model output is never trusted without parsing, repair, diffing, and validation.
+- Queue safety is deterministic: model output is never trusted without operation-contract validation, applicability checks, merging, diffing, and semantic validation.
+- The full workout queue is 9 items (`DEFAULT_QUEUE_SIZE`), while Coach requests may target a user-selected 1-9 item horizon.
+- Duplicate same-name/same-variant exercises are blocked on a single day; use customised sets for per-set variation.
 - The repo uses Expo Router, so navigation behavior is driven by the `app/` file tree rather than a manually declared route map.
