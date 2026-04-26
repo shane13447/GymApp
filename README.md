@@ -68,7 +68,7 @@ The codebase now follows a clearer split between routes, controller hooks, prese
   - SQLite internals split by concern:
   - `connection.ts`, `programs.ts`, `workouts.ts`, `queue.ts`, `preferences.ts`, `serialization.ts`, `seeds.ts`, `timers.ts`.
 - `services/queue/`
-  - Deterministic queue codec, diff, repair, and types.
+  - Deterministic targeting, diff, repair, semantic validation, scoped horizon merge, and queue-analysis types.
 - `services/coach/`
   - Coach orchestration support such as prompt running, response processing, proxy transport, and program-draft generation.
 - `services/catalog/`
@@ -141,9 +141,9 @@ Current refactor validation baseline:
 - `npm run typecheck`
 - `npm run test -- --ci --runInBand`
 
-At the time of the refactor handoff this baseline was green with:
+Current local validation baseline:
 - `40` test suites passing
-- `930` tests passing
+- `762` tests passing
 
 ## Notes
 
