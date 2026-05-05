@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { DEFAULT_QUEUE_SIZE } from '@/constants';
+import { resolveWorkoutProgram } from '@/lib/active-workout-program-resolution';
 import * as db from '@/services/database';
 import type {
   Program,
@@ -276,7 +277,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       setLoadingFromQueue(true);
       const firstWorkout = workoutQueue[0];
 
-      const program = programs.find((p) => p.id === firstWorkout.programId);
+      const program = await resolveWorkoutProgram(programs, firstWorkout, db.getProgramById);
       if (!program) {
         setLoadingFromQueue(false);
         Alert.alert(
@@ -286,6 +287,12 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
         );
         return;
       }
+
+      setPrograms((currentPrograms) =>
+        currentPrograms.some((entry) => entry.id === program.id)
+          ? currentPrograms
+          : [...currentPrograms, program]
+      );
 
       const dayIndex = program.workoutDays.findIndex(
         (day) => day.dayNumber === firstWorkout.dayNumber
