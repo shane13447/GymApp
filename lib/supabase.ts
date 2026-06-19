@@ -1,6 +1,15 @@
 import Constants from 'expo-constants';
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * Resolves the Supabase URL and publishable key from Expo config and env vars.
+ *
+ * Checks each known location in priority order (expoConfig extra, legacy
+ * manifest/manifest2 extras, then `EXPO_PUBLIC_*` environment variables),
+ * returning the first non-empty trimmed string for each value.
+ *
+ * @returns {{ url: string; publishableKey: string }} Resolved config; values are empty strings when unset.
+ */
 const getSupabaseConfig = (): { url: string; publishableKey: string } => {
   const constantsWithManifests = Constants as typeof Constants & {
     manifest?: { extra?: { supabaseUrl?: unknown; supabasePublishableKey?: unknown } };
@@ -28,6 +37,12 @@ const getSupabaseConfig = (): { url: string; publishableKey: string } => {
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   ];
 
+  /**
+   * Returns the first candidate that is a non-empty trimmed string.
+   *
+   * @param {unknown[]} candidates - Possible config values in priority order.
+   * @returns {string} The first valid trimmed string, or `''` when none qualify.
+   */
   const resolveCandidate = (candidates: unknown[]): string => {
     for (const candidate of candidates) {
       if (typeof candidate === 'string' && candidate.trim().length > 0) {
@@ -45,6 +60,14 @@ const getSupabaseConfig = (): { url: string; publishableKey: string } => {
 
 let supabaseClient: SupabaseClient | null = null;
 
+/**
+ * Returns a lazily-created, memoized Supabase client.
+ *
+ * The client is created once on first call using the resolved config and
+ * reused thereafter. Returns `null` when URL or key cannot be resolved.
+ *
+ * @returns {SupabaseClient | null} The shared client, or `null` if not configured.
+ */
 export const getSupabaseClient = (): SupabaseClient | null => {
   if (supabaseClient) {
     return supabaseClient;
@@ -66,6 +89,14 @@ export const getSupabaseClient = (): SupabaseClient | null => {
   return supabaseClient;
 };
 
+/**
+ * Retrieves the current session's access token, if any.
+ *
+ * Returns `null` when the client is unconfigured, no session exists, or the
+ * session lookup errors or throws.
+ *
+ * @returns {Promise<string | null>} The access token, or `null` when unavailable.
+ */
 export const getSupabaseAccessToken = async (): Promise<string | null> => {
   const client = getSupabaseClient();
   if (!client) {
