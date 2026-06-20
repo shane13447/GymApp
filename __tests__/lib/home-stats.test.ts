@@ -164,6 +164,22 @@ describe('formatRelativeDate', () => {
     expect(result).not.toBe('Yesterday');
     expect(result).not.toContain('days ago');
   });
+
+  it('uses the injected reference "now" instead of the wall clock', () => {
+    // 2026-04-10 is 3 days before the injected reference of 2026-04-13.
+    expect(formatRelativeDate('2026-04-10T12:00:00Z', makeDate('2026-04-13'))).toBe(
+      '3 days ago'
+    );
+  });
+
+  it('clamps future dates to "Today" instead of rendering negative "days ago"', () => {
+    // Date two days AFTER the reference would naively compute days === -2.
+    const result = formatRelativeDate('2026-04-15T12:00:00Z', makeDate('2026-04-13'));
+
+    expect(result).toBe('Today');
+    expect(result).not.toContain('-');
+    expect(result).not.toContain('days ago');
+  });
 });
 
 describe('getMuscleGroups', () => {
@@ -184,6 +200,15 @@ describe('getMuscleGroups', () => {
     const item = makeQueueItem(['chest', 'back', 'chest', 'shoulders']);
 
     expect(getMuscleGroups(item)).toEqual(['back', 'chest', 'shoulders']);
+  });
+
+  it('tolerates exercises with a missing muscle_groups_worked field', () => {
+    const item = makeQueueItem(['chest']);
+    // Simulate malformed/persisted data where the field is absent at runtime.
+    delete (item.exercises[0] as { muscle_groups_worked?: string[] }).muscle_groups_worked;
+
+    expect(() => getMuscleGroups(item)).not.toThrow();
+    expect(getMuscleGroups(item)).toEqual([]);
   });
 });
 
