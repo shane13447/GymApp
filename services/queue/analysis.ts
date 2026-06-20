@@ -1260,6 +1260,14 @@ export const extractTargetExercises = (
   return targetNames;
 };
 
+/**
+ * Resolves the queue exercises a request targets, returning concrete
+ * {@link TargetedExerciseRef} locations (de-duplicated) rather than bare names,
+ * accounting for injury intent and alias/fuzzy matching.
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} queue - The current workout queue to resolve against.
+ * @returns {TargetedExerciseRef[]} The targeted exercise references found in the queue.
+ */
 export const extractTargetExerciseRefs = (
   request: string,
   queue: WorkoutQueueItem[]
@@ -1506,6 +1514,14 @@ export const fuzzyMatchExerciseName = (
 // =============================================================================
 // QUEUE COMPARISON AND SEMANTIC VALIDATION
 // =============================================================================
+/**
+ * Computes the per-exercise differences between two workout queue snapshots,
+ * matching items/exercises by occurrence-aware identity to detect additions,
+ * removals, and attribute changes.
+ * @param {WorkoutQueueItem[]} oldQueue - The queue snapshot before the change.
+ * @param {WorkoutQueueItem[]} newQueue - The queue snapshot after the change.
+ * @returns {QueueDifference[]} The list of detected differences between the two queues.
+ */
 export const compareWorkoutQueues = (
   oldQueue: WorkoutQueueItem[],
   newQueue: WorkoutQueueItem[]
@@ -1644,6 +1660,12 @@ export const compareWorkoutQueues = (
   return differences;
 };
 
+/**
+ * Converts a list of queue differences into the structured {@link ProposedChanges}
+ * summary surfaced to the user for confirmation.
+ * @param {QueueDifference[]} differences - The differences produced by {@link compareWorkoutQueues}.
+ * @returns {ProposedChanges} The grouped, user-facing proposed-changes summary.
+ */
 export const differencesToProposedChanges = (differences: QueueDifference[]): ProposedChanges => {
   const variantChanges: ProposedChanges['variantChanges'] = [];
   const weightChanges: ProposedChanges['weightChanges'] = [];
