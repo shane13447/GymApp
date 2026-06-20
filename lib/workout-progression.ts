@@ -45,6 +45,13 @@ export type ProgressionRecommendation = {
   timesRepsHitInARow?: number;
 };
 
+/**
+ * Determine whether an exercise has all the fields required for double
+ * progression (positive rep range min/max and progression threshold).
+ *
+ * @param {ProgramExercise} exercise - The exercise to inspect.
+ * @returns {boolean} True if the exercise is configured for double progression.
+ */
 const hasDoubleProgressionFields = (exercise: ProgramExercise): boolean => {
   return (
     typeof exercise.repRangeMin === 'number' &&

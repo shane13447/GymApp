@@ -39,6 +39,12 @@ interface ExerciseLogCardProps {
 
 const LOGGED_WEIGHT_INPUT_KEY = 'loggedWeight';
 
+/**
+ * Build the per-set weight input field key for a given set index.
+ *
+ * @param {number} setIndex - The zero-based set index.
+ * @returns {string} The namespaced input key for that set's weight field.
+ */
 const getSetWeightInputKey = (setIndex: number): string => `setWeight:${setIndex}`;
 
 /**
@@ -65,6 +71,14 @@ const normalizeDecimalInputValue = (value: string): string => {
   return Number.isFinite(parsed) ? parsed.toString() : '';
 };
 
+/**
+ * Memoized card for logging a single exercise during an active workout,
+ * handling per-set or single weight/reps entry, an integrated rest timer keyed
+ * by a unique exercise instance, and app-state-aware timer restoration.
+ *
+ * @param {ExerciseLogCardProps} props - The exercise, its index/instance/program/day context, and logged-value update callbacks.
+ * @returns {React.ReactElement} The exercise log card element.
+ */
 export const ExerciseLogCard = memo(function ExerciseLogCard({
   exercise,
   index,

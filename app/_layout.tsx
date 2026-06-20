@@ -21,6 +21,12 @@ export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
 
+/**
+ * Root application layout: initialises the database, runs startup maintenance,
+ * applies the theme provider, and renders the navigation stack once ready.
+ *
+ * @returns {React.ReactElement | null} The root layout, or null until the database is ready.
+ */
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [dbReady, setDbReady] = useState(false);

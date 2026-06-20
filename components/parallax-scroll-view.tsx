@@ -15,6 +15,13 @@ type Props = PropsWithChildren<{
   style?: ViewStyle;
 }>;
 
+/**
+ * Themed scrollable screen container with a centered, max-width content area
+ * and optional pull-to-refresh control.
+ *
+ * @param {Props} props - Children to render, an optional `refreshControl`, and an optional `style` override.
+ * @returns {React.ReactElement} The scroll view container.
+ */
 export default function ParallaxScrollView({ children, refreshControl, style }: Props) {
   const backgroundColor = useThemeColor({}, 'background');
   const scrollRef = useAnimatedRef<Animated.ScrollView>();

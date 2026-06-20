@@ -19,6 +19,12 @@ import { useWorkoutHistory } from '@/hooks/use-workout-history';
 import { formatTime } from '@/lib/workout-history';
 import type { Workout } from '@/types';
 
+/**
+ * History tab screen: lists completed workouts grouped by date with
+ * pull-to-refresh, backed by the {@link useWorkoutHistory} hook.
+ *
+ * @returns {React.ReactElement} The workout history screen.
+ */
 export default function HistoryScreen() {
   const { workoutsByDate, isLoading, isRefreshing, handleRefresh } = useWorkoutHistory();
 

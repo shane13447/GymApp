@@ -19,6 +19,13 @@ import { ExerciseLogCard } from '@/components/workout/ExerciseLogCard';
 import { useActiveWorkout } from '@/hooks/use-active-workout';
 import type { WorkoutExercise } from '@/types';
 
+/**
+ * Active Workout tab screen: drives the in-progress workout session, rendering a
+ * log card per exercise and finish/cancel controls via the
+ * {@link useActiveWorkout} hook.
+ *
+ * @returns {React.ReactElement} The active workout screen.
+ */
 export default function ActiveWorkout() {
   const router = useRouter();
 

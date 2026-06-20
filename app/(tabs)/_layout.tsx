@@ -7,6 +7,12 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+/**
+ * Bottom-tab navigator layout defining the app's main tab screens, their icons,
+ * and theme-aware styling.
+ *
+ * @returns {React.ReactElement} The tab navigator element.
+ */
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
