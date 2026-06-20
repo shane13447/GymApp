@@ -164,9 +164,25 @@ export const resetConnectionState = (): void => {
 };
 
 /**
+ * Tracks which databases currently have an active transaction started by
+ * {@link runInTransaction}. Used to make nested transaction calls participate
+ * in the outermost transaction instead of issuing a second BEGIN (which SQLite
+ * rejects with "cannot start a transaction within a transaction").
+ */
+const activeTransactions = new WeakSet<SQLite.SQLiteDatabase>();
+
+/**
  * Run an async operation inside an immediate SQLite transaction, committing on
  * success and rolling back on error. Rollback failures are logged but the
  * original error is rethrown.
+ *
+ * Nesting-safe: if a transaction is already active for the given database
+ * (tracked via a module-level WeakSet), a nested call joins the outer
+ * transaction and simply runs its operation WITHOUT issuing its own
+ * BEGIN/COMMIT/ROLLBACK. Only the outermost call drives transaction control,
+ * so a single BEGIN/COMMIT wraps the whole operation tree and an error from any
+ * nested operation rolls the entire transaction back exactly once at the outer
+ * level. This is behavior-preserving for non-nested callers.
  *
  * @template T
  * @param {SQLite.SQLiteDatabase} database - The database to run the transaction on.
@@ -177,18 +193,30 @@ export const runInTransaction = async <T>(
   database: SQLite.SQLiteDatabase,
   operation: () => Promise<T>
 ): Promise<T> => {
-  await database.execAsync('BEGIN IMMEDIATE TRANSACTION');
+  if (activeTransactions.has(database)) {
+    // A transaction is already in progress for this database: join the outer
+    // transaction and run the operation without issuing nested BEGIN/COMMIT.
+    return await operation();
+  }
 
+  activeTransactions.add(database);
   try {
-    const result = await operation();
-    await database.execAsync('COMMIT');
-    return result;
-  } catch (error) {
+    await database.execAsync('BEGIN IMMEDIATE TRANSACTION');
+
     try {
-      await database.execAsync('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('Error rolling back transaction:', rollbackError);
+      const result = await operation();
+      await database.execAsync('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await database.execAsync('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Error rolling back transaction:', rollbackError);
+      }
+      throw error;
     }
-    throw error;
+  } finally {
+    // Always clear the flag, even if BEGIN itself threw, so the flag never leaks.
+    activeTransactions.delete(database);
   }
 };
