@@ -1935,6 +1935,12 @@ export const validateChanges = (
   };
 };
 
+/**
+ * Infers an explicit variant label mentioned in a prompt (e.g. "incline",
+ * "close grip"), mapping "wrist-friendly" to "neutral grip".
+ * @param {string} prompt - The prompt text to scan.
+ * @returns {string | null} The recognised variant label, or `null` when none is present.
+ */
 const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
   const lowerPrompt = prompt.toLowerCase();
 
@@ -1961,6 +1967,14 @@ const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
   return null;
 };
 
+/**
+ * Evaluates a batch of test prompts against a queue, reporting per-prompt
+ * coverage (which exercises each prompt targets and whether any targets are
+ * missing) for prompt-suite diagnostics.
+ * @param {TestPromptCoverageInput[]} prompts - The test prompts to evaluate.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to resolve targets against.
+ * @returns {TestPromptCoverageReport} The aggregated per-prompt coverage report.
+ */
 export const analyzeTestPromptQueueCoverage = (
   prompts: TestPromptCoverageInput[],
   queue: WorkoutQueueItem[]
@@ -2049,6 +2063,13 @@ const NUMERIC_CHANGE_DIFF_TYPES: QueueDifference['type'][] = [
   'sets_change',
 ];
 
+/**
+ * Resolves the concrete queue exercise referenced by a target ref, preferring a
+ * match on exercise instance id and falling back to the queue item + index.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to look up within.
+ * @param {TargetedExerciseRef} targetRef - The reference identifying the exercise.
+ * @returns {ProgramExercise | undefined} The matching exercise, or `undefined` if not found.
+ */
 const getExerciseFromTargetRef = (
   queue: WorkoutQueueItem[],
   targetRef: TargetedExerciseRef
@@ -2067,6 +2088,14 @@ type NumericAttribute = 'weight' | 'reps' | 'sets';
 
 type TargetNumericIntent = Partial<Record<NumericAttribute, string>>;
 
+/**
+ * Infers, per targeted exercise, the numeric attributes (weight/reps/sets) the
+ * request intends to change and their expected values.
+ * @param {string} request - The raw user request text.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targets.
+ * @param {ChangeType[]} changeTypes - The change categories detected for the request.
+ * @returns {Map<string, TargetNumericIntent>} A map from exercise display name to its inferred numeric intent.
+ */
 const inferTargetedNumericIntent = (
   request: string,
   targetedExerciseRefs: TargetedExerciseRef[],
@@ -2206,6 +2235,16 @@ const inferTargetedNumericIntent = (
   return intentMap;
 };
 
+/**
+ * Evaluates whether the change between the original and parsed queues semantically
+ * satisfies the request's intent (correct exercises changed, expected numeric
+ * outcomes, no unexpected add/remove).
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} originalQueue - The queue before the Coach mutation.
+ * @param {WorkoutQueueItem[]} parsedQueue - The queue after the Coach mutation.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targeted.
+ * @returns {SemanticEvaluationResult} A pass/fail result with an explanatory reason on failure.
+ */
 export const evaluatePromptIntentOutcome = (
   request: string,
   originalQueue: WorkoutQueueItem[],
@@ -2503,6 +2542,16 @@ export const evaluatePromptIntentOutcome = (
   return { passed: true };
 };
 
+/**
+ * Evaluates whether the parsed queue applied the requested variant to the
+ * targeted exercises.
+ * @param {string} _request - The raw user request text (unused; kept for signature parity).
+ * @param {WorkoutQueueItem[]} _originalQueue - The pre-mutation queue (unused; kept for signature parity).
+ * @param {WorkoutQueueItem[]} parsedQueue - The queue after the Coach mutation.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targeted.
+ * @param {string} requestedVariant - The variant label expected to be applied.
+ * @returns {SemanticEvaluationResult} A pass/fail result with an explanatory reason on failure.
+ */
 export const evaluateVariantSemanticOutcome = (
   _request: string,
   _originalQueue: WorkoutQueueItem[],
