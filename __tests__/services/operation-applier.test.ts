@@ -555,4 +555,60 @@ describe('operation-applier', () => {
       ]);
     });
   });
+
+  describe('stale exerciseInstanceId target', () => {
+    const twoDayQueue = (): WorkoutQueueItem[] => [
+      {
+        id: 'q-1',
+        programId: 'prog-1',
+        programName: 'Test Program',
+        dayNumber: 1,
+        position: 0,
+        exercises: [makeExercise({ exerciseInstanceId: 'q-1:e0', name: 'Bench Press', weight: '80' })],
+      },
+      {
+        id: 'q-2',
+        programId: 'prog-1',
+        programName: 'Test Program',
+        dayNumber: 2,
+        position: 1,
+        exercises: [makeExercise({ exerciseInstanceId: 'q-2:e0', name: 'Bench Press', weight: '60' })],
+      },
+    ];
+
+    it('does NOT mutate a same-named exercise on another day when the instance id is stale', () => {
+      const queue = twoDayQueue();
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          // Instance id no longer exists in the queue, but a same-named
+          // exercise is present on both days. The instance id is authoritative,
+          // so nothing should be modified rather than picking the wrong one.
+          target: { exerciseInstanceId: 'gone-stale', exerciseName: 'Bench Press' },
+          value: { weight: 999 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('80');
+      expect(result[1].exercises[0].weight).toBe('60');
+    });
+
+    it('still applies when the instance id resolves to a real exercise', () => {
+      const queue = twoDayQueue();
+      const ops: QueueOperation[] = [
+        {
+          id: 'op_1',
+          type: 'modify_weight',
+          target: { exerciseInstanceId: 'q-2:e0', exerciseName: 'Bench Press' },
+          value: { weight: 65 },
+        },
+      ];
+
+      const result = applyOperations(queue, ops);
+      expect(result[0].exercises[0].weight).toBe('80');
+      expect(result[1].exercises[0].weight).toBe('65');
+    });
+  });
 });

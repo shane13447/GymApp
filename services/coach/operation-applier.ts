@@ -76,7 +76,11 @@ const findExerciseInQueue = (
   queue: WorkoutQueueItem[],
   target: QueueOperation['target']
 ): { queueItem: WorkoutQueueItem; exercise: ProgramExercise; exerciseIndex: number } | null => {
-  // Try by exerciseInstanceId first
+  // Try by exerciseInstanceId first. The instance id is the authoritative,
+  // model-asserted target, so if it is supplied but no longer exists in the
+  // queue we must NOT fall through to name/index matching — doing so could
+  // silently mutate a different exercise (e.g. a same-named exercise on
+  // another day) than the operation intended.
   if (target.exerciseInstanceId) {
     for (const queueItem of queue) {
       const exerciseIndex = queueItem.exercises.findIndex(
@@ -90,6 +94,8 @@ const findExerciseInQueue = (
         };
       }
     }
+
+    return null;
   }
 
   const candidateQueueItems = target.queueItemId
