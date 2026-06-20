@@ -5,7 +5,8 @@
  * This is the sole mutation authority - operations are applied deterministically.
  */
 
-import type { ExerciseVariant, ProgramExercise, WorkoutQueueItem } from '@/types';
+import { parseVariantString } from '@/lib/coach-utils';
+import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 import type { QueueOperation, OperationApplicabilityResult } from './operation-contract';
 
 type ExerciseCatalogEntry = {
@@ -21,56 +22,6 @@ export type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEnt
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-/**
- * Parse a free-form variant string (e.g. "incline / wide grip") into an
- * ExerciseVariant by splitting on slashes/commas and mapping recognised tokens
- * to angle, grip, posture, laterality, or extras. Kept local to avoid pulling
- * UI/database dependencies into tests.
- *
- * @param {string} value - The variant descriptor string to parse.
- * @returns {ExerciseVariant | null} The parsed variant, or null if no segments are present.
- */
-const parseVariantString = (value: string): ExerciseVariant | null => {
-  const segments = value
-    .split(/[\/,]/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-
-  if (segments.length === 0) {
-    return null;
-  }
-
-  const variant: ExerciseVariant = {};
-  for (const segment of segments) {
-    const lower = segment.toLowerCase();
-    if (lower.includes('incline') || lower.includes('decline')) {
-      variant.angle = segment;
-    } else if (
-      lower.includes('grip') || lower.includes('neutral') || lower.includes('supinated') ||
-      lower.includes('pronated') || lower.includes('reverse') || lower.includes('close') ||
-      lower.includes('wide') || lower.includes('narrow')
-    ) {
-      variant.grip = segment;
-    } else if (
-      lower.includes('seated') || lower.includes('standing') ||
-      lower.includes('supported') || lower.includes('bent')
-    ) {
-      variant.posture = segment;
-    } else if (
-      lower.includes('one-arm') || lower.includes('single arm') ||
-      lower.includes('one leg') || lower.includes('single leg')
-    ) {
-      variant.laterality = segment;
-    } else {
-      const extras = variant.extras ?? [];
-      extras.push(segment);
-      variant.extras = extras;
-    }
-  }
-
-  return Object.keys(variant).length > 0 ? variant : null;
-};
 
 const findExerciseInQueue = (
   queue: WorkoutQueueItem[],
