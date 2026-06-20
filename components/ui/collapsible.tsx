@@ -7,6 +7,13 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+/**
+ * Collapsible disclosure section with a tappable header (rotating chevron) that
+ * toggles visibility of its children.
+ *
+ * @param {PropsWithChildren & { title: string | ReactNode }} props - The section children and a string or node `title`.
+ * @returns {React.ReactElement} The collapsible section element.
+ */
 export function Collapsible({ children, title }: PropsWithChildren & { title: string | ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const theme = useColorScheme() ?? 'light';

@@ -60,6 +60,13 @@ const ANDROID_ROOT_SIZE_CLASS: Record<ButtonSize, string> = {
   lg: 'rounded-xl',
 };
 
+/**
+ * Compute the Android ripple color for a button variant and color scheme.
+ *
+ * @param {ButtonVariant} variant - The button visual variant.
+ * @param {'light' | 'dark'} colorScheme - The active color scheme.
+ * @returns {string} An rgba ripple color string.
+ */
 const getAndroidRippleColor = (variant: ButtonVariant, colorScheme: 'light' | 'dark'): string => {
   if (colorScheme === 'dark') {
     switch (variant) {
@@ -84,12 +91,33 @@ const getAndroidRippleColor = (variant: ButtonVariant, colorScheme: 'light' | 'd
   }
 };
 
+/**
+ * Build the container className for a button from its variant, size, and extra
+ * className.
+ *
+ * @param {ButtonVariantProps} props - The variant, size, and optional className.
+ * @returns {string} The composed className string.
+ */
 const buttonVariants = ({ variant = 'primary', size = 'md', className }: ButtonVariantProps): string =>
   cn('flex-row items-center justify-center gap-2', BUTTON_VARIANT_CLASS[variant], BUTTON_SIZE_CLASS[size], className);
 
+/**
+ * Build the text className for a button label from its variant and size.
+ *
+ * @param {Omit<ButtonVariantProps, 'className'>} props - The variant and size.
+ * @returns {string} The composed text className string.
+ */
 const buttonTextVariants = ({ variant = 'primary', size = 'md' }: Omit<ButtonVariantProps, 'className'>): string =>
   cn('font-medium', BUTTON_TEXT_VARIANT_CLASS[variant], BUTTON_TEXT_SIZE_CLASS[size]);
 
+/**
+ * Themed pressable button that applies variant/size styling and a platform-
+ * appropriate Android ripple, providing its text styling to descendants via
+ * context.
+ *
+ * @param {ButtonProps} props - Button props including `variant`, `size`, `androidRootClassName`, and `android_ripple`.
+ * @returns {React.ReactElement} The button element.
+ */
 function Button({
   className,
   variant = 'primary',

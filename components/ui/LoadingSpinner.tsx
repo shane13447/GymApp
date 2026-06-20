@@ -14,6 +14,12 @@ interface LoadingSpinnerProps {
   style?: ViewStyle;
 }
 
+/**
+ * Activity indicator with an optional message, optionally centered full-screen.
+ *
+ * @param {LoadingSpinnerProps} props - Optional `message`, `size`, `fullScreen` flag, and `style`.
+ * @returns {React.JSX.Element} The loading spinner element.
+ */
 export function LoadingSpinner({
   message,
   size = 'large',

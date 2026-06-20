@@ -47,6 +47,13 @@ const TEXT_COLOR_CLASS: Record<TextColorVariant, string> = {
   quarternary: 'text-muted-foreground/50',
 };
 
+/**
+ * Build the className for themed text from its typography variant, color, and
+ * extra className.
+ *
+ * @param {TextVariantProps & { className?: string }} props - The variant, color, and optional className.
+ * @returns {string} The composed className string.
+ */
 const textVariants = ({
   variant = 'body',
   color = 'primary',
@@ -56,6 +63,13 @@ const textVariants = ({
 
 const TextClassContext = React.createContext<string | undefined>(undefined);
 
+/**
+ * Themed Text component applying variant/color typography classes and merging
+ * any text className supplied via {@link TextClassContext}.
+ *
+ * @param {RNTextProps & TextVariantProps} props - Text props plus `variant` and `color`.
+ * @returns {React.ReactElement} The themed text element.
+ */
 function Text({
   className,
   variant = 'body',

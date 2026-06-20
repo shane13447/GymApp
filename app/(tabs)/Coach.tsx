@@ -55,6 +55,14 @@ type CoachTestResult = {
 };
 
 
+/**
+ * Coach tab screen: lets the user chat with the AI coach to modify their
+ * workout queue or generate a program, previews proposed changes for
+ * confirmation, and runs the prompt test suite. Orchestrates the coach proxy,
+ * response processing, and queue persistence.
+ *
+ * @returns {React.ReactElement} The coach screen.
+ */
 export default function CoachScreen() {
   const [inputText, setInputText] = useState('');
   const [response, setResponse] = useState('');

@@ -19,6 +19,13 @@ interface EmptyStateProps {
   onAction?: () => void;
 }
 
+/**
+ * Empty-state placeholder showing an optional icon, a title and message, and an
+ * optional call-to-action button.
+ *
+ * @param {EmptyStateProps} props - Optional `icon`, required `title`/`message`, and optional `actionLabel`/`onAction`.
+ * @returns {React.ReactElement} The empty-state view.
+ */
 export function EmptyState({
   icon,
   title,

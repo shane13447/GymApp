@@ -24,6 +24,14 @@ type SkeletonBlockProps = {
   shimmer: Animated.Value;
 };
 
+/**
+ * Compute the pressed-state ring/glow style for a card, coloured by ring
+ * variant and only visible while pressed.
+ *
+ * @param {boolean} pressed - Whether the card is currently pressed.
+ * @param {RingVariant} variant - The ring color variant.
+ * @returns {object} A style object for the pressed ring/glow effect.
+ */
 const getPressedRingStyle = (pressed: boolean, variant: RingVariant) => {
   const ringColor =
     variant === 'secondary' ? '#FFCA70' : variant === 'indigo' ? '#9480E6' : '#4DA2FF';
@@ -39,6 +47,12 @@ const getPressedRingStyle = (pressed: boolean, variant: RingVariant) => {
   };
 };
 
+/**
+ * Single shimmering placeholder block used to build loading skeletons.
+ *
+ * @param {SkeletonBlockProps} props - Dimensions, corner radius, theme, and the shared shimmer animation value.
+ * @returns {React.ReactElement} The shimmering skeleton block.
+ */
 function SkeletonBlock({ width = '100%', height, radius = 14, theme, shimmer }: SkeletonBlockProps) {
   const shimmerTranslate = shimmer.interpolate({
     inputRange: [0, 1],
@@ -71,6 +85,13 @@ function SkeletonBlock({ width = '100%', height, radius = 14, theme, shimmer }: 
   );
 }
 
+/**
+ * Full loading skeleton for the Home screen, animating a looped shimmer across
+ * a set of placeholder blocks.
+ *
+ * @param {{ theme: 'light' | 'dark' }} props - The active color theme.
+ * @returns {React.ReactElement} The Home loading skeleton.
+ */
 function HomeLoadingSkeleton({ theme }: { theme: 'light' | 'dark' }) {
   const shimmer = useRef(new Animated.Value(0)).current;
 
@@ -163,6 +184,13 @@ function HomeLoadingSkeleton({ theme }: { theme: 'light' | 'dark' }) {
   );
 }
 
+/**
+ * Home tab screen: shows the current program summary, next workout, and quick
+ * stats with navigation shortcuts, rendering a loading skeleton while data
+ * loads (via the home-data hook).
+ *
+ * @returns {React.ReactElement} The Home screen.
+ */
 export default function HomeScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'light';
