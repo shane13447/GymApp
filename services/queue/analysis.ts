@@ -44,8 +44,20 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
   'laterality',
 ];
 
+/**
+ * Lower-cases and trims a string for case-insensitive comparison.
+ * @param {string} value - The raw string to normalise.
+ * @returns {string} The trimmed, lower-cased string.
+ */
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
+/**
+ * Parses a free-text variant label (e.g. "Incline / Close Grip") into a
+ * structured {@link ExerciseVariant}, bucketing each segment into the
+ * appropriate field (angle, grip, posture, laterality) or `extras`.
+ * @param {string} value - The variant label, with segments separated by `/` or `,`.
+ * @returns {ExerciseVariant | null} The parsed variant, or `null` if no recognisable segments are present.
+ */
 export const parseVariantLabel = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)
@@ -98,6 +110,12 @@ export const parseVariantLabel = (value: string): ExerciseVariant | null => {
   return Object.keys(variant).length > 0 ? variant : null;
 };
 
+/**
+ * Renders a variant as a prompt-friendly label, replacing commas with slashes
+ * so the value is safe to embed in slash-delimited prompt text.
+ * @param {ExerciseVariant | null} [variant] - The variant to serialise.
+ * @returns {string} The serialised label, or an empty string when there is no variant.
+ */
 const serialiseVariantForPrompt = (variant?: ExerciseVariant | null): string => {
   const label = getExerciseVariantLabel(variant).trim();
   if (!label) {
@@ -107,11 +125,23 @@ const serialiseVariantForPrompt = (variant?: ExerciseVariant | null): string => 
   return label.replace(/,/g, '/');
 };
 
+/**
+ * Builds a display name combining an exercise's name with its prompt-formatted
+ * variant label in parentheses (when a variant is present).
+ * @param {ProgramExercise} exercise - The exercise to render.
+ * @returns {string} The exercise name, optionally suffixed with `(variant)`.
+ */
 const withVariantDisplayName = (exercise: ProgramExercise): string => {
   const variantLabel = serialiseVariantForPrompt(exercise.variant);
   return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
 };
 
+/**
+ * Parses a single variant token into a structured variant, returning `null`
+ * for empty input.
+ * @param {string} variantToken - The raw variant token to parse.
+ * @returns {ExerciseVariant | null} The parsed variant, or `null` when the token is blank or unparseable.
+ */
 const parseVariantFromToken = (variantToken: string): ExerciseVariant | null => {
   const value = variantToken.trim();
   if (!value) {
@@ -121,6 +151,12 @@ const parseVariantFromToken = (variantToken: string): ExerciseVariant | null => 
   return parseVariantLabel(value);
 };
 
+/**
+ * Collects every normalised value, label, and alias from an exercise's variant
+ * option metadata into a lookup set.
+ * @param {ExerciseData} [exerciseData] - The catalog exercise whose variant options are read.
+ * @returns {Set<string>} A set of normalised allowed variant values (empty when no options exist).
+ */
 const variantValuesFromOptions = (exerciseData?: ExerciseData): Set<string> => {
   const values = new Set<string>();
   if (!exerciseData?.variantOptions) {
@@ -140,6 +176,12 @@ const variantValuesFromOptions = (exerciseData?: ExerciseData): Set<string> => {
   return values;
 };
 
+/**
+ * Flattens a variant's field values and extras into a normalised set suitable
+ * for membership comparison.
+ * @param {ExerciseVariant | null} [variant] - The variant to convert.
+ * @returns {Set<string>} A set of normalised, non-empty variant values.
+ */
 const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> => {
   const values: string[] = [];
 
@@ -157,8 +199,14 @@ const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> =
   return new Set(values.filter(Boolean));
 };
 
-// Validates a parsed variant against known exercise variant options.
-// If no options metadata exists, we treat the variant as viable and allow intent to pass through.
+/**
+ * Validates a parsed variant against an exercise's known variant options. When
+ * no options metadata exists the variant is treated as viable so intent can
+ * pass through.
+ * @param {ExerciseData | null} exerciseData - The catalog exercise providing allowed options, or `null`.
+ * @param {ExerciseVariant | null} [variant] - The variant to validate.
+ * @returns {boolean} `true` if the variant is valid (or cannot be disproven), otherwise `false`.
+ */
 const isVariantValidForExercise = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null
@@ -186,8 +234,13 @@ const isVariantValidForExercise = (
   return true;
 };
 
-// Builds a canonical variant object from option metadata.
-// It converts user-entered casing/aliases to option labels (e.g., "inclined" -> "Incline").
+/**
+ * Builds a canonical variant from option metadata, converting user-entered
+ * casing/aliases to their canonical option labels (e.g. "inclined" -> "Incline").
+ * @param {ExerciseData} exerciseData - The catalog exercise whose variant options drive canonicalisation.
+ * @param {ExerciseVariant} variant - The raw variant to canonicalise.
+ * @returns {ExerciseVariant | null} The canonicalised variant, or `null` when nothing matched.
+ */
 const canonicaliseVariantFromOptions = (
   exerciseData: ExerciseData,
   variant: ExerciseVariant
@@ -225,8 +278,14 @@ const canonicaliseVariantFromOptions = (
   return Object.keys(canonical).length > 0 ? canonical : null;
 };
 
-// Normalizes a requested variant using available option metadata.
-// If requested variant is unsupported, falls back to the provided safe variant (usually the original variant).
+/**
+ * Normalises a requested variant using available option metadata, falling back
+ * to a safe variant (usually the original) when the request is unsupported.
+ * @param {ExerciseData | null} exerciseData - The catalog exercise providing option metadata, or `null`.
+ * @param {ExerciseVariant | null} [variant] - The requested variant to normalise.
+ * @param {ExerciseVariant | null} [fallback] - The variant to use when the request is invalid or unmatched.
+ * @returns {ExerciseVariant | null} The normalised variant, the fallback, or `null`.
+ */
 const normaliseVariantAgainstOptions = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null,
@@ -247,8 +306,13 @@ const normaliseVariantAgainstOptions = (
   return canonicaliseVariantFromOptions(exerciseData, variant) ?? fallback ?? null;
 };
 
-// Chooses the best source of variant metadata for validation.
-// Prefer catalog metadata when present; otherwise use queue/original exercise metadata if available.
+/**
+ * Chooses the best source of variant metadata for validation, preferring catalog
+ * metadata and otherwise falling back to the original exercise's own options.
+ * @param {ExerciseData | null} exerciseData - Catalog metadata for the exercise, or `null`.
+ * @param {ProgramExercise} [originalEx] - The original program exercise whose options may be used as a fallback.
+ * @returns {ExerciseData | null} The chosen metadata source, or `null` when none is available.
+ */
 const getVariantValidationSource = (
   exerciseData: ExerciseData | null,
   originalEx?: ProgramExercise
@@ -271,6 +335,13 @@ const getVariantValidationSource = (
   return exerciseData;
 };
 
+/**
+ * Builds a stable JSON identity string for an exercise from its canonical name
+ * and variant, optionally including its instance id.
+ * @param {Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>} exercise - The exercise to identify.
+ * @param {{ includeInstanceId: boolean }} options - Whether the instance id participates in the identity.
+ * @returns {string} A JSON string uniquely describing the exercise identity.
+ */
 const getExerciseIdentity = (
   exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>,
   options: { includeInstanceId: boolean }
@@ -284,11 +355,25 @@ const getExerciseIdentity = (
   });
 };
 
+/**
+ * Builds a human-readable display name combining the exercise name with its
+ * prompt-formatted variant label in parentheses.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to render.
+ * @returns {string} The display name, optionally suffixed with `(variant)`.
+ */
 const getDisplayName = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string => {
   const variantLabel = serialiseVariantForPrompt(exercise.variant);
   return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
 };
 
+/**
+ * Constructs a {@link TargetedExerciseRef} locating an exercise within a queue
+ * item, capturing its day, index, instance id, and display name.
+ * @param {WorkoutQueueItem} item - The queue item (day) containing the exercise.
+ * @param {ProgramExercise} exercise - The exercise being referenced.
+ * @param {number} exerciseIndex - The exercise's index within the day.
+ * @returns {TargetedExerciseRef} A reference identifying the exercise's location.
+ */
 const buildTargetedExerciseRef = (
   item: WorkoutQueueItem,
   exercise: ProgramExercise,
@@ -302,6 +387,12 @@ const buildTargetedExerciseRef = (
   displayName: getDisplayName(exercise),
 });
 
+/**
+ * Produces the set of normalised labels (plain name and display name) that an
+ * exercise can be matched against during text comparison.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to derive labels from.
+ * @returns {string[]} Normalised, non-empty comparable labels.
+ */
 const getComparableExerciseLabels = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>
 ): string[] => {
@@ -310,6 +401,13 @@ const getComparableExerciseLabels = (
     .filter(Boolean);
 };
 
+/**
+ * Determines whether a free-text string refers to an exercise via exact,
+ * substring, or fuzzy (similarity > 0.8) matching against its comparable labels.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to test.
+ * @param {string} text - The free-text target to match.
+ * @returns {boolean} `true` if the text plausibly refers to the exercise.
+ */
 const doesExerciseTextMatch = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>,
   text: string
@@ -329,6 +427,16 @@ const doesExerciseTextMatch = (
   });
 };
 
+/**
+ * Finds the original exercise that best matches a parsed exercise, scoring
+ * candidates by name/display/variant equality and positional proximity while
+ * skipping already-used indices.
+ * @param {ProgramExercise[]} originalExercises - The candidate exercises to match against.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} parsedExercise - The parsed exercise to match.
+ * @param {number} parsedIndex - The parsed exercise's index, used for proximity scoring.
+ * @param {Set<number>} usedIndices - Indices already claimed by previous matches.
+ * @returns {{ exercise: ProgramExercise; index: number } | null} The best match with its index, or `null`.
+ */
 const findBestOriginalExerciseMatch = (
   originalExercises: ProgramExercise[],
   parsedExercise: Pick<ProgramExercise, 'name' | 'variant'>,
@@ -381,6 +489,13 @@ const findBestOriginalExerciseMatch = (
   return candidates[0] ?? null;
 };
 
+/**
+ * Builds a map keyed by per-occurrence exercise identity (`identity::occurrence`)
+ * so duplicate exercises in a list remain individually addressable.
+ * @param {ProgramExercise[]} exercises - The exercises to index.
+ * @param {{ includeInstanceId: boolean }} options - Whether the instance id participates in identity.
+ * @returns {Map<string, { exercise: ProgramExercise; index: number }>} Occurrence-keyed exercise map.
+ */
 const buildExerciseIdentityMap = (
   exercises: ProgramExercise[],
   options: { includeInstanceId: boolean }
@@ -398,6 +513,12 @@ const buildExerciseIdentityMap = (
   );
 };
 
+/**
+ * Builds a map keyed by per-occurrence queue item id (`id::occurrence`) so
+ * duplicate item ids remain individually addressable.
+ * @param {WorkoutQueueItem[]} queue - The queue items to index.
+ * @returns {Map<string, WorkoutQueueItem>} Occurrence-keyed queue item map.
+ */
 const buildQueueItemIdentityMap = (queue: WorkoutQueueItem[]) => {
   const seenCounts = new Map<string, number>();
 
@@ -411,6 +532,12 @@ const buildQueueItemIdentityMap = (queue: WorkoutQueueItem[]) => {
   );
 };
 
+/**
+ * Splits a string like "Bench Press (Incline)" into its base name and the
+ * inline variant label found in trailing parentheses.
+ * @param {string} value - The combined name/variant string.
+ * @returns {{ name: string; variantLabel: string | null }} The base name and the inline variant label (or `null`).
+ */
 const splitNameAndInlineVariant = (
   value: string
 ): { name: string; variantLabel: string | null } => {
@@ -425,6 +552,13 @@ const splitNameAndInlineVariant = (
   };
 };
 
+/**
+ * Canonicalises an exercise name/variant pair, applying special-case handling
+ * (e.g. mapping "Decline Crunches" to name "Crunches" with a "Decline" variant).
+ * @param {string} nameToken - The raw exercise name.
+ * @param {string | null} [variantToken] - The raw variant label, if any.
+ * @returns {{ name: string; variantLabel: string }} The canonical name and variant label.
+ */
 const normalizeExerciseNameAndVariant = (
   nameToken: string,
   variantToken?: string | null
@@ -453,6 +587,12 @@ const normalizeExerciseNameAndVariant = (
   };
 };
 
+/**
+ * Produces a canonical name/variant representation of an exercise for use in
+ * identity comparisons, re-parsing the variant from its normalised label.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to normalise.
+ * @returns {{ name: string; variant: ExerciseVariant | null }} The canonical name and parsed variant.
+ */
 const normaliseExerciseForIdentity = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>
 ): { name: string; variant: ExerciseVariant | null } => {
