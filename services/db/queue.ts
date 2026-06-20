@@ -20,7 +20,19 @@ import type { SqlExerciseRow } from '@/services/db/serialization';
 
 let currentQueueGenerationId = 0;
 
+/**
+ * Get the current queue generation id, used to detect and abort stale async
+ * queue generations.
+ *
+ * @returns {number} The current generation id.
+ */
 export const getQueueGenerationId = (): number => currentQueueGenerationId;
+/**
+ * Increment and return the queue generation id, invalidating any in-flight
+ * generation that started under a prior id.
+ *
+ * @returns {number} The new generation id.
+ */
 export const incrementQueueGenerationId = (): number => {
   currentQueueGenerationId += 1;
   return currentQueueGenerationId;
@@ -77,6 +89,13 @@ export const validateWorkoutQueueForPersistence = (queue: WorkoutQueueItem[]): v
   }
 };
 
+/**
+ * Load the full workout queue with each item's exercises, ordered by position.
+ * Each exercise is assigned a stable `exerciseInstanceId` derived from the
+ * queue item id and exercise position.
+ *
+ * @returns {Promise<WorkoutQueueItem[]>} The ordered queue items with exercises.
+ */
 export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
   const database = await getDatabase();
 
@@ -114,6 +133,14 @@ export const getWorkoutQueue = async (): Promise<WorkoutQueueItem[]> => {
   return result;
 };
 
+/**
+ * Validate and persist a complete workout queue, replacing any existing queue
+ * atomically within a transaction. Positions are re-assigned by array order.
+ *
+ * @param {WorkoutQueueItem[]} queue - The queue items to persist.
+ * @returns {Promise<void>} Resolves when the queue has been saved.
+ * @throws {Error} If the queue fails persistence validation.
+ */
 export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void> => {
   const database = await getDatabase();
   validateWorkoutQueueForPersistence(queue);
@@ -144,6 +171,13 @@ export const saveWorkoutQueue = async (queue: WorkoutQueueItem[]): Promise<void>
   });
 };
 
+/**
+ * Append a single item to the end of the workout queue, computing its position
+ * from the current maximum, atomically within a transaction.
+ *
+ * @param {WorkoutQueueItem} item - The queue item to append.
+ * @returns {Promise<void>} Resolves when the item has been added.
+ */
 export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> => {
   const database = await getDatabase();
 
@@ -173,6 +207,12 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
   });
 };
 
+/**
+ * Remove and return the first item in the queue, shifting remaining items'
+ * positions down by one, atomically within a transaction.
+ *
+ * @returns {Promise<WorkoutQueueItem | null>} The dequeued item, or null if the queue was empty.
+ */
 export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> => {
   const database = await getDatabase();
 
@@ -192,12 +232,24 @@ export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> =>
   });
 };
 
+/**
+ * Remove all items (and their exercises) from the workout queue.
+ *
+ * @returns {Promise<void>} Resolves when the queue has been cleared.
+ */
 export const clearWorkoutQueue = async (): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync('DELETE FROM queue_exercises');
   await database.runAsync('DELETE FROM workout_queue');
 };
 
+/**
+ * Update a single queue item's metadata and fully replace its exercises,
+ * atomically within a transaction.
+ *
+ * @param {WorkoutQueueItem} item - The queue item to update (identified by its id).
+ * @returns {Promise<void>} Resolves when the item has been updated.
+ */
 export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => {
   const database = await getDatabase();
 
@@ -217,6 +269,12 @@ export const updateQueueItem = async (item: WorkoutQueueItem): Promise<void> => 
   });
 };
 
+/**
+ * Round a weight to the nearest 0.25 increment.
+ *
+ * @param {number} weight - The raw weight value.
+ * @returns {number} The weight rounded to the nearest quarter unit.
+ */
 function roundWeightToNearestQuarter(weight: number): number {
   return Math.round(weight * 4) / 4;
 }
@@ -227,6 +285,15 @@ type GetProgressionRecommendationFn = (
   programId: string
 ) => Promise<{ weight: number; timesRepsHitInARow?: number }>;
 
+/**
+ * Apply progression recommendations to a list of exercises, producing copies
+ * with updated (quarter-rounded) weights and progression streak counts.
+ *
+ * @param {ProgramExercise[]} exercises - The source exercises.
+ * @param {string} programId - The program the exercises belong to.
+ * @param {GetProgressionRecommendationFn} getProgressionRecommendation - Injected recommender for next weight/streak.
+ * @returns {Promise<ProgramExercise[]>} New exercises with progression applied.
+ */
 async function applyProgressionToExercises(
   exercises: ProgramExercise[],
   programId: string,
@@ -248,6 +315,16 @@ async function applyProgressionToExercises(
   return exercisesWithProgression;
 }
 
+/**
+ * Generate a fresh workout queue for a program by cycling through its workout
+ * days up to the default queue size, applying progression to each exercise.
+ * Uses the generation id to abort if a newer generation supersedes this one.
+ *
+ * @param {string} programId - The program to generate a queue for.
+ * @param {GetProgramByIdFn} getProgramById - Injected program loader.
+ * @param {GetProgressionRecommendationFn} getProgressionRecommendation - Injected progression recommender.
+ * @returns {Promise<number | null>} The generation id on success, or null if aborted/invalid.
+ */
 export const generateWorkoutQueue = async (
   programId: string,
   getProgramById: GetProgramByIdFn,
@@ -299,6 +376,19 @@ export const generateWorkoutQueue = async (
   return thisRequestId;
 };
 
+/**
+ * Rebuild the queue so the next workout is the requested day. Trims the
+ * reference queue to start at the target day (regenerating if it belongs to a
+ * different program) and refills it back up to the default size, applying
+ * progression to newly-added days.
+ *
+ * @param {string} programId - The program the queue belongs to.
+ * @param {number} targetDayNumber - The day number to skip the queue to.
+ * @param {WorkoutQueueItem[] | undefined} originalQueue - Optional reference queue; loaded from storage if omitted.
+ * @param {GetProgramByIdFn} getProgramById - Injected program loader.
+ * @param {GetProgressionRecommendationFn} getProgressionRecommendation - Injected progression recommender.
+ * @returns {Promise<WorkoutQueueItem[] | null>} The new queue, or null if the program is missing/empty.
+ */
 export const skipQueueToDay = async (
   programId: string,
   targetDayNumber: number,
@@ -378,6 +468,12 @@ export const skipQueueToDay = async (
   return newQueue;
 };
 
+/**
+ * Find the first queued item matching a given day number.
+ *
+ * @param {number} dayNumber - The workout day number to look for.
+ * @returns {Promise<WorkoutQueueItem | null>} The matching queue item, or null if none.
+ */
 export const getQueueItemForDay = async (dayNumber: number): Promise<WorkoutQueueItem | null> => {
   const queue = await getWorkoutQueue();
   return queue.find(q => q.dayNumber === dayNumber) ?? null;

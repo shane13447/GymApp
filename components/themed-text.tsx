@@ -10,6 +10,13 @@ export type ThemedTextProps = TextProps & {
   className?: string;
 };
 
+/**
+ * Themed Text component that resolves its text color from the active color
+ * scheme (with optional per-scheme overrides) and applies a typography preset.
+ *
+ * @param {ThemedTextProps} props - Text props plus optional light/dark color overrides, a `type` preset, and `className`.
+ * @returns {React.ReactElement} The themed Text element.
+ */
 export function ThemedText({
   style,
   lightColor,

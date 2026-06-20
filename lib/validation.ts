@@ -7,6 +7,12 @@ import {
 } from '@/constants';
 import type { Program, ProgramExercise, ValidationResult, WorkoutDay } from '@/types';
 
+/**
+ * Wraps a list of error messages into a ValidationResult.
+ *
+ * @param {string[]} errors - Collected validation error messages.
+ * @returns {ValidationResult} Result whose `isValid` is true only when `errors` is empty.
+ */
 function toValidationResult(errors: string[]): ValidationResult {
   return {
     isValid: errors.length === 0,
@@ -14,6 +20,15 @@ function toValidationResult(errors: string[]): ValidationResult {
   };
 }
 
+/**
+ * Builds a stable, order-independent key identifying an exercise's variant.
+ *
+ * Empty/undefined/null variant fields are ignored and remaining entries are
+ * sorted, so two exercises with the same variant always produce the same key.
+ *
+ * @param {ProgramExercise} exercise - Program exercise whose variant should be keyed.
+ * @returns {string} `'default'` when no variant is set, otherwise a stable JSON key.
+ */
 function getStableVariantKey(exercise: ProgramExercise): string {
   const variant = exercise.variant;
   if (!variant || Object.keys(variant).length === 0) {
@@ -27,6 +42,12 @@ function getStableVariantKey(exercise: ProgramExercise): string {
   return JSON.stringify(variantEntries);
 }
 
+/**
+ * Validates a program name for presence and maximum length.
+ *
+ * @param {string} name - Raw program name to validate.
+ * @returns {ValidationResult} Result describing any name validation errors.
+ */
 export function validateProgramName(name: string): ValidationResult {
   const errors: string[] = [];
 
@@ -39,6 +60,12 @@ export function validateProgramName(name: string): ValidationResult {
   return toValidationResult(errors);
 }
 
+/**
+ * Validates that a workout day count is a number within the allowed range.
+ *
+ * @param {number} days - Number of workout days in the program.
+ * @returns {ValidationResult} Result describing any day-count validation errors.
+ */
 export function validateNumberOfDays(days: number): ValidationResult {
   const errors: string[] = [];
 
@@ -56,8 +83,8 @@ export function validateNumberOfDays(days: number): ValidationResult {
 /**
  * Validates workout day structure and duplicate exercise/variant rules.
  *
- * @param day - Workout day containing day number and exercise list.
- * @returns ValidationResult containing all day-level validation errors.
+ * @param {WorkoutDay} day - Workout day containing day number and exercise list.
+ * @returns {ValidationResult} Result containing all day-level validation errors.
  */
 export function validateWorkoutDay(day: WorkoutDay): ValidationResult {
   const errors: string[] = [];
@@ -94,8 +121,8 @@ export function validateWorkoutDay(day: WorkoutDay): ValidationResult {
 /**
  * Validates an individual program exercise configuration.
  *
- * @param exercise - Program exercise containing target values and progression metadata.
- * @returns ValidationResult containing all exercise-level validation errors.
+ * @param {ProgramExercise} exercise - Program exercise containing target values and progression metadata.
+ * @returns {ValidationResult} Result containing all exercise-level validation errors.
  */
 export function validateExercise(exercise: ProgramExercise): ValidationResult {
   const errors: string[] = [];
@@ -162,6 +189,13 @@ export function validateExercise(exercise: ProgramExercise): ValidationResult {
   return toValidationResult(errors);
 }
 
+/**
+ * Validates a complete (partial) program, aggregating name, day-count, day, and
+ * exercise errors. Exercise errors are prefixed with their day number.
+ *
+ * @param {Partial<Program>} program - Program to validate; may be incomplete.
+ * @returns {ValidationResult} Result containing all aggregated validation errors.
+ */
 export function validateProgram(program: Partial<Program>): ValidationResult {
   const errors: string[] = [];
 
@@ -189,6 +223,15 @@ export function validateProgram(program: Partial<Program>): ValidationResult {
   return toValidationResult(errors);
 }
 
+/**
+ * Parses a weight string into a numeric value and unit.
+ *
+ * Accepts an optional `kg`/`lb`/`lbs` suffix; `lb` is normalised to `lbs`.
+ * An empty string is treated as valid with a zero value.
+ *
+ * @param {string} weight - Raw weight string such as `"60 kg"` or `"135 lbs"`.
+ * @returns {{ value: number; unit: string; isValid: boolean }} Parsed value, normalised unit, and validity flag.
+ */
 export function parseWeight(weight: string): { value: number; unit: string; isValid: boolean } {
   if (!weight || !weight.trim()) {
     return { value: 0, unit: '', isValid: true };
@@ -209,6 +252,13 @@ export function parseWeight(weight: string): { value: number; unit: string; isVa
   };
 }
 
+/**
+ * Formats a numeric weight and unit into a display string.
+ *
+ * @param {number} value - Weight value; `0` produces an empty string.
+ * @param {string} [unit='kg'] - Unit label to append.
+ * @returns {string} Formatted string like `"60 kg"`, or `""` when value is `0`.
+ */
 export function formatWeight(value: number, unit: string = 'kg'): string {
   if (value === 0) {
     return '';
@@ -217,6 +267,15 @@ export function formatWeight(value: number, unit: string = 'kg'): string {
   return `${value} ${unit}`;
 }
 
+/**
+ * Parses a reps string into a positive integer value.
+ *
+ * An empty string is treated as valid with a zero value. Non-integer or
+ * non-positive inputs are rejected as invalid.
+ *
+ * @param {string} reps - Raw reps string.
+ * @returns {{ value: number; isValid: boolean }} Parsed value and validity flag.
+ */
 export function parseReps(reps: string): { value: number; isValid: boolean } {
   if (!reps || !reps.trim()) {
     return { value: 0, isValid: true };
@@ -232,10 +291,24 @@ export function parseReps(reps: string): { value: number; isValid: boolean } {
   return { value: 0, isValid: false };
 }
 
+/**
+ * Formats a numeric reps value as a display string.
+ *
+ * @param {number} value - Reps value to format.
+ * @returns {string} The value rendered as a string.
+ */
 export function formatReps(value: number): string {
   return value.toString();
 }
 
+/**
+ * Validates that an input parses to a positive decimal number.
+ *
+ * An empty string is treated as valid with a `null` value (optional field).
+ *
+ * @param {string} input - Raw input string to validate.
+ * @returns {{ value: number | null; isValid: boolean; error: string | null }} Parsed value, validity flag, and error message when invalid.
+ */
 export function validatePositiveDecimal(
   input: string
 ): { value: number | null; isValid: boolean; error: string | null } {
@@ -257,6 +330,14 @@ export function validatePositiveDecimal(
   return { value: num, isValid: true, error: null };
 }
 
+/**
+ * Validates that an input parses to a positive whole number.
+ *
+ * An empty string is treated as valid with a `null` value (optional field).
+ *
+ * @param {string} input - Raw input string to validate.
+ * @returns {{ value: number | null; isValid: boolean; error: string | null }} Parsed value, validity flag, and error message when invalid.
+ */
 export function validatePositiveInteger(
   input: string
 ): { value: number | null; isValid: boolean; error: string | null } {

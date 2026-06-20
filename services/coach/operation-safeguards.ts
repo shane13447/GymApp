@@ -10,6 +10,12 @@ export type OperationIntentSafeguardInput = {
   targetedExercises: TargetedExerciseRef[];
 };
 
+/**
+ * Normalise text for comparison by trimming and lowercasing.
+ *
+ * @param {string} value - The text to normalise.
+ * @returns {string} The trimmed, lowercased text.
+ */
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
 /**

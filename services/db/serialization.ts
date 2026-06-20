@@ -11,9 +11,25 @@ import type { ExerciseVariant, ProgramExercise } from '@/types';
 import type { SQLiteBindValue } from 'expo-sqlite';
 import { safeParseFloat, safeParseInt } from '@/lib/safe-convert';
 
+/**
+ * Serialize an exercise variant to its JSON string form for storage.
+ *
+ * @param {ExerciseVariant | null} [variant] - The variant to serialize.
+ * @returns {string} The JSON string, or an empty string when no variant is provided.
+ */
 export const serializeVariant = (variant?: ExerciseVariant | null): string =>
   variant ? JSON.stringify(variant) : '';
 
+/**
+ * Parse a JSON-encoded string array column, tolerating missing/invalid data by
+ * logging a fallback warning and returning an empty array. Non-string entries
+ * are filtered out.
+ *
+ * @param {string | null | undefined} raw - The raw stored JSON string.
+ * @param {string} fieldName - The field name, used in fallback log context.
+ * @param {Record<string, unknown>} context - Extra context merged into fallback logs.
+ * @returns {string[]} The parsed string array, or an empty array on failure.
+ */
 export const parseStringArrayField = (
   raw: string | null | undefined,
   fieldName: string,
@@ -42,6 +58,16 @@ export const parseStringArrayField = (
   }
 };
 
+/**
+ * Parse a JSON-encoded number array column, tolerating missing/invalid data by
+ * logging a fallback warning and returning an empty array. Non-finite and
+ * non-number entries are filtered out.
+ *
+ * @param {string | null | undefined} raw - The raw stored JSON string.
+ * @param {string} fieldName - The field name, used in fallback log context.
+ * @param {Record<string, unknown>} context - Extra context merged into fallback logs.
+ * @returns {number[]} The parsed finite-number array, or an empty array on failure.
+ */
 export const parseNumberArrayField = (
   raw: string | null | undefined,
   fieldName: string,
@@ -70,6 +96,14 @@ export const parseNumberArrayField = (
   }
 };
 
+/**
+ * Parse and normalise a stored variant JSON string into an ExerciseVariant.
+ * Trims string fields, filters empty extras, and returns null when the JSON is
+ * absent, invalid, or yields no meaningful fields.
+ *
+ * @param {string | null} [variantJson] - The stored variant JSON string.
+ * @returns {ExerciseVariant | null} The normalised variant, or null when empty/invalid.
+ */
 export const parseVariant = (variantJson?: string | null): ExerciseVariant | null => {
   if (!variantJson || !variantJson.trim()) {
     return null;
@@ -184,6 +218,15 @@ function optionalPositiveIntField(value: number | null | undefined): number | un
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+/**
+ * Build the INSERT SQL and bound parameters for persisting a program exercise
+ * into `program_exercises`, applying safe numeric coercion and defaults.
+ *
+ * @param {ProgramExercise} exercise - The exercise to serialize.
+ * @param {number} position - The zero-based ordering position within its day.
+ * @param {SQLiteBindValue} foreignKey - The owning workout day id.
+ * @returns {{ sql: string; params: SQLiteBindValue[] }} The SQL statement and its bound parameters.
+ */
 export function serializeExerciseToSqlParams(
   exercise: ProgramExercise,
   position: number,
@@ -219,6 +262,15 @@ export function serializeExerciseToSqlParams(
   };
 }
 
+/**
+ * Build the INSERT SQL and bound parameters for persisting an exercise into
+ * `queue_exercises`, applying safe numeric coercion and defaults.
+ *
+ * @param {ProgramExercise} exercise - The exercise to serialize.
+ * @param {number} position - The zero-based ordering position within its queue item.
+ * @param {string} queueItemId - The owning queue item id.
+ * @returns {{ sql: string; params: SQLiteBindValue[] }} The SQL statement and its bound parameters.
+ */
 export function serializeQueueExerciseToSqlParams(
   exercise: ProgramExercise,
   position: number,
@@ -254,6 +306,13 @@ export function serializeQueueExerciseToSqlParams(
   };
 }
 
+/**
+ * Convert a raw SQLite exercise row back into a ProgramExercise, parsing array
+ * and variant columns and applying default values for missing numeric fields.
+ *
+ * @param {SqlExerciseRow} ex - The raw database row.
+ * @returns {ProgramExercise} The reconstructed program exercise.
+ */
 export function deserializeProgramExerciseRow(ex: SqlExerciseRow): ProgramExercise {
   return {
     exerciseInstanceId: ex.exercise_instance_id ?? undefined,

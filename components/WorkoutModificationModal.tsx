@@ -10,6 +10,14 @@ interface WorkoutModificationModalProps {
   onCancel: () => void;
 }
 
+/**
+ * Modal that previews coach-proposed workout changes (variant, weight, reps,
+ * sets, removals, additions, swaps) and lets the user confirm or cancel them.
+ * Renders nothing when there are no proposed changes.
+ *
+ * @param {WorkoutModificationModalProps} props - Visibility flag, the proposed changes, and confirm/cancel handlers.
+ * @returns {React.ReactElement | null} The modal element, or null when there is nothing to show.
+ */
 export default function WorkoutModificationModal({
   visible,
   proposedChanges,

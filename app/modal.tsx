@@ -9,6 +9,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
+/**
+ * Simple modal route screen displaying placeholder modal content.
+ *
+ * @returns {React.ReactElement} The modal screen.
+ */
 export default function ModalScreen() {
   return (
     <ThemedView style={styles.container}>

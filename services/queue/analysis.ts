@@ -44,8 +44,20 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
   'laterality',
 ];
 
+/**
+ * Lower-cases and trims a string for case-insensitive comparison.
+ * @param {string} value - The raw string to normalise.
+ * @returns {string} The trimmed, lower-cased string.
+ */
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
+/**
+ * Parses a free-text variant label (e.g. "Incline / Close Grip") into a
+ * structured {@link ExerciseVariant}, bucketing each segment into the
+ * appropriate field (angle, grip, posture, laterality) or `extras`.
+ * @param {string} value - The variant label, with segments separated by `/` or `,`.
+ * @returns {ExerciseVariant | null} The parsed variant, or `null` if no recognisable segments are present.
+ */
 export const parseVariantLabel = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)
@@ -98,6 +110,12 @@ export const parseVariantLabel = (value: string): ExerciseVariant | null => {
   return Object.keys(variant).length > 0 ? variant : null;
 };
 
+/**
+ * Renders a variant as a prompt-friendly label, replacing commas with slashes
+ * so the value is safe to embed in slash-delimited prompt text.
+ * @param {ExerciseVariant | null} [variant] - The variant to serialise.
+ * @returns {string} The serialised label, or an empty string when there is no variant.
+ */
 const serialiseVariantForPrompt = (variant?: ExerciseVariant | null): string => {
   const label = getExerciseVariantLabel(variant).trim();
   if (!label) {
@@ -107,11 +125,23 @@ const serialiseVariantForPrompt = (variant?: ExerciseVariant | null): string => 
   return label.replace(/,/g, '/');
 };
 
+/**
+ * Builds a display name combining an exercise's name with its prompt-formatted
+ * variant label in parentheses (when a variant is present).
+ * @param {ProgramExercise} exercise - The exercise to render.
+ * @returns {string} The exercise name, optionally suffixed with `(variant)`.
+ */
 const withVariantDisplayName = (exercise: ProgramExercise): string => {
   const variantLabel = serialiseVariantForPrompt(exercise.variant);
   return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
 };
 
+/**
+ * Parses a single variant token into a structured variant, returning `null`
+ * for empty input.
+ * @param {string} variantToken - The raw variant token to parse.
+ * @returns {ExerciseVariant | null} The parsed variant, or `null` when the token is blank or unparseable.
+ */
 const parseVariantFromToken = (variantToken: string): ExerciseVariant | null => {
   const value = variantToken.trim();
   if (!value) {
@@ -121,6 +151,12 @@ const parseVariantFromToken = (variantToken: string): ExerciseVariant | null => 
   return parseVariantLabel(value);
 };
 
+/**
+ * Collects every normalised value, label, and alias from an exercise's variant
+ * option metadata into a lookup set.
+ * @param {ExerciseData} [exerciseData] - The catalog exercise whose variant options are read.
+ * @returns {Set<string>} A set of normalised allowed variant values (empty when no options exist).
+ */
 const variantValuesFromOptions = (exerciseData?: ExerciseData): Set<string> => {
   const values = new Set<string>();
   if (!exerciseData?.variantOptions) {
@@ -140,6 +176,12 @@ const variantValuesFromOptions = (exerciseData?: ExerciseData): Set<string> => {
   return values;
 };
 
+/**
+ * Flattens a variant's field values and extras into a normalised set suitable
+ * for membership comparison.
+ * @param {ExerciseVariant | null} [variant] - The variant to convert.
+ * @returns {Set<string>} A set of normalised, non-empty variant values.
+ */
 const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> => {
   const values: string[] = [];
 
@@ -157,8 +199,14 @@ const variantToComparableSet = (variant?: ExerciseVariant | null): Set<string> =
   return new Set(values.filter(Boolean));
 };
 
-// Validates a parsed variant against known exercise variant options.
-// If no options metadata exists, we treat the variant as viable and allow intent to pass through.
+/**
+ * Validates a parsed variant against an exercise's known variant options. When
+ * no options metadata exists the variant is treated as viable so intent can
+ * pass through.
+ * @param {ExerciseData | null} exerciseData - The catalog exercise providing allowed options, or `null`.
+ * @param {ExerciseVariant | null} [variant] - The variant to validate.
+ * @returns {boolean} `true` if the variant is valid (or cannot be disproven), otherwise `false`.
+ */
 const isVariantValidForExercise = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null
@@ -186,8 +234,13 @@ const isVariantValidForExercise = (
   return true;
 };
 
-// Builds a canonical variant object from option metadata.
-// It converts user-entered casing/aliases to option labels (e.g., "inclined" -> "Incline").
+/**
+ * Builds a canonical variant from option metadata, converting user-entered
+ * casing/aliases to their canonical option labels (e.g. "inclined" -> "Incline").
+ * @param {ExerciseData} exerciseData - The catalog exercise whose variant options drive canonicalisation.
+ * @param {ExerciseVariant} variant - The raw variant to canonicalise.
+ * @returns {ExerciseVariant | null} The canonicalised variant, or `null` when nothing matched.
+ */
 const canonicaliseVariantFromOptions = (
   exerciseData: ExerciseData,
   variant: ExerciseVariant
@@ -225,8 +278,14 @@ const canonicaliseVariantFromOptions = (
   return Object.keys(canonical).length > 0 ? canonical : null;
 };
 
-// Normalizes a requested variant using available option metadata.
-// If requested variant is unsupported, falls back to the provided safe variant (usually the original variant).
+/**
+ * Normalises a requested variant using available option metadata, falling back
+ * to a safe variant (usually the original) when the request is unsupported.
+ * @param {ExerciseData | null} exerciseData - The catalog exercise providing option metadata, or `null`.
+ * @param {ExerciseVariant | null} [variant] - The requested variant to normalise.
+ * @param {ExerciseVariant | null} [fallback] - The variant to use when the request is invalid or unmatched.
+ * @returns {ExerciseVariant | null} The normalised variant, the fallback, or `null`.
+ */
 const normaliseVariantAgainstOptions = (
   exerciseData: ExerciseData | null,
   variant?: ExerciseVariant | null,
@@ -247,8 +306,13 @@ const normaliseVariantAgainstOptions = (
   return canonicaliseVariantFromOptions(exerciseData, variant) ?? fallback ?? null;
 };
 
-// Chooses the best source of variant metadata for validation.
-// Prefer catalog metadata when present; otherwise use queue/original exercise metadata if available.
+/**
+ * Chooses the best source of variant metadata for validation, preferring catalog
+ * metadata and otherwise falling back to the original exercise's own options.
+ * @param {ExerciseData | null} exerciseData - Catalog metadata for the exercise, or `null`.
+ * @param {ProgramExercise} [originalEx] - The original program exercise whose options may be used as a fallback.
+ * @returns {ExerciseData | null} The chosen metadata source, or `null` when none is available.
+ */
 const getVariantValidationSource = (
   exerciseData: ExerciseData | null,
   originalEx?: ProgramExercise
@@ -271,6 +335,13 @@ const getVariantValidationSource = (
   return exerciseData;
 };
 
+/**
+ * Builds a stable JSON identity string for an exercise from its canonical name
+ * and variant, optionally including its instance id.
+ * @param {Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>} exercise - The exercise to identify.
+ * @param {{ includeInstanceId: boolean }} options - Whether the instance id participates in the identity.
+ * @returns {string} A JSON string uniquely describing the exercise identity.
+ */
 const getExerciseIdentity = (
   exercise: Pick<ProgramExercise, 'exerciseInstanceId' | 'name' | 'variant'>,
   options: { includeInstanceId: boolean }
@@ -284,11 +355,25 @@ const getExerciseIdentity = (
   });
 };
 
+/**
+ * Builds a human-readable display name combining the exercise name with its
+ * prompt-formatted variant label in parentheses.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to render.
+ * @returns {string} The display name, optionally suffixed with `(variant)`.
+ */
 const getDisplayName = (exercise: Pick<ProgramExercise, 'name' | 'variant'>): string => {
   const variantLabel = serialiseVariantForPrompt(exercise.variant);
   return variantLabel ? `${exercise.name} (${variantLabel})` : exercise.name;
 };
 
+/**
+ * Constructs a {@link TargetedExerciseRef} locating an exercise within a queue
+ * item, capturing its day, index, instance id, and display name.
+ * @param {WorkoutQueueItem} item - The queue item (day) containing the exercise.
+ * @param {ProgramExercise} exercise - The exercise being referenced.
+ * @param {number} exerciseIndex - The exercise's index within the day.
+ * @returns {TargetedExerciseRef} A reference identifying the exercise's location.
+ */
 const buildTargetedExerciseRef = (
   item: WorkoutQueueItem,
   exercise: ProgramExercise,
@@ -302,6 +387,12 @@ const buildTargetedExerciseRef = (
   displayName: getDisplayName(exercise),
 });
 
+/**
+ * Produces the set of normalised labels (plain name and display name) that an
+ * exercise can be matched against during text comparison.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to derive labels from.
+ * @returns {string[]} Normalised, non-empty comparable labels.
+ */
 const getComparableExerciseLabels = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>
 ): string[] => {
@@ -310,6 +401,13 @@ const getComparableExerciseLabels = (
     .filter(Boolean);
 };
 
+/**
+ * Determines whether a free-text string refers to an exercise via exact,
+ * substring, or fuzzy (similarity > 0.8) matching against its comparable labels.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to test.
+ * @param {string} text - The free-text target to match.
+ * @returns {boolean} `true` if the text plausibly refers to the exercise.
+ */
 const doesExerciseTextMatch = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>,
   text: string
@@ -329,6 +427,16 @@ const doesExerciseTextMatch = (
   });
 };
 
+/**
+ * Finds the original exercise that best matches a parsed exercise, scoring
+ * candidates by name/display/variant equality and positional proximity while
+ * skipping already-used indices.
+ * @param {ProgramExercise[]} originalExercises - The candidate exercises to match against.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} parsedExercise - The parsed exercise to match.
+ * @param {number} parsedIndex - The parsed exercise's index, used for proximity scoring.
+ * @param {Set<number>} usedIndices - Indices already claimed by previous matches.
+ * @returns {{ exercise: ProgramExercise; index: number } | null} The best match with its index, or `null`.
+ */
 const findBestOriginalExerciseMatch = (
   originalExercises: ProgramExercise[],
   parsedExercise: Pick<ProgramExercise, 'name' | 'variant'>,
@@ -381,6 +489,13 @@ const findBestOriginalExerciseMatch = (
   return candidates[0] ?? null;
 };
 
+/**
+ * Builds a map keyed by per-occurrence exercise identity (`identity::occurrence`)
+ * so duplicate exercises in a list remain individually addressable.
+ * @param {ProgramExercise[]} exercises - The exercises to index.
+ * @param {{ includeInstanceId: boolean }} options - Whether the instance id participates in identity.
+ * @returns {Map<string, { exercise: ProgramExercise; index: number }>} Occurrence-keyed exercise map.
+ */
 const buildExerciseIdentityMap = (
   exercises: ProgramExercise[],
   options: { includeInstanceId: boolean }
@@ -398,6 +513,12 @@ const buildExerciseIdentityMap = (
   );
 };
 
+/**
+ * Builds a map keyed by per-occurrence queue item id (`id::occurrence`) so
+ * duplicate item ids remain individually addressable.
+ * @param {WorkoutQueueItem[]} queue - The queue items to index.
+ * @returns {Map<string, WorkoutQueueItem>} Occurrence-keyed queue item map.
+ */
 const buildQueueItemIdentityMap = (queue: WorkoutQueueItem[]) => {
   const seenCounts = new Map<string, number>();
 
@@ -411,6 +532,12 @@ const buildQueueItemIdentityMap = (queue: WorkoutQueueItem[]) => {
   );
 };
 
+/**
+ * Splits a string like "Bench Press (Incline)" into its base name and the
+ * inline variant label found in trailing parentheses.
+ * @param {string} value - The combined name/variant string.
+ * @returns {{ name: string; variantLabel: string | null }} The base name and the inline variant label (or `null`).
+ */
 const splitNameAndInlineVariant = (
   value: string
 ): { name: string; variantLabel: string | null } => {
@@ -425,6 +552,13 @@ const splitNameAndInlineVariant = (
   };
 };
 
+/**
+ * Canonicalises an exercise name/variant pair, applying special-case handling
+ * (e.g. mapping "Decline Crunches" to name "Crunches" with a "Decline" variant).
+ * @param {string} nameToken - The raw exercise name.
+ * @param {string | null} [variantToken] - The raw variant label, if any.
+ * @returns {{ name: string; variantLabel: string }} The canonical name and variant label.
+ */
 const normalizeExerciseNameAndVariant = (
   nameToken: string,
   variantToken?: string | null
@@ -453,6 +587,12 @@ const normalizeExerciseNameAndVariant = (
   };
 };
 
+/**
+ * Produces a canonical name/variant representation of an exercise for use in
+ * identity comparisons, re-parsing the variant from its normalised label.
+ * @param {Pick<ProgramExercise, 'name' | 'variant'>} exercise - The exercise to normalise.
+ * @returns {{ name: string; variant: ExerciseVariant | null }} The canonical name and parsed variant.
+ */
 const normaliseExerciseForIdentity = (
   exercise: Pick<ProgramExercise, 'name' | 'variant'>
 ): { name: string; variant: ExerciseVariant | null } => {
@@ -738,12 +878,25 @@ const GENERIC_EXERCISE_WORDS = new Set([
   'extensions',
 ]);
 
+/**
+ * Reports whether a lower-cased request contains any of the given keywords.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @param {readonly string[]} keywords - The keywords to look for.
+ * @returns {boolean} `true` if at least one keyword is present.
+ */
 function includesAnyKeyword(requestLower: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => requestLower.includes(keyword));
 }
 
 const BROAD_ALIAS_KEYS = new Set(['row', 'rows', 'curl', 'curls', 'bench']);
 
+/**
+ * Reports whether an alias appears in the request as a whole word (word-boundary
+ * matched, with regex metacharacters escaped).
+ * @param {string} alias - The alias to look for.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {boolean} `true` if the alias appears as a standalone word.
+ */
 const aliasAppearsInRequest = (alias: string, requestLower: string): boolean => {
   const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   return aliasRegex.test(requestLower);
@@ -774,6 +927,12 @@ const findMatchingExerciseAliases = (requestLower: string): Array<[string, strin
   });
 };
 
+/**
+ * Infers injury context and severity from a request using explicit severity
+ * words and contextual cue phrases.
+ * @param {string} requestLower - The lower-cased request text to analyse.
+ * @returns {{ hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null }} Whether injury context is present and the inferred severity.
+ */
 const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null } => {
   const hasInjuryContext = includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS);
 
@@ -859,6 +1018,12 @@ const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
 
 const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, readonly string[]> = JOINT_INJURY_MAP;
 
+/**
+ * Infers all variant adjustments (grip, angle, posture, laterality) mentioned in
+ * a request, used when repairing/adjusting exercises for injuries.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {ExerciseVariant[]} The variants found, in the order their tokens were detected.
+ */
 const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[] => {
   const candidateTokens = [
     'neutral grip',
@@ -901,11 +1066,24 @@ const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[
   return variants;
 };
 
+/**
+ * Infers the single most relevant requested variant for repair, i.e. the first
+ * variant returned by {@link inferRequestedVariantsForRepair}.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {ExerciseVariant | null} The first inferred variant, or `null` when none is found.
+ */
 const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
   const variants = inferRequestedVariantsForRepair(requestLower);
   return variants[0] ?? null;
 };
 
+/**
+ * Canonicalises a raw exercise name for semantic comparison, preferring an alias
+ * resolution against the catalog, then a known-exercise lookup, then the
+ * normalised input.
+ * @param {string} nameRaw - The raw exercise name to canonicalise.
+ * @returns {string} The normalised canonical name (empty string for blank input).
+ */
 const canonicaliseExerciseNameForSemantics = (nameRaw: string): string => {
   const lower = normaliseText(nameRaw);
   if (!lower) return '';
@@ -923,6 +1101,13 @@ const canonicaliseExerciseNameForSemantics = (nameRaw: string): string => {
   return lower;
 };
 
+/**
+ * Finds every queue exercise that works any of the target muscle groups,
+ * returning targeted references annotated with each exercise's parsed weight.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to search.
+ * @param {string[]} targetMuscles - The lower-cased muscle groups to match against.
+ * @returns {Array<TargetedExerciseRef & { weight: number }>} Matching exercise references with weights.
+ */
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
   targetMuscles: string[]
@@ -951,6 +1136,12 @@ const findExercisesInQueueByMuscleGroup = (
   return matchingExercises;
 };
 
+/**
+ * Detects a percentage-based weight change in a request (e.g. "increase by 10%"),
+ * inferring direction from increase/decrease keywords.
+ * @param {string} request - The raw user request text.
+ * @returns {{ percentage: number; isIncrease: boolean } | null} The percentage and direction, or `null` when no percentage change is present.
+ */
 const detectPercentageChange = (
   request: string
 ): { percentage: number; isIncrease: boolean } | null => {
@@ -1010,6 +1201,13 @@ const detectAbsoluteNumericChange = (
   return null;
 };
 
+/**
+ * Detects a muscle-group scope in a request, matching explicit phrases (e.g.
+ * "all chest", "chest exercises") or a bare keyword combined with a numeric
+ * modifier and global-scope term.
+ * @param {string} request - The raw user request text.
+ * @returns {{ keyword: string; muscles: string[] } | null} The matched keyword and its muscle groups, or `null` when none is found.
+ */
 const detectMuscleGroupInRequest = (
   request: string
 ): { keyword: string; muscles: string[] } | null => {
@@ -1260,6 +1458,14 @@ export const extractTargetExercises = (
   return targetNames;
 };
 
+/**
+ * Resolves the queue exercises a request targets, returning concrete
+ * {@link TargetedExerciseRef} locations (de-duplicated) rather than bare names,
+ * accounting for injury intent and alias/fuzzy matching.
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} queue - The current workout queue to resolve against.
+ * @returns {TargetedExerciseRef[]} The targeted exercise references found in the queue.
+ */
 export const extractTargetExerciseRefs = (
   request: string,
   queue: WorkoutQueueItem[]
@@ -1506,6 +1712,14 @@ export const fuzzyMatchExerciseName = (
 // =============================================================================
 // QUEUE COMPARISON AND SEMANTIC VALIDATION
 // =============================================================================
+/**
+ * Computes the per-exercise differences between two workout queue snapshots,
+ * matching items/exercises by occurrence-aware identity to detect additions,
+ * removals, and attribute changes.
+ * @param {WorkoutQueueItem[]} oldQueue - The queue snapshot before the change.
+ * @param {WorkoutQueueItem[]} newQueue - The queue snapshot after the change.
+ * @returns {QueueDifference[]} The list of detected differences between the two queues.
+ */
 export const compareWorkoutQueues = (
   oldQueue: WorkoutQueueItem[],
   newQueue: WorkoutQueueItem[]
@@ -1644,6 +1858,12 @@ export const compareWorkoutQueues = (
   return differences;
 };
 
+/**
+ * Converts a list of queue differences into the structured {@link ProposedChanges}
+ * summary surfaced to the user for confirmation.
+ * @param {QueueDifference[]} differences - The differences produced by {@link compareWorkoutQueues}.
+ * @returns {ProposedChanges} The grouped, user-facing proposed-changes summary.
+ */
 export const differencesToProposedChanges = (differences: QueueDifference[]): ProposedChanges => {
   const variantChanges: ProposedChanges['variantChanges'] = [];
   const weightChanges: ProposedChanges['weightChanges'] = [];
@@ -1935,6 +2155,12 @@ export const validateChanges = (
   };
 };
 
+/**
+ * Infers an explicit variant label mentioned in a prompt (e.g. "incline",
+ * "close grip"), mapping "wrist-friendly" to "neutral grip".
+ * @param {string} prompt - The prompt text to scan.
+ * @returns {string | null} The recognised variant label, or `null` when none is present.
+ */
 const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
   const lowerPrompt = prompt.toLowerCase();
 
@@ -1961,6 +2187,14 @@ const inferRequestedVariantFromPrompt = (prompt: string): string | null => {
   return null;
 };
 
+/**
+ * Evaluates a batch of test prompts against a queue, reporting per-prompt
+ * coverage (which exercises each prompt targets and whether any targets are
+ * missing) for prompt-suite diagnostics.
+ * @param {TestPromptCoverageInput[]} prompts - The test prompts to evaluate.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to resolve targets against.
+ * @returns {TestPromptCoverageReport} The aggregated per-prompt coverage report.
+ */
 export const analyzeTestPromptQueueCoverage = (
   prompts: TestPromptCoverageInput[],
   queue: WorkoutQueueItem[]
@@ -2049,6 +2283,13 @@ const NUMERIC_CHANGE_DIFF_TYPES: QueueDifference['type'][] = [
   'sets_change',
 ];
 
+/**
+ * Resolves the concrete queue exercise referenced by a target ref, preferring a
+ * match on exercise instance id and falling back to the queue item + index.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to look up within.
+ * @param {TargetedExerciseRef} targetRef - The reference identifying the exercise.
+ * @returns {ProgramExercise | undefined} The matching exercise, or `undefined` if not found.
+ */
 const getExerciseFromTargetRef = (
   queue: WorkoutQueueItem[],
   targetRef: TargetedExerciseRef
@@ -2067,6 +2308,14 @@ type NumericAttribute = 'weight' | 'reps' | 'sets';
 
 type TargetNumericIntent = Partial<Record<NumericAttribute, string>>;
 
+/**
+ * Infers, per targeted exercise, the numeric attributes (weight/reps/sets) the
+ * request intends to change and their expected values.
+ * @param {string} request - The raw user request text.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targets.
+ * @param {ChangeType[]} changeTypes - The change categories detected for the request.
+ * @returns {Map<string, TargetNumericIntent>} A map from exercise display name to its inferred numeric intent.
+ */
 const inferTargetedNumericIntent = (
   request: string,
   targetedExerciseRefs: TargetedExerciseRef[],
@@ -2206,6 +2455,16 @@ const inferTargetedNumericIntent = (
   return intentMap;
 };
 
+/**
+ * Evaluates whether the change between the original and parsed queues semantically
+ * satisfies the request's intent (correct exercises changed, expected numeric
+ * outcomes, no unexpected add/remove).
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} originalQueue - The queue before the Coach mutation.
+ * @param {WorkoutQueueItem[]} parsedQueue - The queue after the Coach mutation.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targeted.
+ * @returns {SemanticEvaluationResult} A pass/fail result with an explanatory reason on failure.
+ */
 export const evaluatePromptIntentOutcome = (
   request: string,
   originalQueue: WorkoutQueueItem[],
@@ -2503,6 +2762,16 @@ export const evaluatePromptIntentOutcome = (
   return { passed: true };
 };
 
+/**
+ * Evaluates whether the parsed queue applied the requested variant to the
+ * targeted exercises.
+ * @param {string} _request - The raw user request text (unused; kept for signature parity).
+ * @param {WorkoutQueueItem[]} _originalQueue - The pre-mutation queue (unused; kept for signature parity).
+ * @param {WorkoutQueueItem[]} parsedQueue - The queue after the Coach mutation.
+ * @param {TargetedExerciseRef[]} targetedExerciseRefs - The exercises the request targeted.
+ * @param {string} requestedVariant - The variant label expected to be applied.
+ * @returns {SemanticEvaluationResult} A pass/fail result with an explanatory reason on failure.
+ */
 export const evaluateVariantSemanticOutcome = (
   _request: string,
   _originalQueue: WorkoutQueueItem[],

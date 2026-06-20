@@ -25,10 +25,23 @@ const OPENROUTER_DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const REQUEST_TIMEOUT_MS = 60000;
 
+/**
+ * Type guard for a non-null object value.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is a non-null object.
+ */
 const isObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
 };
 
+/**
+ * Verify a Supabase access token by calling the Auth `/user` endpoint. Returns
+ * false (and logs) when required env vars are missing or the request fails.
+ *
+ * @param {string} token - The bearer access token to verify.
+ * @returns {Promise<boolean>} True if the token is valid.
+ */
 export const verifyAccessToken = async (token: string): Promise<boolean> => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -54,6 +67,14 @@ export const verifyAccessToken = async (token: string): Promise<boolean> => {
   }
 };
 
+/**
+ * Enforce the configured authentication mode for a request, returning an error
+ * Response when access is denied or null when the request may proceed.
+ *
+ * @param {Request} request - The incoming request.
+ * @param {AuthMode} mode - The active authentication mode.
+ * @returns {Promise<Response | null>} A denial Response, or null to allow the request.
+ */
 export const enforceAuthMode = async (request: Request, mode: AuthMode): Promise<Response | null> => {
   const token = getBearerToken(request);
   const tokenIsValid = token ? await verifyAccessToken(token) : null;
@@ -66,10 +87,23 @@ export const enforceAuthMode = async (request: Request, mode: AuthMode): Promise
   return null;
 };
 
+/**
+ * Type guard for a valid coach message role.
+ *
+ * @param {unknown} role - The role value to test.
+ * @returns {boolean} True if the role is 'system', 'user', or 'assistant'.
+ */
 const isValidRole = (role: unknown): role is CoachProxyMessage['role'] => {
   return role === 'system' || role === 'user' || role === 'assistant';
 };
 
+/**
+ * Validate and extract the `messages` array from a request body, returning null
+ * if the body shape or any message entry is invalid.
+ *
+ * @param {unknown} body - The parsed request body.
+ * @returns {CoachProxyMessage[] | null} The validated messages, or null when invalid.
+ */
 const parseRequestMessages = (body: unknown): CoachProxyMessage[] | null => {
   if (!isObject(body) || !Array.isArray(body.messages)) {
     return null;

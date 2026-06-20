@@ -10,6 +10,13 @@ export type ThemedViewProps = ViewProps & {
   className?: string;
 };
 
+/**
+ * Themed View component that resolves its background color from the active
+ * color scheme, with optional per-scheme overrides.
+ *
+ * @param {ThemedViewProps} props - View props plus optional light/dark color overrides and `className`.
+ * @returns {ReactElement} The themed View element.
+ */
 export function ThemedView({
   style,
   lightColor,
