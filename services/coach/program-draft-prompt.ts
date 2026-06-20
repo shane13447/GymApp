@@ -148,6 +148,13 @@ EXAMPLE OUTPUT — ADVANCED HYPERTROPHY, 1 EXERCISE:
   "progressionThreshold": 3
 }`;
 
+/**
+ * Build the program-draft system prompt, appending goal-specific guidance when
+ * a training goal is provided.
+ *
+ * @param {TrainingGoal | null} [goal] - Optional training goal used to tailor the prompt.
+ * @returns {string} The complete system prompt text.
+ */
 export const buildProgramDraftSystemPrompt = (goal: TrainingGoal | null = null): string => {
   if (goal === 'strength') {
     return `${PROGRAM_DRAFT_SYSTEM_PROMPT}\nPrioritize lower rep ranges and progressive overload for strength focus.`;

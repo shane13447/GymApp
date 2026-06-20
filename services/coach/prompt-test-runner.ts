@@ -212,6 +212,14 @@ export const runCoachPromptSuite = async ({
   };
 };
 
+/**
+ * Parse a bracketed numeric-array string (e.g. "[8, 10, 12]") into an array of
+ * finite numbers, returning null if the format is invalid or any entry is
+ * non-finite.
+ *
+ * @param {string} value - The string to parse.
+ * @returns {number[] | null} The parsed numbers, or null on invalid input.
+ */
 const parseNumericArray = (value: string): number[] | null => {
   const trimmed = value.trim();
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return null;
@@ -227,6 +235,14 @@ const parseNumericArray = (value: string): number[] | null => {
   }
 };
 
+/**
+ * Flatten per-set customised exercises in a queue to scalar values for
+ * transport, collapsing matching reps/weight arrays to their first entry and
+ * deriving the set count, while leaving non-customised exercises untouched.
+ *
+ * @param {WorkoutQueueItem[]} queue - The queue to scalarize.
+ * @returns {WorkoutQueueItem[]} A new queue with customised exercises scalarized.
+ */
 const scalarizeQueueForTransport = (queue: WorkoutQueueItem[]): WorkoutQueueItem[] => {
   return queue.map((item) => ({
     ...item,

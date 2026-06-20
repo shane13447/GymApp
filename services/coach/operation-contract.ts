@@ -94,28 +94,65 @@ const VALID_OPERATION_TYPES = [
   'swap_variant',
 ] as const;
 
+/**
+ * Type guard for a non-null object value.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is a non-null object record.
+ */
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null
 );
 
+/**
+ * Type guard for a non-empty (after trimming) string.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is a string with non-whitespace content.
+ */
 const isNonEmptyString = (value: unknown): value is string => (
   typeof value === 'string' && value.trim().length > 0
 );
 
+/**
+ * Type guard for a finite number.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is a finite number.
+ */
 const isFiniteNumber = (value: unknown): value is number => (
   typeof value === 'number' && Number.isFinite(value)
 );
 
+/**
+ * Type guard for a non-negative integer.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is an integer >= 0.
+ */
 const isNonNegativeInteger = (value: unknown): value is number => (
   Number.isInteger(value) && (value as number) >= 0
 );
 
+/**
+ * Type guard for a positive integer.
+ *
+ * @param {unknown} value - The value to test.
+ * @returns {boolean} True if the value is an integer > 0.
+ */
 const isPositiveInteger = (value: unknown): value is number => (
   Number.isInteger(value) && (value as number) > 0
 );
 
 const INVALID_JSON = Symbol('invalid_json');
 
+/**
+ * Parse a JSON string, returning the {@link INVALID_JSON} sentinel instead of
+ * throwing on malformed input.
+ *
+ * @param {string} text - The JSON text to parse.
+ * @returns {unknown | typeof INVALID_JSON} The parsed value, or the INVALID_JSON sentinel on failure.
+ */
 const parseJson = (text: string): unknown | typeof INVALID_JSON => {
   try {
     return JSON.parse(text) as unknown;
@@ -124,6 +161,13 @@ const parseJson = (text: string): unknown | typeof INVALID_JSON => {
   }
 };
 
+/**
+ * Parse JSON, falling back to extracting the first `{...}` object substring
+ * when the whole string is not valid JSON.
+ *
+ * @param {string} text - The text that may contain or be JSON.
+ * @returns {unknown | typeof INVALID_JSON} The parsed value, or the INVALID_JSON sentinel on failure.
+ */
 const parseJsonOrEmbeddedObject = (text: string): unknown | typeof INVALID_JSON => {
   const parsed = parseJson(text);
   if (parsed !== INVALID_JSON) {
@@ -139,6 +183,15 @@ const parseJsonOrEmbeddedObject = (text: string): unknown | typeof INVALID_JSON 
   return INVALID_JSON;
 };
 
+/**
+ * Recursively unwrap a proxy response payload to reach the underlying operation
+ * contract object, descending through JSON strings and common wrapper keys
+ * (`response`, `content`, `output`, `text`, `message.content`) until an object
+ * carrying `version`/`operations` is found.
+ *
+ * @param {unknown} value - The raw payload to unwrap.
+ * @returns {unknown} The innermost operation payload (or the original value if no wrapper applies).
+ */
 const unwrapProxyOperationPayload = (value: unknown): unknown => {
   if (typeof value === 'string') {
     const parsed = parseJson(value);
@@ -339,6 +392,14 @@ export const validateOperationResponse = (responseText: string): OperationValida
   return validateParsedOperationResponse(parsed);
 };
 
+/**
+ * Parse a (possibly wrapped or embedded) coach response and validate it against
+ * the operation contract schema, tolerating proxy wrappers and JSON embedded in
+ * surrounding text.
+ *
+ * @param {string} responseText - The raw coach/proxy response text.
+ * @returns {OperationValidationResult} The validation result, including any errors and validated operations.
+ */
 export const parseAndValidateOperations = (responseText: string): OperationValidationResult => {
   const parsed = parseJsonOrEmbeddedObject(responseText);
 

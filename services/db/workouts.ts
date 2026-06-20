@@ -73,6 +73,11 @@ const deserializeWorkoutExerciseRow = (workoutId: string, ex: WorkoutExerciseRow
 // Exported CRUD
 // ---------------------------------------------------------------------------
 
+/**
+ * Load all workouts (with their exercises) ordered by date descending.
+ *
+ * @returns {Promise<Workout[]>} Every stored workout, newest first.
+ */
 export const getAllWorkouts = async (): Promise<Workout[]> => {
   const database = await getDatabase();
 
@@ -111,6 +116,13 @@ export const getAllWorkouts = async (): Promise<Workout[]> => {
   return result;
 };
 
+/**
+ * Load all workouts (with their exercises) for a specific program, ordered by
+ * date descending.
+ *
+ * @param {string} programId - The program whose workouts should be loaded.
+ * @returns {Promise<Workout[]>} The program's workouts, newest first.
+ */
 export const getWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
   const database = await getDatabase();
 
@@ -149,11 +161,26 @@ export const getWorkoutsForProgram = async (programId: string): Promise<Workout[
   return result;
 };
 
+/**
+ * Load only the completed workouts for a program. The data source is injectable
+ * for testing, defaulting to {@link getWorkoutsForProgram}.
+ *
+ * @param {string} programId - The program whose completed workouts should be loaded.
+ * @param {(id: string) => Promise<Workout[]>} [getWorkoutsForProgramFn] - Injectable workout loader.
+ * @returns {Promise<Workout[]>} The program's completed workouts.
+ */
 export const getCompletedWorkoutsForProgram = async (programId: string, getWorkoutsForProgramFn: (id: string) => Promise<Workout[]> = getWorkoutsForProgram): Promise<Workout[]> => {
   const workouts = await getWorkoutsForProgramFn(programId);
   return workouts.filter((w) => w.completed);
 };
 
+/**
+ * Persist a workout and all of its logged exercises atomically within a
+ * transaction, applying safe numeric coercion and defaults.
+ *
+ * @param {Workout} workout - The workout (with exercises) to save.
+ * @returns {Promise<void>} Resolves when the workout has been saved.
+ */
 export const saveWorkout = async (workout: Workout): Promise<void> => {
   const database = await getDatabase();
 
@@ -208,16 +235,37 @@ export const saveWorkout = async (workout: Workout): Promise<void> => {
   });
 };
 
+/**
+ * Delete a single workout by id (its exercises cascade).
+ *
+ * @param {string} workoutId - The id of the workout to delete.
+ * @returns {Promise<void>} Resolves when the workout has been deleted.
+ */
 export const deleteWorkout = async (workoutId: string): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync('DELETE FROM workouts WHERE id = ?', [workoutId]);
 };
 
+/**
+ * Delete every workout (and cascading exercises) from the database.
+ *
+ * @returns {Promise<void>} Resolves when all workouts have been removed.
+ */
 export const clearAllWorkouts = async (): Promise<void> => {
   const database = await getDatabase();
   await database.runAsync('DELETE FROM workouts');
 };
 
+/**
+ * Find the highest weight last logged for an exercise (matching name and
+ * variant) within a program's completed workouts, considering both the single
+ * logged weight and per-set weights.
+ *
+ * @param {string} exerciseName - The exercise name to match.
+ * @param {string} programId - The program to search within.
+ * @param {ExerciseVariant | null} [variant] - The variant to match (empty matches no-variant rows).
+ * @returns {Promise<number | null>} The highest logged weight, or null if none above zero.
+ */
 export const getLastLoggedWeight = async (
   exerciseName: string,
   programId: string,
