@@ -182,6 +182,12 @@ export const updateTimerSetsCompleted = async (
   );
 };
 
+/**
+ * Deletes expired rest-timer records (those whose `end_timestamp` is in the
+ * past) using the provided database handle.
+ * @param {import('expo-sqlite').SQLiteDatabase} database - The database handle to operate on.
+ * @returns {Promise<number>} The number of timer rows deleted.
+ */
 export const cleanupOrphanedTimersWithDatabase = async (database: import('expo-sqlite').SQLiteDatabase): Promise<number> => {
   const now = Date.now();
 
@@ -194,10 +200,9 @@ export const cleanupOrphanedTimersWithDatabase = async (database: import('expo-s
 };
 
 /**
- * Clean up orphaned/expired timer records
- * ORPHANED TIMER FIX: Called on app startup to remove timers that:
- * 1. Have already expired (end_timestamp < now)
- * 2. Are unreasonably old (end_timestamp was set more than 15 min ago)
+ * Removes expired rest-timer records on app startup, deleting any timer whose
+ * `end_timestamp` is already in the past.
+ * @returns {Promise<number>} The number of timer rows deleted.
  */
 export const cleanupOrphanedTimers = async (): Promise<number> => {
   const database = await getDatabase();

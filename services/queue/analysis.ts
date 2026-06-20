@@ -608,7 +608,10 @@ const normaliseExerciseForIdentity = (
 };
 
 /**
- * Find exercise by name with fuzzy matching
+ * Finds a catalog exercise by name, trying an exact (case-insensitive) match
+ * first and then a substring (contains) match in either direction.
+ * @param {string} name - The exercise name to look up.
+ * @returns {ExerciseData | null} The matching catalog entry, or `null` when none matches.
  */
 export const findExerciseByName = (
   name: string
@@ -766,11 +769,12 @@ export const EXERCISE_ALIASES: Record<string, string[]> = {
 };
 
 /**
- * Resolve user input to actual exercise names using aliases
- */
-/**
- * Resolves a user-provided exercise name against known aliases in the queue.
- * Returns matching exercise names that the alias maps to.
+ * Resolves a user-provided exercise name against known aliases, returning the
+ * mapped exercise names that are present in the queue; falls back to direct
+ * (case-insensitive, bidirectional substring) queue matching.
+ * @param {string} userInput - The raw user-provided exercise name or alias.
+ * @param {string[]} queueExercises - The exercise names currently in the queue.
+ * @returns {string[]} The resolved exercise names found in the queue (possibly empty).
  */
 export const resolveExerciseAlias = (userInput: string, queueExercises: string[]): string[] => {
   const lowerInput = userInput.toLowerCase().trim();
@@ -1247,14 +1251,22 @@ const detectMuscleGroupInRequest = (
 };
 
 /**
- * Preprocess user request to replace muscle group references with explicit weight changes
+ * Detects a muscle-group scope in a request and resolves the queue exercises it
+ * covers, so a broad phrase (e.g. "all chest") can be rewritten into explicit,
+ * per-exercise targeting.
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} queue - The current workout queue to resolve against.
+ * @returns {{ processedRequest: string; wasProcessed: boolean; matchedExercises: string[]; matchedExerciseRefs: TargetedExerciseRef[]; muscleGroupDetected: string | null; noMatchesFound: boolean }}
+ *   The (possibly rewritten) request, whether rewriting occurred, the matched
+ *   exercise names and refs, the detected muscle-group keyword (or `null`), and
+ *   whether a group was detected but matched no queue exercises.
  */
 export const preprocessMuscleGroupRequest = (
   request: string,
   queue: WorkoutQueueItem[]
-): { 
-  processedRequest: string; 
-  wasProcessed: boolean; 
+): {
+  processedRequest: string;
+  wasProcessed: boolean;
   matchedExercises: string[];
   matchedExerciseRefs: TargetedExerciseRef[];
   muscleGroupDetected: string | null;
@@ -1444,9 +1456,12 @@ export const detectRequestedChangeType = (request: string): ChangeType[] => {
 };
 
 /**
- * Extract target exercise names from user request
- * Uses fuzzy matching, alias resolution, and partial word matching
- * Returns normalized exercise names that were mentioned
+ * Extracts the display names of the queue exercises a request targets, using
+ * fuzzy matching, alias resolution, and partial word matching (a thin wrapper
+ * over {@link extractTargetExerciseRefs}).
+ * @param {string} request - The raw user request text.
+ * @param {WorkoutQueueItem[]} queue - The current workout queue to resolve against.
+ * @returns {string[]} The display names of the targeted exercises (possibly empty).
  */
 export const extractTargetExercises = (
   request: string,
@@ -1667,11 +1682,12 @@ export const extractTargetExerciseRefs = (
 };
 
 /**
- * Fuzzy match an exercise name to the known exercise database
- */
-/**
- * Finds the best fuzzy-matching exercise in the known catalog for a given name.
- * Returns the matching catalog entry or null if no close match is found.
+ * Finds the best fuzzy-matching exercise in a known catalog for a given name,
+ * trying an exact (case-insensitive) match first and then a bidirectional
+ * substring match.
+ * @param {string} name - The exercise name to match.
+ * @param {{ name: string; equipment: string; muscle_groups_worked: string[] }[]} knownExercises - The catalog to match against.
+ * @returns {{ name: string; equipment: string; muscle_groups_worked: string[] } | null} The matching catalog entry, or `null` when none matches.
  */
 export const fuzzyMatchExerciseName = (
   name: string,

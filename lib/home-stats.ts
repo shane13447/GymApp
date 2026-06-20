@@ -32,6 +32,7 @@ export interface HomeStats {
  * from yesterday is allowed (one-day grace for "haven't worked out yet today").
  *
  * @param workouts - Full list of workouts with completion status
+ * @param now - Reference "current" date (defaults to `new Date()`); injectable for tests
  * @returns Number of consecutive days with completed workouts, ending at today or yesterday
  */
 export const calculateStreak = (workouts: Workout[], now?: Date): number => {
@@ -74,6 +75,7 @@ export const calculateStreak = (workouts: Workout[], now?: Date): number => {
  * Week starts on Sunday (as per Date.getDay() convention).
  *
  * @param workouts - Full list of workouts
+ * @param now - Reference "current" date (defaults to `new Date()`); injectable for tests
  * @returns Number of completed workouts this week
  */
 export const getThisWeekWorkoutCount = (workouts: Workout[], now?: Date): number => {
