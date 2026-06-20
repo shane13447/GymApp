@@ -11,6 +11,15 @@ import { ExerciseVariantField } from '@/types';
 
 const VALID_VARIANT_FIELDS: ExerciseVariantField[] = ['angle', 'grip', 'posture', 'laterality'];
 
+/**
+ * Parses an untrusted raw value into a validated ExerciseVariantOption.
+ *
+ * Requires a non-empty `label`. The `field` is kept only if it is a known
+ * variant field; `value` and `aliases` are trimmed, with empty results dropped.
+ *
+ * @param {unknown} rawOption - Untrusted catalog option value.
+ * @returns {ExerciseVariantOption | null} The parsed option, or `null` when invalid.
+ */
 export const parseVariantOption = (rawOption: unknown): ExerciseVariantOption | null => {
   if (!rawOption || typeof rawOption !== 'object') {
     return null;
@@ -43,6 +52,14 @@ export const parseVariantOption = (rawOption: unknown): ExerciseVariantOption | 
   };
 };
 
+/**
+ * Parses an untrusted array of raw values into validated variant options.
+ *
+ * Non-array input and invalid entries are dropped.
+ *
+ * @param {unknown} rawOptions - Untrusted catalog options value.
+ * @returns {ExerciseVariantOption[] | undefined} Parsed options, or `undefined` when none are valid.
+ */
 export const parseVariantOptions = (rawOptions: unknown): ExerciseVariantOption[] | undefined => {
   if (!Array.isArray(rawOptions)) {
     return undefined;
@@ -52,6 +69,15 @@ export const parseVariantOptions = (rawOptions: unknown): ExerciseVariantOption[
   return options.length > 0 ? options : undefined;
 };
 
+/**
+ * Builds the default variant for an exercise from its variant options.
+ *
+ * For each variant field, the first option providing a `field`/`value` pair
+ * wins; later options for an already-set field are ignored.
+ *
+ * @param {ExerciseVariantOption[]} [variantOptions] - Available variant options.
+ * @returns {ExerciseVariant | null} The default variant, or `null` when no field defaults exist.
+ */
 export const getDefaultVariantForExercise = (
   variantOptions?: ExerciseVariantOption[]
 ): ExerciseVariant | null => {
@@ -76,6 +102,15 @@ export const getDefaultVariantForExercise = (
   return Object.keys(defaultVariant).length > 0 ? defaultVariant : null;
 };
 
+/**
+ * Parses an array of untrusted raw entries into validated Exercise objects.
+ *
+ * Missing or wrongly-typed fields are coerced to safe defaults (empty strings,
+ * empty arrays, or `false`); variant options are validated and aliases trimmed.
+ *
+ * @param {unknown[]} data - Untrusted raw exercise catalog entries.
+ * @returns {Exercise[]} The parsed, validated exercise list (same length as input).
+ */
 export const parseExerciseCatalog = (data: unknown[]): Exercise[] => {
   return data.map((rawExercise) => {
     const ex = rawExercise as Record<string, unknown>;
