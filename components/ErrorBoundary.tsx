@@ -24,6 +24,9 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private previousGlobalHandler: ReturnType<typeof ErrorUtils.getGlobalHandler> | null = null;
+  private isComponentMounted = false;
+
   constructor(props: Props) {
     super(props);
     this.state = {
@@ -38,19 +41,42 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  /**
+   * Installs a global error handler that surfaces async/unhandled errors in
+   * the boundary UI, chaining to any previously-registered handler.
+   * @returns {void}
+   */
   componentDidMount(): void {
-    const originalHandler = ErrorUtils.getGlobalHandler();
+    this.isComponentMounted = true;
+    this.previousGlobalHandler = ErrorUtils.getGlobalHandler();
     ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
       console.error('Global error caught by ErrorBoundary:', error, { isFatal });
-      this.setState((prev) => ({
-        hasError: true,
-        error,
-        retryCount: prev.retryCount,
-      }));
-      if (originalHandler) {
-        originalHandler(error, isFatal);
+      // Guard against setState-after-unmount: the installed closure can be
+      // invoked even after this instance has unmounted.
+      if (this.isComponentMounted) {
+        this.setState((prev) => ({
+          hasError: true,
+          error,
+          retryCount: prev.retryCount,
+        }));
+      }
+      if (this.previousGlobalHandler) {
+        this.previousGlobalHandler(error, isFatal);
       }
     });
+  }
+
+  /**
+   * Restores the previously-registered global error handler so handlers do
+   * not stack across remounts and no setState fires after unmount.
+   * @returns {void}
+   */
+  componentWillUnmount(): void {
+    this.isComponentMounted = false;
+    if (this.previousGlobalHandler) {
+      ErrorUtils.setGlobalHandler(this.previousGlobalHandler);
+      this.previousGlobalHandler = null;
+    }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
