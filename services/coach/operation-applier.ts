@@ -22,7 +22,15 @@ export type ExerciseCatalogLookup = (exerciseName: string) => ExerciseCatalogEnt
 // HELPER FUNCTIONS
 // =============================================================================
 
-// Keep variant parsing local to avoid pulling UI/database dependencies into tests.
+/**
+ * Parse a free-form variant string (e.g. "incline / wide grip") into an
+ * ExerciseVariant by splitting on slashes/commas and mapping recognised tokens
+ * to angle, grip, posture, laterality, or extras. Kept local to avoid pulling
+ * UI/database dependencies into tests.
+ *
+ * @param {string} value - The variant descriptor string to parse.
+ * @returns {ExerciseVariant | null} The parsed variant, or null if no segments are present.
+ */
 const parseVariantString = (value: string): ExerciseVariant | null => {
   const segments = value
     .split(/[\/,]/)

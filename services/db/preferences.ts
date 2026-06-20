@@ -45,6 +45,12 @@ export const registerPreferencesDeps = (deps: {
 // User Preferences
 // ---------------------------------------------------------------------------
 
+/**
+ * Read the singleton user preferences row, returning sensible defaults when no
+ * row exists yet.
+ *
+ * @returns {Promise<UserPreferences>} The stored (or default) user preferences.
+ */
 export const getUserPreferences = async (): Promise<UserPreferences> => {
   const database = await getDatabase();
   const result = await database.getFirstAsync<{
@@ -80,6 +86,14 @@ export const getUserPreferences = async (): Promise<UserPreferences> => {
   };
 };
 
+/**
+ * Update one or more fields of the singleton user preferences row. Only
+ * provided (non-undefined) fields are written; `updated_at` is refreshed when
+ * any field changes.
+ *
+ * @param {Partial<UserPreferences>} preferences - The preference fields to update.
+ * @returns {Promise<void>} Resolves when the update has been persisted.
+ */
 export const updateUserPreferences = async (
   preferences: Partial<UserPreferences>
 ): Promise<void> => {
@@ -122,11 +136,25 @@ export const updateUserPreferences = async (
   }
 };
 
+/**
+ * Get the id of the currently-selected program from user preferences.
+ *
+ * @returns {Promise<string | null>} The current program id, or null if none is set.
+ */
 export const getCurrentProgramId = async (): Promise<string | null> => {
   const prefs = await getUserPreferences();
   return prefs.currentProgramId;
 };
 
+/**
+ * Set (or clear) the current program. Selecting a program regenerates the
+ * workout queue and aborts if a newer generation superseded it; clearing the
+ * program bumps the queue generation id and clears the queue. Either way the
+ * preference is updated on success.
+ *
+ * @param {string | null} programId - The program to make current, or null to clear.
+ * @returns {Promise<void>} Resolves once the change has been applied.
+ */
 export const setCurrentProgramId = async (programId: string | null): Promise<void> => {
   if (programId) {
     const completedGenerationId = await _generateWorkoutQueue(programId);
@@ -145,6 +173,12 @@ export const setCurrentProgramId = async (programId: string | null): Promise<voi
 // User Profile
 // ---------------------------------------------------------------------------
 
+/**
+ * Read the singleton user profile row, returning a fully-null default profile
+ * when no row exists yet.
+ *
+ * @returns {Promise<UserProfile>} The stored (or default) user profile.
+ */
 export const getUserProfile = async (): Promise<UserProfile> => {
   const database = await getDatabase();
   const result = await database.getFirstAsync<{
@@ -186,6 +220,14 @@ export const getUserProfile = async (): Promise<UserProfile> => {
   };
 };
 
+/**
+ * Update one or more fields of the singleton user profile row. Only provided
+ * (non-undefined) fields are written; `updated_at` is refreshed when any field
+ * changes.
+ *
+ * @param {Partial<UserProfile>} profile - The profile fields to update.
+ * @returns {Promise<void>} Resolves when the update has been persisted.
+ */
 export const updateUserProfile = async (
   profile: Partial<UserProfile>
 ): Promise<void> => {
@@ -240,6 +282,11 @@ export const updateUserProfile = async (
 // Muscle Group Targets
 // ---------------------------------------------------------------------------
 
+/**
+ * Read all configured muscle group targets, ordered by muscle group name.
+ *
+ * @returns {Promise<MuscleGroupTarget[]>} The list of muscle group targets.
+ */
 export const getMuscleGroupTargets = async (): Promise<MuscleGroupTarget[]> => {
   const database = await getDatabase();
   const results = await database.getAllAsync<{
@@ -253,6 +300,12 @@ export const getMuscleGroupTargets = async (): Promise<MuscleGroupTarget[]> => {
   }));
 };
 
+/**
+ * Read the target set count for a single muscle group.
+ *
+ * @param {string} muscleGroup - The muscle group to look up.
+ * @returns {Promise<number | null>} The target sets, or null if none is configured.
+ */
 export const getMuscleGroupTarget = async (
   muscleGroup: string
 ): Promise<number | null> => {
@@ -264,6 +317,13 @@ export const getMuscleGroupTarget = async (
   return result?.target_sets ?? null;
 };
 
+/**
+ * Insert or update the target set count for a muscle group (upsert).
+ *
+ * @param {string} muscleGroup - The muscle group to set.
+ * @param {number} targetSets - The desired weekly target set count.
+ * @returns {Promise<void>} Resolves when the target has been persisted.
+ */
 export const setMuscleGroupTarget = async (
   muscleGroup: string,
   targetSets: number
@@ -279,6 +339,12 @@ export const setMuscleGroupTarget = async (
   );
 };
 
+/**
+ * Delete the target for a single muscle group, if present.
+ *
+ * @param {string} muscleGroup - The muscle group whose target should be removed.
+ * @returns {Promise<void>} Resolves when the deletion has completed.
+ */
 export const removeMuscleGroupTarget = async (
   muscleGroup: string
 ): Promise<void> => {
@@ -289,6 +355,13 @@ export const removeMuscleGroupTarget = async (
   );
 };
 
+/**
+ * Replace all muscle group targets with the provided set, atomically within a
+ * transaction (existing rows are cleared first).
+ *
+ * @param {MuscleGroupTarget[]} targets - The complete set of targets to persist.
+ * @returns {Promise<void>} Resolves once all targets have been saved.
+ */
 export const saveMuscleGroupTargets = async (
   targets: MuscleGroupTarget[]
 ): Promise<void> => {

@@ -530,6 +530,14 @@ export const createProgram = programsDb.createProgram;
 
 export const updateProgram = programsDb.updateProgram;
 
+/**
+ * Facade for duplicating a program, wiring the programs module's
+ * {@link programsDb.duplicateProgram} with the concrete data-access functions.
+ *
+ * @param {string} programId - The id of the program to duplicate.
+ * @param {string} duplicateNameRaw - The desired name for the duplicate.
+ * @returns {Promise<Program>} The newly created duplicate program.
+ */
 export const duplicateProgram = async (programId: string, duplicateNameRaw: string): Promise<Program> => {
   return programsDb.duplicateProgram(programId, duplicateNameRaw, {
     getProgramById: programsDb.getProgramById,
@@ -538,6 +546,13 @@ export const duplicateProgram = async (programId: string, duplicateNameRaw: stri
   });
 };
 
+/**
+ * Facade for deleting a program, wiring the programs module's
+ * {@link programsDb.deleteProgram} with the concrete cross-cutting functions.
+ *
+ * @param {string} programId - The id of the program to delete.
+ * @returns {Promise<void>} Resolves once deletion completes.
+ */
 export const deleteProgram = async (programId: string): Promise<void> => {
   return programsDb.deleteProgram(programId, {
     getUserPreferences: getUserPreferences,
@@ -555,6 +570,13 @@ export const getAllWorkouts = workoutsDb.getAllWorkouts;
 
 export const getWorkoutsForProgram = workoutsDb.getWorkoutsForProgram;
 
+/**
+ * Facade for loading a program's completed workouts, delegating to the workouts
+ * module with the concrete workout loader.
+ *
+ * @param {string} programId - The program whose completed workouts to load.
+ * @returns {Promise<Workout[]>} The program's completed workouts.
+ */
 export const getCompletedWorkoutsForProgram = async (programId: string): Promise<Workout[]> => {
   return workoutsDb.getCompletedWorkoutsForProgram(programId, workoutsDb.getWorkoutsForProgram);
 };

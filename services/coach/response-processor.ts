@@ -168,6 +168,16 @@ export function processCoachResponse(input: ProcessCoachResponseInput): CoachRes
 // Test evaluation (internal)
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a failing test-result for a prompt test case, advancing to the next
+ * test index when one remains.
+ *
+ * @param {CoachPromptCase} currentTest - The test case that failed.
+ * @param {number} testIndex - The zero-based index of the current test.
+ * @param {number} totalTests - The total number of tests in the run.
+ * @param {string} error - The failure message.
+ * @returns {CoachResponseResult} A failing test-result with the next test index (or null when last).
+ */
 function buildTestFailureResult(
   currentTest: CoachPromptCase,
   testIndex: number,
@@ -184,6 +194,23 @@ function buildTestFailureResult(
   };
 }
 
+/**
+ * Evaluate a prompt test case against the merged queue and proposed changes,
+ * applying variant- and injury-specific semantic checks and folding in any
+ * safeguard warnings to produce a pass/fail test result.
+ *
+ * @param {CoachPromptCase} currentTest - The test case being evaluated.
+ * @param {number} testIndex - The zero-based index of the current test.
+ * @param {number} totalTests - The total number of tests in the run.
+ * @param {WorkoutQueueItem[]} mergedQueue - The queue after applying proposed changes.
+ * @param {ProposedChanges} proposedChanges - The changes proposed by the model.
+ * @param {boolean} hasWarnings - Whether safeguard warnings were raised.
+ * @param {string[]} warnings - The safeguard warning messages.
+ * @param {WorkoutQueueItem[]} scopedQueue - The queue scoped to the targeted exercises.
+ * @param {WorkoutQueueItem[]} parsedQueue - The original parsed queue before changes.
+ * @param {TargetedExerciseRef[]} targetedExercises - The exercises targeted by the request.
+ * @returns {CoachResponseResult} The pass/fail test result with the next test index.
+ */
 function evaluateTestResult(
   currentTest: CoachPromptCase,
   testIndex: number,
