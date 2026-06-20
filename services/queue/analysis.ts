@@ -878,12 +878,25 @@ const GENERIC_EXERCISE_WORDS = new Set([
   'extensions',
 ]);
 
+/**
+ * Reports whether a lower-cased request contains any of the given keywords.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @param {readonly string[]} keywords - The keywords to look for.
+ * @returns {boolean} `true` if at least one keyword is present.
+ */
 function includesAnyKeyword(requestLower: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => requestLower.includes(keyword));
 }
 
 const BROAD_ALIAS_KEYS = new Set(['row', 'rows', 'curl', 'curls', 'bench']);
 
+/**
+ * Reports whether an alias appears in the request as a whole word (word-boundary
+ * matched, with regex metacharacters escaped).
+ * @param {string} alias - The alias to look for.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {boolean} `true` if the alias appears as a standalone word.
+ */
 const aliasAppearsInRequest = (alias: string, requestLower: string): boolean => {
   const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   return aliasRegex.test(requestLower);
@@ -914,6 +927,12 @@ const findMatchingExerciseAliases = (requestLower: string): Array<[string, strin
   });
 };
 
+/**
+ * Infers injury context and severity from a request using explicit severity
+ * words and contextual cue phrases.
+ * @param {string} requestLower - The lower-cased request text to analyse.
+ * @returns {{ hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null }} Whether injury context is present and the inferred severity.
+ */
 const inferInjuryIntent = (requestLower: string): { hasInjuryContext: boolean; severity: 'mild' | 'moderate' | 'severe' | null } => {
   const hasInjuryContext = includesAnyKeyword(requestLower, INJURY_CONTEXT_KEYWORDS);
 
@@ -999,6 +1018,12 @@ const INJURY_MOVEMENT_FAMILY_KEYWORDS: Record<string, string[]> = {
 
 const INJURY_BODY_PART_MUSCLE_KEYWORDS: Record<string, readonly string[]> = JOINT_INJURY_MAP;
 
+/**
+ * Infers all variant adjustments (grip, angle, posture, laterality) mentioned in
+ * a request, used when repairing/adjusting exercises for injuries.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {ExerciseVariant[]} The variants found, in the order their tokens were detected.
+ */
 const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[] => {
   const candidateTokens = [
     'neutral grip',
@@ -1041,11 +1066,24 @@ const inferRequestedVariantsForRepair = (requestLower: string): ExerciseVariant[
   return variants;
 };
 
+/**
+ * Infers the single most relevant requested variant for repair, i.e. the first
+ * variant returned by {@link inferRequestedVariantsForRepair}.
+ * @param {string} requestLower - The lower-cased request text to scan.
+ * @returns {ExerciseVariant | null} The first inferred variant, or `null` when none is found.
+ */
 const inferRequestedVariantForRepair = (requestLower: string): ExerciseVariant | null => {
   const variants = inferRequestedVariantsForRepair(requestLower);
   return variants[0] ?? null;
 };
 
+/**
+ * Canonicalises a raw exercise name for semantic comparison, preferring an alias
+ * resolution against the catalog, then a known-exercise lookup, then the
+ * normalised input.
+ * @param {string} nameRaw - The raw exercise name to canonicalise.
+ * @returns {string} The normalised canonical name (empty string for blank input).
+ */
 const canonicaliseExerciseNameForSemantics = (nameRaw: string): string => {
   const lower = normaliseText(nameRaw);
   if (!lower) return '';
@@ -1063,6 +1101,13 @@ const canonicaliseExerciseNameForSemantics = (nameRaw: string): string => {
   return lower;
 };
 
+/**
+ * Finds every queue exercise that works any of the target muscle groups,
+ * returning targeted references annotated with each exercise's parsed weight.
+ * @param {WorkoutQueueItem[]} queue - The workout queue to search.
+ * @param {string[]} targetMuscles - The lower-cased muscle groups to match against.
+ * @returns {Array<TargetedExerciseRef & { weight: number }>} Matching exercise references with weights.
+ */
 const findExercisesInQueueByMuscleGroup = (
   queue: WorkoutQueueItem[],
   targetMuscles: string[]
@@ -1091,6 +1136,12 @@ const findExercisesInQueueByMuscleGroup = (
   return matchingExercises;
 };
 
+/**
+ * Detects a percentage-based weight change in a request (e.g. "increase by 10%"),
+ * inferring direction from increase/decrease keywords.
+ * @param {string} request - The raw user request text.
+ * @returns {{ percentage: number; isIncrease: boolean } | null} The percentage and direction, or `null` when no percentage change is present.
+ */
 const detectPercentageChange = (
   request: string
 ): { percentage: number; isIncrease: boolean } | null => {
@@ -1150,6 +1201,13 @@ const detectAbsoluteNumericChange = (
   return null;
 };
 
+/**
+ * Detects a muscle-group scope in a request, matching explicit phrases (e.g.
+ * "all chest", "chest exercises") or a bare keyword combined with a numeric
+ * modifier and global-scope term.
+ * @param {string} request - The raw user request text.
+ * @returns {{ keyword: string; muscles: string[] } | null} The matched keyword and its muscle groups, or `null` when none is found.
+ */
 const detectMuscleGroupInRequest = (
   request: string
 ): { keyword: string; muscles: string[] } | null => {
