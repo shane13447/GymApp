@@ -9,7 +9,7 @@
  * to avoid circular imports.
  */
 
-import type { Program, ProgramExercise, WorkoutDay } from '@/types';
+import type { Program, WorkoutDay } from '@/types';
 
 import { getDatabase, runInTransaction } from '@/services/db/connection';
 import {
@@ -17,6 +17,7 @@ import {
   serializeExerciseToSqlParams,
 } from '@/services/db/serialization';
 import type { SqlExerciseRow } from '@/services/db/serialization';
+import { cloneWorkoutDays } from '@/services/programs/clone';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -66,34 +67,9 @@ const createDuplicateProgramId = (sourceProgramId: string): string => {
 };
 
 /**
- * Deep-clone a program exercise for duplication, copying nested arrays and the
- * variant object so the duplicate shares no mutable references with the source.
- *
- * @param {ProgramExercise} exercise - The exercise to clone.
- * @returns {ProgramExercise} An independent copy of the exercise.
- */
-const cloneProgramExerciseForDuplicate = (exercise: ProgramExercise): ProgramExercise => ({
-  ...exercise,
-  muscle_groups_worked: [...exercise.muscle_groups_worked],
-  variant: exercise.variant
-    ? {
-        ...exercise.variant,
-        extras: exercise.variant.extras ? [...exercise.variant.extras] : undefined,
-      }
-    : null,
-  variantOptions: exercise.variantOptions
-    ? exercise.variantOptions.map((option) => ({
-        ...option,
-        aliases: option.aliases ? [...option.aliases] : undefined,
-      }))
-    : undefined,
-  aliases: exercise.aliases ? [...exercise.aliases] : undefined,
-});
-
-/**
  * Build a duplicate program draft (without timestamps) from a source program,
  * assigning a fresh id and the supplied name and deep-cloning all workout days
- * and exercises.
+ * and exercises via the shared `cloneWorkoutDays` helper.
  *
  * @param {Program} program - The source program to duplicate.
  * @param {string} duplicateName - The name to give the duplicate.
@@ -102,10 +78,7 @@ const cloneProgramExerciseForDuplicate = (exercise: ProgramExercise): ProgramExe
 const cloneProgramForDuplicate = (program: Program, duplicateName: string): Omit<Program, 'createdAt' | 'updatedAt'> => ({
   id: createDuplicateProgramId(program.id),
   name: duplicateName,
-  workoutDays: program.workoutDays.map((day) => ({
-    dayNumber: day.dayNumber,
-    exercises: day.exercises.map(cloneProgramExerciseForDuplicate),
-  })),
+  workoutDays: cloneWorkoutDays(program.workoutDays),
 });
 
 // ---------------------------------------------------------------------------
