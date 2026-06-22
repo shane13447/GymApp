@@ -1,4 +1,7 @@
-# Shane's Gym App
+# IronLogic
+
+> Offline-first fitness tracker with an on-device AI coach — Llama 3.2 running locally via Executorch. React Native · Expo · SQLite. 40 test suites, 762 passing tests.
+
 
 React Native gym tracking app built with Expo Router, NativeWind, and SQLite.
 
@@ -24,12 +27,12 @@ The app covers the full training loop:
 
 This repo uses **Expo Router file-based navigation**.
 
-- [app/_layout.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/_layout.tsx) is the root stack shell.
-- [app/index.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/index.tsx) immediately redirects to `/(tabs)/Home`.
-- [app/(tabs)/_layout.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/_layout.tsx) defines the bottom-tab navigator.
+- [app/_layout.tsx](app/_layout.tsx) is the root stack shell.
+- [app/index.tsx](app/index.tsx) immediately redirects to `/(tabs)/Home`.
+- [app/(tabs)/_layout.tsx](app/(tabs)/_layout.tsx) defines the bottom-tab navigator.
 - Visible tabs are `Home`, `Programs`, `Coach`, `History`, and `Profile`.
-- [app/(tabs)/ActiveWorkout.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/ActiveWorkout.tsx) is a hidden tab route (`href: null`) that is pushed programmatically when starting a workout.
-- [app/modal.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/modal.tsx) is a stack modal route outside the tab bar.
+- [app/(tabs)/ActiveWorkout.tsx](app/(tabs)/ActiveWorkout.tsx) is a hidden tab route (`href: null`) that is pushed programmatically when starting a workout.
+- [app/modal.tsx](app/modal.tsx) is a stack modal route outside the tab bar.
 
 ## Refactored architecture
 
@@ -44,11 +47,11 @@ The codebase now follows a clearer split between routes, controller hooks, prese
 ### Controller hooks
 
 - `hooks/`
-  - [use-home-data.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-home-data.ts): Home screen loading/state.
-  - [use-active-workout.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-active-workout.ts): active workout orchestration.
-  - [use-profile-screen.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-profile-screen.ts): profile persistence + autosave workflow.
-  - [use-programs-screen.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-programs-screen.ts): program create/edit/list workflow.
-  - [use-workout-history.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-workout-history.ts): history loading/grouping.
+  - [use-home-data.ts](hooks/use-home-data.ts): Home screen loading/state.
+  - [use-active-workout.ts](hooks/use-active-workout.ts): active workout orchestration.
+  - [use-profile-screen.ts](hooks/use-profile-screen.ts): profile persistence + autosave workflow.
+  - [use-programs-screen.ts](hooks/use-programs-screen.ts): program create/edit/list workflow.
+  - [use-workout-history.ts](hooks/use-workout-history.ts): history loading/grouping.
 
 ### Presentational components
 
@@ -101,13 +104,13 @@ The codebase now follows a clearer split between routes, controller hooks, prese
 
 ### Program management
 
-- Programs are created/edited from [app/(tabs)/Programs.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/Programs.tsx).
-- The screen delegates workflow state to [hooks/use-programs-screen.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-programs-screen.ts).
-- Persistence goes through [services/database.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/database.ts) and then into `services/db/*`.
+- Programs are created/edited from [app/(tabs)/Programs.tsx](app/(tabs)/Programs.tsx).
+- The screen delegates workflow state to [hooks/use-programs-screen.ts](hooks/use-programs-screen.ts).
+- Persistence goes through [services/database.ts](services/database.ts) and then into `services/db/*`.
 
 ### Active workout flow
 
-- [app/(tabs)/ActiveWorkout.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/ActiveWorkout.tsx) uses [hooks/use-active-workout.ts](/C:/Users/Shane/ShanesGymApp/GymApp/hooks/use-active-workout.ts).
+- [app/(tabs)/ActiveWorkout.tsx](app/(tabs)/ActiveWorkout.tsx) uses [hooks/use-active-workout.ts](hooks/use-active-workout.ts).
 - Queue loading, workout saving, timer cleanup, and progression all end up in the database/db modules.
 - Customised set weights prefill from the current recommendation for every set, while reps stay blank for the user to log.
 - Decimal weight inputs preserve in-progress values like `2.` while focused and normalize only on blur.
@@ -115,9 +118,9 @@ The codebase now follows a clearer split between routes, controller hooks, prese
 
 ### Coach flow
 
-- [app/(tabs)/Coach.tsx](/C:/Users/Shane/ShanesGymApp/GymApp/app/(tabs)/Coach.tsx) remains the route entry point.
-- Proxy transport lives in [services/coach/proxy-client.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/coach/proxy-client.ts).
-- Prompt suite constants live in [services/coach/test-prompts.ts](/C:/Users/Shane/ShanesGymApp/GymApp/services/coach/test-prompts.ts).
+- [app/(tabs)/Coach.tsx](app/(tabs)/Coach.tsx) remains the route entry point.
+- Proxy transport lives in [services/coach/proxy-client.ts](services/coach/proxy-client.ts).
+- Prompt suite constants live in [services/coach/test-prompts.ts](services/coach/test-prompts.ts).
 - Deterministic queue parsing/repair relies on `services/coach/operation-contract.ts`, `services/coach/operation-applier.ts`, and `services/queue/*`.
 - Generated program preview and queue preview UI were split into `components/coach/*`.
 - Generated program drafts are repaired against the canonical exercise catalog: unknown exercises are removed, aliases are normalized to catalog names, and missing/invalid variants are repaired to catalog defaults.
