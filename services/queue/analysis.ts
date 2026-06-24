@@ -52,6 +52,15 @@ const VARIANT_FIELD_ORDER: Array<keyof Omit<ExerciseVariant, 'extras'>> = [
 const normaliseText = (value: string): string => value.trim().toLowerCase();
 
 /**
+ * Escapes all regular-expression metacharacters in a string so it can be
+ * embedded safely inside a dynamically-constructed `RegExp` literal.
+ * @param {string} value - The raw string to escape.
+ * @returns {string} The string with every regex metacharacter backslash-escaped.
+ */
+export const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
  * Parses a free-text variant label (e.g. "Incline / Close Grip") into a
  * structured {@link ExerciseVariant}, bucketing each segment into the
  * appropriate field (angle, grip, posture, laterality) or `extras`.
@@ -898,7 +907,7 @@ const BROAD_ALIAS_KEYS = new Set(['row', 'rows', 'curl', 'curls', 'bench']);
  * @returns {boolean} `true` if the alias appears as a standalone word.
  */
 const aliasAppearsInRequest = (alias: string, requestLower: string): boolean => {
-  const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const aliasRegex = new RegExp(`\\b${escapeRegExp(alias)}\\b`, 'i');
   return aliasRegex.test(requestLower);
 };
 
@@ -1237,7 +1246,7 @@ const detectMuscleGroupInRequest = (
       }
     }
 
-    const keywordRegex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
+    const keywordRegex = new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i');
     if (keywordRegex.test(lowerRequest) && hasNumericModifier && hasGlobalScopeTerms) {
       return { keyword, muscles: MUSCLE_GROUP_KEYWORDS[keyword] };
     }
