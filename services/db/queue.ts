@@ -208,8 +208,9 @@ export const addToWorkoutQueue = async (item: WorkoutQueueItem): Promise<void> =
 };
 
 /**
- * Remove and return the first item in the queue, shifting remaining items'
- * positions down by one, atomically within a transaction.
+ * Remove and return the first item in the queue, shifting the positions of all
+ * items after the dequeued item's position down by one, atomically within a
+ * transaction.
  *
  * @returns {Promise<WorkoutQueueItem | null>} The dequeued item, or null if the queue was empty.
  */
@@ -224,8 +225,12 @@ export const dequeueFirstWorkout = async (): Promise<WorkoutQueueItem | null> =>
 
     await database.runAsync('DELETE FROM queue_exercises WHERE queue_item_id = ?', [first.id]);
     await database.runAsync('DELETE FROM workout_queue WHERE id = ?', [first.id]);
+    // Shift items after the dequeued item's position down by one. Using the
+    // actual first.position (rather than a hard-coded 0) avoids assuming the
+    // queue always starts at position 0.
     await database.runAsync(
-      'UPDATE workout_queue SET position = position - 1 WHERE position > 0'
+      'UPDATE workout_queue SET position = position - 1 WHERE position > ?',
+      [first.position]
     );
 
     return first;
