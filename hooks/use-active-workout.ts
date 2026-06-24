@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { DEFAULT_QUEUE_SIZE } from '@/constants';
+import { resolveCycledDayIndex } from '@/lib/queue-cycle';
 import * as db from '@/services/database';
 import type {
   Program,
@@ -352,8 +353,14 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
       const queue: WorkoutQueueItem[] = [];
       const totalDays = program.workoutDays.length;
 
+      if (totalDays === 0) {
+        console.warn('Cannot initialize queue: program has no workout days');
+        setWorkoutQueue([]);
+        return;
+      }
+
       for (let i = 0; i < DEFAULT_QUEUE_SIZE; i++) {
-        const dayIndex = i % totalDays;
+        const dayIndex = resolveCycledDayIndex(i, totalDays) ?? 0;
         const day = program.workoutDays[dayIndex];
         const progressedExercises = await applyProgressionToExercises(day.exercises, program.id);
 
@@ -579,6 +586,11 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
   const updateWorkoutQueue = useCallback(async () => {
     if (!currentProgram) return;
 
+    if (currentProgram.workoutDays.length === 0) {
+      console.warn('Cannot update queue: program has no workout days');
+      return;
+    }
+
     try {
       let queue = await db.getWorkoutQueue();
 
@@ -607,7 +619,7 @@ export const useActiveWorkout = (): ActiveWorkoutResult => {
         const lastDayIndex = currentProgram.workoutDays.findIndex(
           (day) => day.dayNumber === lastDayNumber
         );
-        const nextDayIndex = (lastDayIndex + 1) % totalDays;
+        const nextDayIndex = resolveCycledDayIndex(lastDayIndex + 1, totalDays) ?? 0;
         const nextDay = currentProgram.workoutDays[nextDayIndex];
 
         const progressedExercises = await applyProgressionToExercises(
