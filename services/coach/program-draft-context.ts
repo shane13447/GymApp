@@ -35,35 +35,40 @@ export type ProgramDraftContext = {
   };
 };
 
+/** Progression increments (per equipment class) and rep-hit threshold. */
+interface ProgressionDefaults {
+  compoundBarbell: number;
+  compoundDumbbell: number;
+  isolationBarbell: number;
+  isolationDumbbell: number;
+  threshold: number;
+}
+
 /**
- * Returns progression defaults based on experience level.
+ * Returns progression defaults for an experience level. Only the rep-hit
+ * `threshold` varies by level; the per-equipment increments are constant.
+ * Falls back to the intermediate threshold for any unrecognised level so the
+ * function always returns a fully-populated object (it feeds the
+ * non-optional `progression_defaults` LLM input).
+ * @param {ExperienceLevel} level - The lifter's experience level.
+ * @returns {ProgressionDefaults} The progression increments and threshold.
  */
-const getProgressionDefaults = (level: ExperienceLevel) => {
+const getProgressionDefaults = (level: ExperienceLevel): ProgressionDefaults => {
+  const increments = {
+    compoundBarbell: 2.5,
+    compoundDumbbell: 4,
+    isolationBarbell: 1.25,
+    isolationDumbbell: 2.5,
+  };
+
   switch (level) {
     case 'beginner':
-      return {
-        compoundBarbell: 2.5,
-        compoundDumbbell: 4,
-        isolationBarbell: 1.25,
-        isolationDumbbell: 2.5,
-        threshold: 0, // Linear progression — increase every session
-      };
-    case 'intermediate':
-      return {
-        compoundBarbell: 2.5,
-        compoundDumbbell: 4,
-        isolationBarbell: 1.25,
-        isolationDumbbell: 2.5,
-        threshold: 1, // Hit max reps once to progress
-      };
+      return { ...increments, threshold: 0 }; // Linear progression — increase every session
     case 'advanced':
-      return {
-        compoundBarbell: 2.5,
-        compoundDumbbell: 4,
-        isolationBarbell: 1.25,
-        isolationDumbbell: 2.5,
-        threshold: 3, // Hit max reps 3 sessions to progress
-      };
+      return { ...increments, threshold: 3 }; // Hit max reps 3 sessions to progress
+    case 'intermediate':
+    default:
+      return { ...increments, threshold: 1 }; // Hit max reps once to progress
   }
 };
 

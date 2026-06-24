@@ -161,4 +161,43 @@ describe('buildProgramDraftContext', () => {
     const exercisesWithVariants = context.allowedExercises.filter((e) => e.variantOptions && e.variantOptions.length > 0);
     expect(exercisesWithVariants.length).toBeGreaterThan(0);
   });
+
+  // =========================================================================
+  // progressionDefaults exhaustiveness
+  // =========================================================================
+  describe('progressionDefaults', () => {
+    const expectedThreshold: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 3 };
+
+    it.each(['beginner', 'intermediate', 'advanced'] as const)(
+      'returns fully-populated defaults with the correct threshold for %s',
+      (level) => {
+        const context = buildProgramDraftContext(
+          { experienceLevel: level, trainingDaysPerWeek: 3, sessionDurationMinutes: 60, trainingGoal: null },
+          exerciseSelectionCatalog,
+        );
+
+        expect(context.progressionDefaults).toEqual({
+          compoundBarbell: 2.5,
+          compoundDumbbell: 4,
+          isolationBarbell: 1.25,
+          isolationDumbbell: 2.5,
+          threshold: expectedThreshold[level],
+        });
+      },
+    );
+
+    it('never returns undefined for an out-of-domain (cast/persisted) experience level', () => {
+      // Simulates a malformed value flowing in from persisted profile data:
+      // previously the non-exhaustive switch returned undefined here.
+      const context = buildProgramDraftContext(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { experienceLevel: 'expert' as any, trainingDaysPerWeek: 3, sessionDurationMinutes: 60, trainingGoal: null },
+        exerciseSelectionCatalog,
+      );
+
+      expect(context.progressionDefaults).toBeDefined();
+      expect(context.progressionDefaults.threshold).toBe(1); // intermediate fallback
+      expect(context.progressionDefaults.compoundBarbell).toBe(2.5);
+    });
+  });
 });
