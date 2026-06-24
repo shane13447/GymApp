@@ -1,4 +1,4 @@
-import { inferRequestedVariant } from '@/lib/coach-utils';
+import { inferRequestedVariant, parseVariantString } from '@/lib/coach-utils';
 import type { ProgramExercise, WorkoutQueueItem } from '@/types';
 import type { TargetedExerciseRef } from '@/services/queue/types';
 
@@ -17,60 +17,6 @@ export type OperationIntentSafeguardInput = {
  * @returns {string} The trimmed, lowercased text.
  */
 const normaliseText = (value: string): string => value.trim().toLowerCase();
-
-/**
- * Parses a model-requested variant label into the internal variant shape.
- *
- * @param value - Plain variant label from the request
- * @returns Exercise variant object, or null when no variant fields are detected
- */
-const parseVariantString = (value: string): ProgramExercise['variant'] | null => {
-  const segments = value
-    .split(/[\/,]/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-
-  if (segments.length === 0) {
-    return null;
-  }
-
-  const variant: NonNullable<ProgramExercise['variant']> = {};
-  for (const segment of segments) {
-    const lower = segment.toLowerCase();
-    if (lower.includes('incline') || lower.includes('decline')) {
-      variant.angle = segment;
-    } else if (
-      lower.includes('grip') ||
-      lower.includes('neutral') ||
-      lower.includes('supinated') ||
-      lower.includes('pronated') ||
-      lower.includes('reverse') ||
-      lower.includes('close') ||
-      lower.includes('wide') ||
-      lower.includes('narrow')
-    ) {
-      variant.grip = segment;
-    } else if (
-      lower.includes('seated') ||
-      lower.includes('standing') ||
-      lower.includes('supported') ||
-      lower.includes('bent')
-    ) {
-      variant.posture = segment;
-    } else if (
-      lower.includes('one-arm') ||
-      lower.includes('single arm') ||
-      lower.includes('one leg') ||
-      lower.includes('single leg')
-    ) {
-      variant.laterality = segment;
-    } else {
-      variant.extras = [...(variant.extras ?? []), segment];
-    }
-  }
-
-  return Object.keys(variant).length > 0 ? variant : null;
-};
 
 /**
  * Infers injury severity from user-facing wording.
