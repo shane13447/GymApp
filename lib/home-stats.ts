@@ -100,23 +100,28 @@ export const getThisWeekWorkoutCount = (workouts: Workout[], now?: Date): number
 /**
  * Format a date string as a human-readable relative description.
  *
- * - "Today" for dates from today
+ * - "Today" for dates from today (or, defensively, any future date)
  * - "Yesterday" for dates from yesterday
  * - "X days ago" for dates within the past week
  * - "Mon Day" (e.g. "Apr 12") for older dates
  *
+ * Future dates (a negative day difference, e.g. from clock skew or a
+ * future-scheduled entry) are clamped to "Today" so the UI never renders
+ * nonsensical "-N days ago" text.
+ *
  * @param dateString - ISO date string
+ * @param now - Optional reference "now" (defaults to the current time); injectable for testing
  * @returns Human-readable relative date description
  */
-export const formatRelativeDate = (dateString: string): string => {
+export const formatRelativeDate = (dateString: string, now?: Date): string => {
   const date = new Date(dateString);
-  const now = new Date();
+  const reference = now ?? new Date();
 
-  const todayMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const todayMidnight = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()));
   const dateMidnight = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const days = Math.round((todayMidnight.getTime() - dateMidnight.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (days === 0) return 'Today';
+  if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -129,13 +134,17 @@ export const formatRelativeDate = (dateString: string): string => {
 /**
  * Collect unique, sorted muscle groups from a queue item's exercises.
  *
+ * Defensive against exercises whose `muscle_groups_worked` is missing at
+ * runtime (e.g. from malformed/persisted data), mirroring the `?? []`
+ * guard already used in the db serialization layer.
+ *
  * @param workout - Queue item containing exercises with muscle_groups_worked
  * @returns Sorted array of unique muscle group names
  */
 export const getMuscleGroups = (workout: WorkoutQueueItem): string[] => {
   const muscleGroups = new Set<string>();
   workout.exercises.forEach((exercise) => {
-    exercise.muscle_groups_worked.forEach((group) => {
+    (exercise.muscle_groups_worked ?? []).forEach((group) => {
       muscleGroups.add(group);
     });
   });
